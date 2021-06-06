@@ -673,6 +673,7 @@ Saskaņā ar domēna <ph name="DOMAIN" /> prasībām viedkartei ir jābūt ievie
 <translation id="1706625117072057435">Tālummaiņas līmeņi</translation>
 <translation id="1708338024780164500">(Neaktīva)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Eksperimentāls pārlūks! Var tikt zaudēti dati vai apdraudēta konfidencialitāte vai drošība. Lūdzu, ziņojiet par problēmām šeit: Palīdzība &gt; Ziņot par problēmu…</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (sākotnējā)</translation>
 <translation id="1709217939274742847">Izvēlieties biļeti, ko izmantot autentificēšanai. <ph name="LINK_BEGIN" />Uzzināt vairāk<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Nevar kopīgot</translation>
@@ -1090,6 +1091,7 @@ Varat pārvaldīt šī konta iestatījumus, savā ierīcē instalējot lietotni 
 <translation id="2144557304298909478">Linux Android lietotņu izstrāde</translation>
 <translation id="2146263598007866206">Vietnes var automātiski lejupielādēt saistītos failus kopā, lai jums ietaupītu laiku.</translation>
 <translation id="2147151613919729065">Lai notīrītu viesa režīma vēsturi, aizveriet visus viesa režīmā atvērtos logus.</translation>
+<translation id="2147218225094845757">Slēpt sānu paneli</translation>
 <translation id="2148219725039824548">Iekļaujot kopīgošanu, radās kļūda. Norādītais kopīgošanas vienums netika atrasts tīklā.</translation>
 <translation id="2148756636027685713">Formatēšana pabeigta</translation>
 <translation id="2148892889047469596">Cilnes apraide</translation>
@@ -3166,6 +3168,7 @@ Vai vēlaties palaist rīku <ph name="CONTROL_PANEL_APPLET_NAME" />?</translatio
 <translation id="4410545552906060960">Savas ierīces atbloķēšanai izmantojiet numuru (PIN), nevis paroli. Lai iestatītu PIN kodu vēlāk, atveriet iestatījumus.</translation>
 <translation id="4411578466613447185">Koda parakstītājs</translation>
 <translation id="4412698727486357573">Palīdzības centrs</translation>
+<translation id="4413088271097062326">Kuru lietojumprogrammu vēlaties izmantot?</translation>
 <translation id="44141919652824029">Vai atļaut lietotnei “<ph name="APP_NAME" />” iegūt pievienoto USB ierīču sarakstu?</translation>
 <translation id="4414232939543644979">Jauns &amp;inkognito režīma logs</translation>
 <translation id="4414515549596849729">sīkfaili un vietņu dati</translation>
@@ -3268,7 +3271,7 @@ Vai vēlaties palaist rīku <ph name="CONTROL_PANEL_APPLET_NAME" />?</translatio
 <translation id="4519935350946509010">Savienojuma kļūda.</translation>
 <translation id="4520385623207007473">Izmantojamie sīkfaili</translation>
 <translation id="452039078290142656">nezināmas ierīces, ko piedāvā <ph name="VENDOR_NAME" /></translation>
-<translation id="4522570452068850558">Informācija</translation>
+<translation id="4522570452068850558">Dati</translation>
 <translation id="4522600456902129422">Turpināt atļaut šai vietnei skatīt starpliktuves saturu</translation>
 <translation id="4522890784888918985">Pakārtotie konti netiek atbalstīti</translation>
 <translation id="4524832533047962394">Nodrošinātais reģistrācijas režīms netiek atbalstīts šajā operētājsistēmas versijā. Izmantojiet jaunāko versiju.</translation>
@@ -3938,6 +3941,7 @@ Vai vēlaties palaist rīku <ph name="CONTROL_PANEL_APPLET_NAME" />?</translatio
 <translation id="5269977353971873915">Drukāšana neizdevās</translation>
 <translation id="5275352920323889391">Suns</translation>
 <translation id="527605982717517565">Vienmēr atļaut izmantot JavaScript vietnē <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Rādīt sānu paneli</translation>
 <translation id="5278823018825269962">Statusa ID</translation>
 <translation id="5280064835262749532">Atjauniniet akreditācijas datus kopīgošanas ceļam <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Aizverot visus logus, notīrīt sīkfailus un vietņu datus</translation>
@@ -6115,7 +6119,6 @@ Saskaņā ar domēna <ph name="DOMAIN" /> prasībām viedkartei ir jābūt ievie
 <translation id="7685049629764448582">JavaScript atmiņa</translation>
 <translation id="7685087414635069102">Jāievada PIN</translation>
 <translation id="768549422429443215">Pievienojiet valodas vai pārkārtojiet sarakstu.</translation>
-<translation id="7686424868232681412">Lacros ir eksperimentāla pārlūkprogramma. Lūdzu, ziņojiet par problēmām šeit: Palīdzība &gt; Ziņot par problēmu…</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Apstipriniet jauno paroli</translation>
 <translation id="7690378713476594306">Izvēlēties no saraksta</translation>

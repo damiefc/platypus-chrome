@@ -425,12 +425,6 @@
       },
     },
 
-    'check_network_annotations_script': {
-      'check_network_annotations': {
-        'script': 'check_network_annotations.py',
-      },
-    },
-
     'chrome_public_wpt': {
       'chrome_public_wpt': {
         'swarming': {
@@ -479,7 +473,6 @@
           ],
         },
         'remove_mixins': [
-          'android_q',
           'android_r',
           'bullhead',
           'flame',
@@ -889,6 +882,9 @@
     },
 
     'chromium_linux_scripts': {
+      'check_network_annotations': {
+        'script': 'check_network_annotations.py',
+      },
       'check_static_initializers': {
         'script': 'check_static_initializers.py',
       },
@@ -910,12 +906,6 @@
       'check_static_initializers': {
         'script': 'check_static_initializers.py',
       },
-      'webkit_lint': {
-        'script': 'blink_lint_expectations.py',
-      },
-    },
-
-    'chromium_scripts': {
       'webkit_lint': {
         'script': 'blink_lint_expectations.py',
       },
@@ -1101,6 +1091,15 @@
         'swarming': {
           'shards': 12,
         }
+      },
+    },
+
+    'chromium_win_scripts': {
+      'check_network_annotations': {
+        'script': 'check_network_annotations.py',
+      },
+      'webkit_lint': {
+        'script': 'blink_lint_expectations.py',
       },
     },
 
@@ -2376,34 +2375,6 @@
           '--bot-mode',
         ],
         'use_isolated_scripts_api': True,
-      },
-    },
-
-    # Actually uploads results to the perf dashboard
-    'gpu_angle_perf_isolated_scripts': {
-      'angle_perftests': {
-        'args': [
-          'angle_perftests',
-          '--non-telemetry=true',
-          '--gtest-benchmark-name=angle_perftests',
-          '-v',
-          '--test-timeout=100',
-        ],
-        'android_args': [
-          '--test-launcher-batch-limit=1',
-        ],
-        'desktop_args': [
-          '--batch-size=1',
-          '--bot-mode',
-          '--max-processes=1',
-          '--print-test-stdout',
-        ],
-        'merge': {
-          'script': '//tools/perf/process_perf_results.py',
-        },
-        'android_swarming': {
-          'shards': 6,
-        },
       },
     },
 
@@ -4331,6 +4302,7 @@
 
     'linux_lacros_chrome_browsertests_version_skew': {
       'lacros_chrome_browsertests': { },
+      'lacros_chrome_browsertests_run_in_series': { },
     },
 
     'linux_lacros_cq_gtests': {
@@ -4348,6 +4320,7 @@
         },
       },
       'lacros_chrome_browsertests': {},
+      'lacros_chrome_browsertests_run_in_series': {},
       'lacros_chrome_unittests': {},
       'sync_integration_tests': {},
       'ui_base_unittests': {},
@@ -4356,6 +4329,7 @@
 
     'linux_lacros_specific_gtests': {
       'lacros_chrome_browsertests': {},
+      'lacros_chrome_browsertests_run_in_series': {},
       'lacros_chrome_unittests': {},
     },
 
@@ -4715,6 +4689,18 @@
       },
     },
 
+    'process_host_on_ui_gtests': {
+      'process_host_on_ui_content_browsertests': {
+        'args': [
+          '--enable-features=ProcessHostOnUI',
+        ],
+        'swarming': {
+          'shards': 10,
+        },
+        'test': 'content_browsertests',
+      },
+    },
+
     # TODO(dpranke): These are run on the p/chromium waterfall; they should
     # probably be run on other builders, and we should get rid of the p/chromium
     # waterfall.
@@ -4737,7 +4723,7 @@
 
     'rendering_mobile_representative_perf_tests_isolated_scripts': {
       'rendering_representative_perf_tests': {
-        'isolate_name': 'rendering_representative_perf_tests',
+        'isolate_name': 'rendering_representative_perf_tests_android_chrome',
         'args': [
           "../../tools/perf/run_benchmark",
           "--benchmarks=rendering.mobile",
@@ -4749,7 +4735,7 @@
 
     'rendering_mobile_representative_perf_tests_isolated_scripts_experimental': {
       'rendering_representative_perf_tests': {
-        'isolate_name': 'rendering_representative_perf_tests',
+        'isolate_name': 'rendering_representative_perf_tests_android_chrome',
         'args': [
           "../../tools/perf/run_benchmark",
           "--benchmarks=rendering.mobile",
@@ -5029,7 +5015,7 @@
           '--passthrough',
           '--retry-limit=2',
         ],
-        'isolate_name': 'telemetry_perf_unittests',
+        'isolate_name': 'telemetry_perf_unittests_android_chrome',
         'resultdb': {
           'enable': True,
         },
@@ -5042,7 +5028,7 @@
           '--passthrough',
           '--retry-limit=2',
         ],
-        'isolate_name': 'telemetry_perf_unittests',
+        'isolate_name': 'telemetry_perf_unittests_android_monochrome',
         'resultdb': {
           'enable': True,
         },
@@ -5067,6 +5053,23 @@
 
     'telemetry_perf_unittests_isolated_scripts': {
       'telemetry_perf_unittests': {
+        'args': [
+          # TODO(crbug.com/1077284): Remove this once Crashpad is the default.
+          '--extra-browser-args=--enable-crashpad',
+        ],
+        'swarming': {
+          'idempotent': False,  # https://crbug.com/549140
+          'shards': 12,
+        },
+        'resultdb': {
+          'enable': True,
+        },
+      },
+    },
+
+    'telemetry_perf_unittests_isolated_scripts_android': {
+      'telemetry_perf_unittests': {
+        'isolate_name': 'telemetry_perf_unittests_android_chrome',
         'args': [
           # TODO(crbug.com/1077284): Remove this once Crashpad is the default.
           '--extra-browser-args=--enable-crashpad',
@@ -5827,6 +5830,7 @@
       'linux_specific_xr_gtests',
       'non_android_and_cast_and_chromeos_chromium_gtests',
       'non_android_chromium_gtests',
+      'process_host_on_ui_gtests',
       'vr_platform_specific_chromium_gtests',
       'weblayer_gtests',
     ],
@@ -5958,7 +5962,7 @@
       'web_engine_gtests',
     ],
 
-    'fuchsia_x64_isolated_scripts': [
+    'fuchsia_isolated_scripts': [
       'chromium_webkit_isolated_scripts',
       'gpu_angle_fuchsia_unittests_isolated_scripts'
     ],
@@ -5984,34 +5988,10 @@
       'gpu_angle_unit_gtests',
     ],
 
-    'gpu_angle_android_vulkan_gtests': [
-      'gpu_angle_deqp_egl_vulkan_gtests',
-      'gpu_angle_deqp_gles2_vulkan_gtests',
-      'gpu_angle_deqp_gles31_vulkan_gtests',
-      'gpu_angle_deqp_gles3_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles2_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles31_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles32_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles3_vulkan_gtests',
-      'gpu_angle_end2end_gtests',
-      'gpu_angle_unit_gtests',
-    ],
-
     'gpu_angle_deqp_android_gtests': [
       'gpu_angle_deqp_egl_gles_gtests',
       'gpu_angle_deqp_gles2_gles_gtests',
       'gpu_angle_deqp_gles3_gles_gtests',
-    ],
-
-    'gpu_angle_deqp_android_vulkan_gtests': [
-      'gpu_angle_deqp_egl_vulkan_gtests',
-      'gpu_angle_deqp_gles2_vulkan_gtests',
-      'gpu_angle_deqp_gles31_vulkan_gtests',
-      'gpu_angle_deqp_gles3_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles2_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles31_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles32_vulkan_gtests',
-      'gpu_angle_deqp_khr_gles3_vulkan_gtests',
     ],
 
     'gpu_angle_deqp_linux_nvidia_gtests': [
@@ -6630,6 +6610,7 @@
       'gpu_common_and_optional_telemetry_tests',
       'gpu_mediapipe_passthrough_telemetry_tests',
       'gpu_mediapipe_validating_telemetry_tests',
+      'gpu_passthrough_telemetry_tests',
       'gpu_validating_telemetry_tests',
       'gpu_webcodecs_telemetry_test',
       'gpu_webgl_conformance_gles_passthrough_telemetry_tests',
@@ -6733,14 +6714,14 @@
       'components_perftests_isolated_scripts',
       'monochrome_public_apk_checker_isolated_script',
       'telemetry_android_minidump_unittests_isolated_scripts',
-      'telemetry_perf_unittests_isolated_scripts',
+      'telemetry_perf_unittests_isolated_scripts_android',
     ],
 
     'marshmallow_pie_isolated_scripts': [
       'android_isolated_scripts',
       'components_perftests_isolated_scripts',
       'telemetry_android_minidump_unittests_isolated_scripts',
-      'telemetry_perf_unittests_isolated_scripts',
+      'telemetry_perf_unittests_isolated_scripts_android',
     ],
 
     'mojo_android_gtests': [
@@ -7232,28 +7213,28 @@
     'ios_webkit_tot_tests': {
       'ios_common_tests': {
         'variants': [
-          'SIM_IPHONE_X_13_5',
-          'SIM_IPAD_AIR_2_13_5',
+          'SIM_IPHONE_X_14_5',
+          'SIM_IPAD_AIR_2_14_5',
         ]
       },
       'ios_eg2_cq_tests': {
         'mixins': ['xcode_parallelization'],
         'variants': [
-          'SIM_IPHONE_X_13_5',
-          'SIM_IPAD_AIR_2_13_5',
+          'SIM_IPHONE_X_14_5',
+          'SIM_IPAD_AIR_2_14_5',
         ]
       },
       'ios_eg2_tests': {
         'mixins': ['xcode_parallelization'],
         'variants': [
-          'SIM_IPHONE_X_13_5',
-          'SIM_IPAD_AIR_2_13_5',
+          'SIM_IPHONE_X_14_5',
+          'SIM_IPAD_AIR_2_14_5',
         ]
       },
       'ios_screen_size_dependent_tests': {
         'variants': [
-          'SIM_IPHONE_X_13_5',
-          'SIM_IPAD_AIR_2_13_5',
+          'SIM_IPHONE_X_14_5',
+          'SIM_IPAD_AIR_2_14_5',
         ]
       },
     },
@@ -7277,11 +7258,13 @@
       'lacros_device_or_vm_gtests': {
         'variants': [
           'LACROS_AMD64_GENERIC',
+          'LACROS_EVE',
         ]
       },
       'lacros_fyi_tast_tests': {
         'variants': [
           'LACROS_AMD64_GENERIC',
+          'LACROS_EVE',
         ]
       },
     },

@@ -1161,8 +1161,8 @@ RuleIndexList* StyleResolver::PseudoCSSRulesForElement(
   DCHECK(element);
   StyleResolverState state(GetDocument(), *element);
   MatchResult match_result;
-  // TODO(crbug.com/1145970): Use actual StyleRecalcContext.
-  StyleRecalcContext style_recalc_context;
+  StyleRecalcContext style_recalc_context =
+      StyleRecalcContext::FromAncestors(*element);
   ElementRuleCollector collector(state.ElementContext(), style_recalc_context,
                                  selector_filter_, match_result, state.Style(),
                                  EInsideLink::kNotInsideLink);
@@ -1751,10 +1751,8 @@ void StyleResolver::PropagateStyleToViewport() {
     // <html> root element with no background steals background from its first
     // <body> child.
     // Also see LayoutBoxModelObject::BackgroundTransfersToView()
-    if (body_style && IsA<HTMLHtmlElement>(document_element) &&
-        !background_style->HasBackground()) {
+    if (body_style && !background_style->HasBackground())
       background_style = body_style;
-    }
 
     Color background_color = Color::kTransparent;
     FillLayer background_layers(EFillLayerType::kBackground, true);

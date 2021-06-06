@@ -57,6 +57,10 @@ void LogInvalidSpecifics(InvalidBookmarkSpecificsError error) {
   base::UmaHistogramEnumeration("Sync.InvalidBookmarkSpecifics", error);
 }
 
+void LogFaviconContainedInSpecifics(bool contains_favicon) {
+  base::UmaHistogramBoolean(
+      "Sync.BookmarkSpecificsExcludingFoldersContainFavicon", contains_favicon);
+}
 void UpdateBookmarkSpecificsMetaInfo(
     const bookmarks::BookmarkNode::MetaInfoMap* metainfo_map,
     sync_pb::BookmarkSpecifics* bm_specifics) {
@@ -85,6 +89,7 @@ void SetBookmarkFaviconFromSpecifics(
     const bookmarks::BookmarkNode* bookmark_node,
     favicon::FaviconService* favicon_service) {
   DCHECK(bookmark_node);
+  DCHECK(!bookmark_node->is_folder());
   DCHECK(favicon_service);
 
   favicon_service->AddPageNoVisitForBookmark(bookmark_node->url(),
@@ -99,10 +104,13 @@ void SetBookmarkFaviconFromSpecifics(
 
   if (icon_bytes->size() == 0 && icon_url.is_empty()) {
     // Empty icon URL and no bitmap data means no icon mapping.
+    LogFaviconContainedInSpecifics(false);
     favicon_service->DeleteFaviconMappings({bookmark_node->url()},
                                            favicon_base::IconType::kFavicon);
     return;
   }
+
+  LogFaviconContainedInSpecifics(true);
 
   if (icon_url.is_empty()) {
     // WebUI pages such as "chrome://bookmarks/" are missing a favicon URL but
@@ -285,20 +293,24 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
 
   bookmarks::BookmarkNode::MetaInfoMap metainfo =
       GetBookmarkMetaInfo(specifics);
-  const bookmarks::BookmarkNode* node;
+
   if (is_folder) {
-    node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
+    // TODO(crbug.com/1214840): Folders should propagate the creation time into
+    // BookmarkModel, just like non-folders.
+    return model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
                             &metainfo, guid);
-  } else {
-    const int64_t create_time_us = specifics.creation_time_us();
-    base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
-        // Use FromDeltaSinceWindowsEpoch because create_time_us has
-        // always used the Windows epoch.
-        base::TimeDelta::FromMicroseconds(create_time_us));
-    node = model->AddURL(parent, index, NodeTitleFromSpecifics(specifics),
-                         GURL(specifics.url()), &metainfo, create_time, guid);
   }
+
+  const int64_t create_time_us = specifics.creation_time_us();
+  base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
+      // Use FromDeltaSinceWindowsEpoch because create_time_us has
+      // always used the Windows epoch.
+      base::TimeDelta::FromMicroseconds(create_time_us));
+  const bookmarks::BookmarkNode* node =
+      model->AddURL(parent, index, NodeTitleFromSpecifics(specifics),
+                    GURL(specifics.url()), &metainfo, create_time, guid);
   SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
+
   return node;
 }
 
@@ -316,13 +328,13 @@ void UpdateBookmarkNodeFromSpecifics(
   base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
   DCHECK(!guid.is_valid() || guid == node->guid());
 
-  if (!node->is_folder()) {
-    model->SetURL(node, GURL(specifics.url()));
-  }
-
   model->SetTitle(node, NodeTitleFromSpecifics(specifics));
   model->SetNodeMetaInfoMap(node, GetBookmarkMetaInfo(specifics));
-  SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
+
+  if (!node->is_folder()) {
+    model->SetURL(node, GURL(specifics.url()));
+    SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
+  }
 }
 
 const bookmarks::BookmarkNode* ReplaceBookmarkNodeGUID(

@@ -6,7 +6,6 @@
 #define SERVICES_NETWORK_CRASH_KEYS_H_
 
 #include "base/debug/crash_logging.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
 namespace network {
@@ -15,8 +14,9 @@ struct ResourceRequest;
 
 namespace debug {
 
+// TODO(lukasza): Move to //services/network/public/cpp to enable reuse outside
+// of //services/network (e.g. see https://crrev.com/c/2923326).
 base::debug::CrashKeyString* GetRequestInitiatorOriginLockCrashKey();
-base::debug::CrashKeyString* GetFactoryDebugTagCrashKey();
 
 class ScopedRequestCrashKeys {
  public:

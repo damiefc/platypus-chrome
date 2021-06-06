@@ -13,9 +13,11 @@
 #include "chromeos/components/diagnostics_ui/backend/diagnostics_manager.h"
 #include "chromeos/components/diagnostics_ui/backend/histogram_util.h"
 #include "chromeos/components/diagnostics_ui/backend/input_data_provider.h"
+#include "chromeos/components/diagnostics_ui/backend/network_health_provider.h"
 #include "chromeos/components/diagnostics_ui/backend/session_log_handler.h"
 #include "chromeos/components/diagnostics_ui/backend/system_data_provider.h"
 #include "chromeos/components/diagnostics_ui/backend/system_routine_controller.h"
+#include "chromeos/components/diagnostics_ui/mojom/network_health_provider.mojom.h"
 #include "chromeos/components/diagnostics_ui/mojom/system_data_provider.mojom.h"
 #include "chromeos/components/diagnostics_ui/url_constants.h"
 #include "chromeos/grit/chromeos_diagnostics_app_resources.h"
@@ -141,10 +143,12 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
 DiagnosticsDialogUI::DiagnosticsDialogUI(
     content::WebUI* web_ui,
     const chromeos::diagnostics::SessionLogHandler::SelectFilePolicyCreator&
-        select_file_policy_creator)
+        select_file_policy_creator,
+    ash::HoldingSpaceClient* holding_space_client)
     : ui::MojoWebDialogUI(web_ui),
       session_log_handler_(std::make_unique<diagnostics::SessionLogHandler>(
-          select_file_policy_creator)) {
+          select_file_policy_creator,
+          holding_space_client)) {
   diagnostics_manager_ = std::make_unique<diagnostics::DiagnosticsManager>(
       session_log_handler_.get());
 
@@ -161,7 +165,7 @@ DiagnosticsDialogUI::DiagnosticsDialogUI(
                        IDR_DIAGNOSTICS_APP_INDEX_HTML);
 
   auto handler = std::make_unique<diagnostics::SessionLogHandler>(
-      select_file_policy_creator);
+      select_file_policy_creator, holding_space_client);
   diagnostics_manager_ =
       std::make_unique<diagnostics::DiagnosticsManager>(handler.get());
   web_ui->AddMessageHandler(std::move(handler));
@@ -176,6 +180,16 @@ DiagnosticsDialogUI::DiagnosticsDialogUI(
 DiagnosticsDialogUI::~DiagnosticsDialogUI() {
   const base::TimeDelta time_open = base::Time::Now() - open_timestamp_;
   diagnostics::metrics::EmitAppOpenDuration(time_open);
+}
+
+void DiagnosticsDialogUI::BindInterface(
+    mojo::PendingReceiver<diagnostics::mojom::NetworkHealthProvider> receiver) {
+  DCHECK(features::IsNetworkingInDiagnosticsAppEnabled());
+  diagnostics::NetworkHealthProvider* network_health_provider =
+      diagnostics_manager_->GetNetworkHealthProvider();
+  if (network_health_provider) {
+    network_health_provider->BindInterface(std::move(receiver));
+  }
 }
 
 void DiagnosticsDialogUI::BindInterface(

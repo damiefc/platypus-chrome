@@ -317,11 +317,7 @@ class SigninManagerImpl
     @Override
     public void signinAndEnableSync(@SigninAccessPoint int accessPoint, Account account,
             @Nullable SignInCallback callback) {
-        mAccountTrackerService.seedAccountsIfNeeded(() -> {
-            final CoreAccountInfo accountInfo =
-                    mIdentityManager
-                            .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                                    account.name);
+        AccountInfoService.get().getAccountInfoByEmail(account.name).then(accountInfo -> {
             signinInternal(
                     SignInState.createForSigninAndEnableSync(accessPoint, accountInfo, callback));
         });
@@ -600,9 +596,7 @@ class SigninManagerImpl
     @Override
     public void isAccountManaged(String email, final Callback<Boolean> callback) {
         assert email != null;
-        CoreAccountInfo account =
-                mIdentityManager.findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                        email);
+        CoreAccountInfo account = mIdentityManager.findExtendedAccountInfoByEmailAddress(email);
         assert account != null;
         SigninManagerImplJni.get().isAccountManaged(mNativeSigninManagerAndroid, account, callback);
     }

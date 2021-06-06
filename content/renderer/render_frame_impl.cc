@@ -55,6 +55,7 @@
 #include "cc/trees/ukm_manager.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_navigation_policy.h"
+#include "content/common/debug_utils.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/navigation_client.mojom.h"
 #include "content/common/navigation_gesture.h"
@@ -291,6 +292,19 @@ namespace {
 
 const int kExtraCharsBeforeAndAfterSelection = 100;
 const size_t kMaxURLLogChars = 1024;
+
+// Time, in seconds, we delay before sending content state changes (such as form
+// state and scroll position) to the browser. We delay sending changes to avoid
+// spamming the browser.
+// To avoid having tab/session restore require sending a message to get the
+// current content state during tab closing we use a shorter timeout for the
+// foreground renderer. This means there is a small window of time from which
+// content state is modified and not sent to session restore, but this is
+// better than having to wake up all renderers during shutdown.
+constexpr base::TimeDelta kDelaySecondsForContentStateSyncHidden =
+    base::TimeDelta::FromSeconds(5);
+constexpr base::TimeDelta kDelaySecondsForContentStateSync =
+    base::TimeDelta::FromSeconds(1);
 
 const blink::PreviewsState kDisabledPreviewsBits =
     blink::PreviewsTypes::PREVIEWS_OFF |
@@ -1105,6 +1119,14 @@ perfetto::protos::pbzero::FrameDeleteIntention FrameDeleteIntentionToProto(
   return ProtoLevel::FRAME_DELETE_INTENTION_NOT_MAIN_FRAME;
 }
 
+void PropagatePageZoomToNewlyAttachedFrame(blink::WebView* web_view,
+                                           float device_scale_factor) {
+  if (RenderThread::Get()->IsUseZoomForDSF())
+    web_view->SetZoomFactorForDeviceScaleFactor(device_scale_factor);
+  else
+    web_view->SetZoomLevel(web_view->ZoomLevel());
+}
+
 }  // namespace
 
 RenderFrameImpl::AssertNavigationCommits::AssertNavigationCommits(
@@ -1820,6 +1842,9 @@ RenderFrameImpl::RenderFrameImpl(CreateParams params)
       std::move(params.browser_interface_broker),
       agent_scheduling_group_.agent_group_scheduler().DefaultTaskRunner());
 
+  delayed_state_sync_timer_.SetTaskRunner(
+      agent_scheduling_group_.agent_group_scheduler().DefaultTaskRunner());
+
   // Must call after binding our own remote interfaces.
   media_factory_.SetupMojo();
 
@@ -1980,7 +2005,8 @@ void RenderFrameImpl::PepperSelectionChanged(
 
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-void RenderFrameImpl::ScriptedPrint(bool user_initiated) {
+void RenderFrameImpl::ScriptedPrint() {
+  bool user_initiated = GetLocalRootWebFrameWidget()->HandlingInputEvent();
   for (auto& observer : observers_)
     observer.ScriptedPrint(user_initiated);
 }
@@ -2505,7 +2531,8 @@ void RenderFrameImpl::BindWebUI(
 }
 
 void RenderFrameImpl::SetOldPageLifecycleStateFromNewPageCommitIfNeeded(
-    const mojom::OldPageInfo* old_page_info) {
+    const mojom::OldPageInfo* old_page_info,
+    const GURL& new_page_url) {
   if (!old_page_info)
     return;
   RenderFrameImpl* old_main_render_frame = RenderFrameImpl::FromRoutingID(
@@ -2516,8 +2543,38 @@ void RenderFrameImpl::SetOldPageLifecycleStateFromNewPageCommitIfNeeded(
     // we should check if it still exists.
     return;
   }
-  CHECK(IsMainFrame());
-  CHECK(old_main_render_frame->IsMainFrame());
+  if (!IsMainFrame() && !old_main_render_frame->IsMainFrame()) {
+    // This shouldn't happen because `old_page_info` should only be set on
+    // cross-BrowsingInstance navigations, which can only happen on main frames.
+    // However, we got some reports of this happening (see
+    // https://crbug.com/1207271).
+    SCOPED_CRASH_KEY_BOOL("old_page_info", "new_is_main_frame", IsMainFrame());
+    SCOPED_CRASH_KEY_STRING256("old_page_info", "new_url", new_page_url.spec());
+    SCOPED_CRASH_KEY_BOOL("old_page_info", "old_is_main_frame",
+                          old_main_render_frame->IsMainFrame());
+    SCOPED_CRASH_KEY_STRING256("old_page_info", "old_url",
+                               old_main_render_frame->GetLoadingUrl().spec());
+    SCOPED_CRASH_KEY_NUMBER("old_page_info", "old_routing_id",
+                            old_page_info->routing_id_for_old_main_frame);
+    SCOPED_CRASH_KEY_BOOL(
+        "old_page_info", "old_is_frozen",
+        old_page_info->new_lifecycle_state_for_old_page->is_frozen);
+    SCOPED_CRASH_KEY_BOOL("old_page_info", "old_is_in_bfcache",
+                          old_page_info->new_lifecycle_state_for_old_page
+                              ->is_in_back_forward_cache);
+    SCOPED_CRASH_KEY_BOOL(
+        "old_page_info", "old_is_hidden",
+        old_page_info->new_lifecycle_state_for_old_page->visibility ==
+            PageVisibilityState::kHidden);
+    SCOPED_CRASH_KEY_BOOL(
+        "old_page_info", "old_pagehide_dispatch",
+        old_page_info->new_lifecycle_state_for_old_page->pagehide_dispatch ==
+            blink::mojom::PagehideDispatch::kNotDispatched);
+    CaptureTraceForNavigationDebugScenario(
+        DebugScenario::kDebugNonMainFrameWithOldPageInfo);
+    NOTREACHED();
+    return;
+  }
   DCHECK_EQ(old_page_info->new_lifecycle_state_for_old_page->visibility,
             PageVisibilityState::kHidden);
   DCHECK_NE(old_page_info->new_lifecycle_state_for_old_page->pagehide_dispatch,
@@ -2553,7 +2610,7 @@ void RenderFrameImpl::CommitNavigation(
       this, kMayReplaceInitialEmptyDocument);
 
   SetOldPageLifecycleStateFromNewPageCommitIfNeeded(
-      commit_params->old_page_info.get());
+      commit_params->old_page_info.get(), common_params->url);
 
   bool was_initiated_in_this_frame =
       navigation_client_impl_ &&
@@ -3900,13 +3957,47 @@ void RenderFrameImpl::DidFinishSameDocumentNavigation(
     observer.DidFinishSameDocumentNavigation();
 }
 
+void RenderFrameImpl::WillFreezePage() {
+  // Make sure browser has the latest info before the page is frozen. If the
+  // page goes into the back-forward cache it could be evicted and some of the
+  // updates lost.
+  SendUpdateState();
+}
+
+void RenderFrameImpl::DidOpenDocumentInputStream(const blink::WebURL& url) {
+  GetFrameHost()->DidOpenDocumentInputStream(url);
+}
+
 void RenderFrameImpl::DidSetPageLifecycleState() {
   for (auto& observer : observers_)
     observer.DidSetPageLifecycleState();
 }
 
 void RenderFrameImpl::DidUpdateCurrentHistoryItem() {
-  render_view_->StartNavStateSyncTimerIfNecessary(this);
+  StartDelayedSyncTimer();
+}
+
+void RenderFrameImpl::StartDelayedSyncTimer() {
+  base::TimeDelta delay;
+  if (send_content_state_immediately_) {
+    SendUpdateState();
+    return;
+  } else if (GetWebView()->GetVisibilityState() !=
+             PageVisibilityState::kVisible)
+    delay = kDelaySecondsForContentStateSyncHidden;
+  else
+    delay = kDelaySecondsForContentStateSync;
+
+  if (delayed_state_sync_timer_.IsRunning()) {
+    // The timer is already running. If the delay of the timer matches the
+    // amount we want to delay by, then return. Otherwise stop the timer so that
+    // it gets started with the right delay.
+    if (delayed_state_sync_timer_.GetCurrentDelay() == delay)
+      return;
+    delayed_state_sync_timer_.Stop();
+  }
+  delayed_state_sync_timer_.Start(FROM_HERE, delay, this,
+                                  &RenderFrameImpl::SendUpdateState);
 }
 
 base::UnguessableToken RenderFrameImpl::GetDevToolsFrameToken() {
@@ -4179,7 +4270,7 @@ void RenderFrameImpl::WillReleaseScriptContext(v8::Local<v8::Context> context,
 }
 
 void RenderFrameImpl::DidChangeScrollOffset() {
-  render_view_->StartNavStateSyncTimerIfNecessary(this);
+  StartDelayedSyncTimer();
 
   for (auto& observer : observers_)
     observer.DidChangeScrollOffset();
@@ -4598,8 +4689,8 @@ void RenderFrameImpl::UpdateStateForCommit(
     // And when UseZoomForDSF is disabled, in content_browsertests:
     //     IFrameZoomBrowserTest.SubframesDontZoomIndependently (and the whole
     //     suite).
-    render_view_->PropagatePageZoomToNewlyAttachedFrame(
-        RenderThread::Get()->IsUseZoomForDSF(),
+    PropagatePageZoomToNewlyAttachedFrame(
+        GetWebView(),
         GetLocalRootWebFrameWidget()->GetScreenInfo().device_scale_factor);
   }
 
@@ -4814,7 +4905,7 @@ void RenderFrameImpl::BeginNavigation(
   CHECK(in_frame_tree_);
 
   // This might be the first navigation in this RenderFrame.
-  const bool first_navigation_in_frame = !had_started_any_navigation_;
+  const bool first_navigation_in_render_frame = !had_started_any_navigation_;
   had_started_any_navigation_ = true;
 
   // This method is only called for renderer initiated navigations, which
@@ -4972,14 +5063,46 @@ void RenderFrameImpl::BeginNavigation(
       mhtml_body_loader_client_.reset();
     }
 
-    // First navigation in a frame to an empty document must be handled
-    // synchronously.
-    bool is_first_real_empty_document_navigation =
+    // In certain cases, Blink re-navigates to about:blank when creating a new
+    // browsing context (when opening a new window or creating an iframe) and
+    // expects the navigation to complete synchronously.
+    // TODO(https://crbug.com/1215096): Remove the synchronous about:blank
+    // navigation.
+    bool should_do_synchronous_about_blank_navigation =
+        // Mainly a proxy for checking about:blank, even though it can match
+        // other things like about:srcdoc (or any empty document schemes that
+        // are registered).
+        // TODO(https://crbug.com/1215096): This should be changed to only check
+        // for about:blank because the navigation triggered by browsing context
+        // creation will always navigate to about:blank.
         WebDocumentLoader::WillLoadUrlAsEmpty(url) &&
-        !frame_->HasCommittedFirstRealLoad() && first_navigation_in_frame;
+        // The navigation method must be "GET". This is to avoid issues like
+        // https://crbug.com/1210653, where a form submits to about:blank
+        // targeting a new window using a POST. The browser never expects this
+        // to happen synchronously because it only expects the synchronous
+        // about:blank navigation to originate from browsing context creation,
+        // which will always be GET requests.
+        info->url_request.HttpMethod().Equals("GET") &&
+        // If the frame has committed or even started a navigation before, this
+        // navigation can't possibly be triggered by browsing context creation,
+        // which would have triggered the navigation synchronously as the first
+        // navigation in this frame. Note that we check both
+        // HasCommittedFirstRealLoad() and `first_navigation_in_render_frame`
+        // here because `first_navigation_in_render_frame` only tracks the state
+        // in this *RenderFrame*, so it will be true even if this navigation
+        // happens on a frame that has existed before in another process (e.g.
+        // an <iframe> pointing to a.com being navigated to a cross-origin
+        // about:blank document that happens in a new frame). Meanwhile,
+        // HasCommittedFirstRealLoad() tracks the state of the frame, so it will
+        // be true in the aforementioned case and we would not do a synchronous
+        // commit here.
+        !frame_->HasCommittedFirstRealLoad() &&
+        first_navigation_in_render_frame &&
+        // If this is a subframe history navigation that should be sent to the
+        // browser, don't commit it synchronously.
+        !is_history_navigation_in_new_child_frame;
 
-    if (is_first_real_empty_document_navigation &&
-        !is_history_navigation_in_new_child_frame) {
+    if (should_do_synchronous_about_blank_navigation) {
       for (auto& observer : observers_)
         observer.DidStartNavigation(url, info->navigation_type);
       SynchronouslyCommitAboutBlankForBug778318(std::move(info));
@@ -5531,6 +5654,9 @@ void RenderFrameImpl::DecodeDataURL(
 }
 
 void RenderFrameImpl::SendUpdateState() {
+  // Since we are sending immediately we can cancel any pending delayed sync
+  // timer.
+  delayed_state_sync_timer_.Stop();
   if (GetWebFrame()->GetCurrentHistoryItem().IsNull())
     return;
 

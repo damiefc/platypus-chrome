@@ -400,6 +400,7 @@ static_library("ui") {
     "//chrome/services/qrcode_generator/public/mojom",
     "//components/about_ui",
     "//components/account_id",
+    "//components/accuracy_tips",
     "//components/autofill/content/browser:risk_proto",
     "//components/autofill/core/browser",
     "//components/autofill_assistant/browser/public:public",
@@ -599,6 +600,7 @@ static_library("ui") {
     "//ui/web_dialogs",
     "//ui/webui",
     "//ui/webui/resources/cr_components/customize_themes:mojom",
+    "//ui/webui/resources/cr_components/most_visited:mojom",
     "//v8:v8_version",
   ]
 
@@ -1341,6 +1343,8 @@ static_library("ui") {
       "webui/commander/commander_handler.h",
       "webui/commander/commander_ui.cc",
       "webui/commander/commander_ui.h",
+      "webui/cr_components/most_visited/most_visited_handler.cc",
+      "webui/cr_components/most_visited/most_visited_handler.h",
       "webui/customize_themes/chrome_customize_themes_handler.cc",
       "webui/customize_themes/chrome_customize_themes_handler.h",
       "webui/devtools_ui.cc",
@@ -2318,6 +2322,8 @@ static_library("ui") {
       "webui/chromeos/internet_config_dialog.h",
       "webui/chromeos/internet_detail_dialog.cc",
       "webui/chromeos/internet_detail_dialog.h",
+      "webui/chromeos/launcher_internals/launcher_internals_ui.cc",
+      "webui/chromeos/launcher_internals/launcher_internals_ui.h",
       "webui/chromeos/login/active_directory_login_screen_handler.cc",
       "webui/chromeos/login/active_directory_login_screen_handler.h",
       "webui/chromeos/login/active_directory_password_change_screen_handler.cc",
@@ -2709,6 +2715,7 @@ static_library("ui") {
       "//chrome/browser/ui/webui/app_management:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/add_supervision:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/crostini_upgrader:mojo_bindings",
+      "//chrome/browser/ui/webui/chromeos/launcher_internals:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/vm:mojo_bindings",
       "//chrome/browser/ui/webui/nearby_share:mojom",
       "//chrome/browser/ui/webui/nearby_share/public/mojom",
@@ -2921,6 +2928,7 @@ static_library("ui") {
       "views/autofill/payments/webauthn_dialog_view_impl.h",
       "views/close_bubble_on_tab_activation_helper.cc",
       "views/close_bubble_on_tab_activation_helper.h",
+      "views/direct_sockets_connection_bubble_dialog.cc",
       "views/external_protocol_dialog.cc",
       "views/external_protocol_dialog.h",
       "views/hats/hats_next_web_dialog.cc",
@@ -3501,6 +3509,13 @@ static_library("ui") {
       # This is the only component that can interact with gtk.
       deps += [ "//ui/gtk" ]
     }
+  }
+
+  if (is_win || is_mac || is_linux) {
+    sources += [
+      "startup/web_app_protocol_handling_startup_utils.cc",
+      "startup/web_app_protocol_handling_startup_utils.h",
+    ]
   }
 
   if (is_win || is_mac || (is_linux && !is_chromeos_lacros)) {
@@ -4188,6 +4203,8 @@ static_library("ui") {
       "views/send_tab_to_self/send_tab_to_self_bubble_view_impl.h",
       "views/send_tab_to_self/send_tab_to_self_icon_view.cc",
       "views/send_tab_to_self/send_tab_to_self_icon_view.h",
+      "views/send_tab_to_self/send_tab_to_self_toolbar_bubble_view.cc",
+      "views/send_tab_to_self/send_tab_to_self_toolbar_bubble_view.h",
       "views/send_tab_to_self/send_tab_to_self_toolbar_button_view.cc",
       "views/send_tab_to_self/send_tab_to_self_toolbar_button_view.h",
       "views/session_crashed_bubble_view.cc",
@@ -4528,6 +4545,15 @@ static_library("ui") {
         "views/web_apps/web_app_hover_button.h",
         "views/web_apps/web_app_protocol_handler_intent_picker_dialog_view.cc",
         "views/web_apps/web_app_protocol_handler_intent_picker_dialog_view.h",
+      ]
+    }
+
+    if (is_win || is_mac || (is_linux && !is_chromeos_lacros)) {
+      sources += [
+        "views/web_apps/web_app_url_handler_hover_button.cc",
+        "views/web_apps/web_app_url_handler_hover_button.h",
+        "views/web_apps/web_app_url_handler_intent_picker_dialog_view.cc",
+        "views/web_apps/web_app_url_handler_intent_picker_dialog_view.h",
       ]
     }
 

@@ -17,23 +17,20 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/arc_web_contents_data.h"
-#include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/badging/badge_manager_factory.h"
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_manager.h"
-#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
@@ -53,11 +50,8 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/full_restore/app_launch_info.h"
-#include "components/full_restore/full_restore_utils.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
-#include "components/sessions/core/session_id.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/clear_site_data_utils.h"
 #include "content/public/browser/web_contents.h"
@@ -151,25 +145,6 @@ void WebAppsChromeOs::Initialize() {
   }
 }
 
-void WebAppsChromeOs::LaunchAppWithIntent(
-    const std::string& app_id,
-    int32_t event_flags,
-    apps::mojom::IntentPtr intent,
-    apps::mojom::LaunchSource launch_source,
-    apps::mojom::WindowInfoPtr window_info) {
-  auto* tab = WebAppsChromeOs::LaunchAppWithIntentImpl(
-      app_id, event_flags, std::move(intent), launch_source,
-      window_info ? window_info->display_id : display::kInvalidDisplayId);
-
-  if (launch_source != apps::mojom::LaunchSource::kFromArc || !tab) {
-    return;
-  }
-
-  // Add a flag to remember this tab originated in the ARC context.
-  tab->SetUserData(&arc::ArcWebContentsData::kArcTransitionFlag,
-                   std::make_unique<arc::ArcWebContentsData>());
-}
-
 void WebAppsChromeOs::Uninstall(const std::string& app_id,
                                 apps::mojom::UninstallSource uninstall_source,
                                 bool clear_site_data,
@@ -184,54 +159,42 @@ void WebAppsChromeOs::Uninstall(const std::string& app_id,
 }
 
 void WebAppsChromeOs::PauseApp(const std::string& app_id) {
-  if (paused_apps_.MaybeAddApp(app_id)) {
-    SetIconEffect(app_id);
-  }
-
-  constexpr bool kPaused = true;
-  Publish(paused_apps_.GetAppWithPauseStatus(app_type(), app_id, kPaused),
-          subscribers());
-
-  for (auto* browser : *BrowserList::GetInstance()) {
-    if (!browser->is_type_app()) {
-      continue;
-    }
-    if (GetAppIdFromApplicationName(browser->app_name()) == app_id) {
-      browser->tab_strip_model()->CloseAllTabs();
-    }
-  }
+  publisher_helper().PauseApp(app_id);
 }
 
 void WebAppsChromeOs::UnpauseApps(const std::string& app_id) {
-  if (paused_apps_.MaybeRemoveApp(app_id)) {
-    SetIconEffect(app_id);
-  }
-
-  constexpr bool kPaused = false;
-  Publish(paused_apps_.GetAppWithPauseStatus(app_type(), app_id, kPaused),
-          subscribers());
+  publisher_helper().UnpauseApps(app_id);
 }
 
 void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
                                    apps::mojom::MenuType menu_type,
                                    int64_t display_id,
                                    GetMenuModelCallback callback) {
-  const WebApp* web_app = GetWebApp(app_id);
-  if (!web_app) {
-    std::move(callback).Run(apps::mojom::MenuItems::New());
-    return;
-  }
+  bool is_system_web_app = false;
+  bool can_use_uninstall = true;
+  apps::mojom::WindowMode display_mode;
+  apps::AppServiceProxyFactory::GetForProfile(profile())
+      ->AppRegistryCache()
+      .ForOneApp(app_id, [&is_system_web_app, &can_use_uninstall,
+                          &display_mode](const apps::AppUpdate& update) {
+        if (update.InstallSource() == apps::mojom::InstallSource::kSystem) {
+          is_system_web_app = true;
+        }
+        if (update.InstallSource() == apps::mojom::InstallSource::kSystem ||
+            update.InstallSource() == apps::mojom::InstallSource::kPolicy) {
+          can_use_uninstall = false;
+        }
+        display_mode = update.WindowMode();
+      });
 
-  const bool is_system_web_app = web_app->IsSystemApp();
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
   if (!is_system_web_app) {
-    apps::CreateOpenNewSubmenu(
-        menu_type,
-        web_app->user_display_mode() == DisplayMode::kStandalone
-            ? IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW
-            : IDS_APP_LIST_CONTEXT_MENU_NEW_TAB,
-        &menu_items);
+    apps::CreateOpenNewSubmenu(menu_type,
+                               display_mode == apps::mojom::WindowMode::kWindow
+                                   ? IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW
+                                   : IDS_APP_LIST_CONTEXT_MENU_NEW_TAB,
+                               &menu_items);
   }
 
   if (menu_type == apps::mojom::MenuType::kShelf &&
@@ -240,7 +203,7 @@ void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
                          &menu_items);
   }
 
-  if (provider()->install_finalizer().CanUserUninstallWebApp(app_id)) {
+  if (can_use_uninstall) {
     apps::AddCommandItem(ash::UNINSTALL, IDS_APP_LIST_UNINSTALL_ITEM,
                          &menu_items);
   }
@@ -248,6 +211,21 @@ void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
   if (!is_system_web_app) {
     apps::AddCommandItem(ash::SHOW_APP_INFO, IDS_APP_CONTEXT_MENU_SHOW_INFO,
                          &menu_items);
+  }
+
+  GetMenuModelFromWebAppProvider(app_id, menu_type, std::move(menu_items),
+                                 std::move(callback));
+}
+
+void WebAppsChromeOs::GetMenuModelFromWebAppProvider(
+    const std::string& app_id,
+    apps::mojom::MenuType menu_type,
+    apps::mojom::MenuItemsPtr menu_items,
+    GetMenuModelCallback callback) {
+  const WebApp* web_app = GetWebApp(app_id);
+  if (!web_app) {
+    std::move(callback).Run(apps::mojom::MenuItems::New());
+    return;
   }
 
   // Read shortcuts menu item icons from disk, if any.
@@ -361,7 +339,12 @@ void WebAppsChromeOs::ExecuteContextMenuCommand(const std::string& app_id,
         web_app->shortcuts_menu_item_infos()[menu_item_index].url;
   }
 
-  LaunchAppWithParams(std::move(params));
+  publisher_helper().LaunchAppWithParams(std::move(params));
+}
+
+void WebAppsChromeOs::SetWindowMode(const std::string& app_id,
+                                    apps::mojom::WindowMode window_mode) {
+  publisher_helper().SetWindowMode(app_id, window_mode);
 }
 
 void WebAppsChromeOs::OnWebAppInstalled(const AppId& app_id) {
@@ -377,7 +360,7 @@ void WebAppsChromeOs::OnWebAppWillBeUninstalled(const AppId& app_id) {
   }
 
   app_notifications_.RemoveNotificationsForApp(app_id);
-  paused_apps_.MaybeRemoveApp(app_id);
+  publisher_helper().MaybeRemovePausedApp(app_id);
 
   auto result = media_requests_.RemoveRequests(app_id);
   ModifyCapabilityAccess(subscribers(), app_id, result.camera,
@@ -402,8 +385,7 @@ void WebAppsChromeOs::OnWebAppDisabledStateChanged(const AppId& app_id,
                   : apps::mojom::Readiness::kReady;
   apps::mojom::AppPtr app =
       publisher_helper().ConvertWebApp(web_app, readiness);
-  app->icon_key = icon_key_factory().MakeIconKey(
-      GetIconEffects(web_app, paused_apps_.IsPaused(app_id), is_disabled));
+  app->icon_key = publisher_helper().MakeIconKey(web_app, is_disabled);
 
   // If the disable mode is hidden, update the visibility of the new disabled
   // app.
@@ -447,6 +429,19 @@ void WebAppsChromeOs::OnWebAppsDisabledModeChanged() {
       cloned_apps.push_back(app.Clone());
     subscriber->OnApps(std::move(cloned_apps), app_type(),
                        should_notify_initialized);
+  }
+}
+
+void WebAppsChromeOs::OnWebAppUserDisplayModeChanged(
+    const AppId& app_id,
+    DisplayMode user_display_mode) {
+  if (GetWebApp(app_id) && Accepts(app_id)) {
+    apps::mojom::AppPtr app = apps::mojom::App::New();
+    app->app_type = app_type();
+    app->app_id = app_id;
+    app->window_mode =
+        publisher_helper().ConvertDisplayModeToWindowMode(user_display_mode);
+    Publish(std::move(app), subscribers());
   }
 }
 
@@ -655,9 +650,12 @@ apps::mojom::AppPtr WebAppsChromeOs::Convert(const WebApp* web_app,
     UpdateAppDisabledMode(app);
   }
 
-  bool paused = paused_apps_.IsPaused(web_app->app_id());
-  app->icon_key = icon_key_factory().MakeIconKey(
-      GetIconEffects(web_app, paused, is_disabled));
+  bool paused = publisher_helper().IsPaused(web_app->app_id());
+  app->icon_key = publisher_helper().MakeIconKey(web_app);
+
+  auto display_mode = GetRegistrar()->GetAppUserDisplayMode(web_app->app_id());
+  app->window_mode =
+      publisher_helper().ConvertDisplayModeToWindowMode(display_mode);
 
   apps::mojom::OptionalBool has_notification =
       app_notifications_.HasNotification(web_app->app_id())
@@ -669,93 +667,15 @@ apps::mojom::AppPtr WebAppsChromeOs::Convert(const WebApp* web_app,
   return app;
 }
 
-IconEffects WebAppsChromeOs::GetIconEffects(const WebApp* web_app,
-                                            bool paused,
-                                            bool is_disabled) {
-  IconEffects icon_effects = IconEffects::kNone;
-  if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
-    icon_effects |= web_app->is_generated_icon()
-                        ? IconEffects::kCrOsStandardMask
-                        : IconEffects::kCrOsStandardIcon;
-  } else {
-    icon_effects |= IconEffects::kResizeAndPad;
-  }
-  if (extensions::util::ShouldApplyChromeBadgeToWebApp(profile(),
-                                                       web_app->app_id())) {
-    icon_effects |= IconEffects::kChromeBadge;
-  }
-  icon_effects |= WebAppsBase::GetIconEffects(web_app);
-  if (paused) {
-    icon_effects |= IconEffects::kPaused;
-  }
-
-  if (is_disabled) {
-    icon_effects |= IconEffects::kBlocked;
-  }
-
-  return icon_effects;
-}
-
 void WebAppsChromeOs::ApplyChromeBadge(const std::string& package_name) {
   const std::vector<std::string> app_ids =
       extensions::util::GetEquivalentInstalledAppIds(package_name);
 
   for (auto& app_id : app_ids) {
     if (GetWebApp(app_id)) {
-      SetIconEffect(app_id);
+      publisher_helper().SetIconEffect(app_id);
     }
   }
-}
-
-void WebAppsChromeOs::SetIconEffect(const std::string& app_id) {
-  const WebApp* web_app = GetWebApp(app_id);
-  if (!web_app) {
-    return;
-  }
-
-  apps::mojom::AppPtr app = apps::mojom::App::New();
-  app->app_type = app_type();
-  app->app_id = app_id;
-  DCHECK(web_app->chromeos_data().has_value());
-  app->icon_key = icon_key_factory().MakeIconKey(
-      GetIconEffects(web_app, paused_apps_.IsPaused(app_id),
-                     web_app->chromeos_data()->is_disabled));
-  Publish(std::move(app), subscribers());
-}
-
-content::WebContents* WebAppsChromeOs::LaunchAppWithParams(
-    apps::AppLaunchParams params) {
-  apps::AppLaunchParams params_for_restore(
-      params.app_id, params.container, params.disposition, params.source,
-      params.display_id, params.launch_files, params.intent);
-
-  auto* web_contents = WebAppsBase::LaunchAppWithParams(std::move(params));
-
-  int session_id = apps::GetSessionIdForRestoreFromWebContents(web_contents);
-  if (!SessionID::IsValidValue(session_id)) {
-    return web_contents;
-  }
-
-  const WebApp* web_app = GetWebApp(params_for_restore.app_id);
-  std::unique_ptr<full_restore::AppLaunchInfo> launch_info;
-  if (web_app && web_app->IsSystemApp()) {
-    // Save all launch information for system web apps, because the browser
-    // session restore can't restore system web apps.
-    launch_info = std::make_unique<full_restore::AppLaunchInfo>(
-        params_for_restore.app_id, session_id, params_for_restore.container,
-        params_for_restore.disposition, params_for_restore.display_id,
-        std::move(params_for_restore.launch_files),
-        std::move(params_for_restore.intent));
-    full_restore::SaveAppLaunchInfo(profile()->GetPath(),
-                                    std::move(launch_info));
-  }
-
-  return web_contents;
-}
-
-bool WebAppsChromeOs::Accepts(const std::string& app_id) {
-  // Crostini Terminal System App is handled by Crostini Apps.
-  return app_id != crostini::kCrostiniTerminalSystemAppId;
 }
 
 apps::mojom::OptionalBool WebAppsChromeOs::ShouldShowBadge(

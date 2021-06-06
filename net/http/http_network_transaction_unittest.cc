@@ -17,6 +17,7 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
@@ -24,7 +25,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -19952,7 +19952,7 @@ class HttpNetworkTransactionReportingTest
   }
 
   // Makes an HTTPS request that should install a valid Reporting policy
-  // using either Report-To header or Reporting-Endpoints header.
+  // using Report-To header.
   void RequestPolicy(CertStatus cert_status = 0) {
     HttpRequestInfo request;
     request.method = "GET";
@@ -19968,15 +19968,10 @@ class HttpNetworkTransactionReportingTest
     };
 
     MockRead reporting_header;
-    if (UseDocumentReporting()) {
-      reporting_header = MockRead(
-          "Reporting-Endpoints: nel=\"https://www.example.org/upload/\"\r\n");
-    } else {
-      reporting_header = MockRead(
-          "Report-To: {\"group\": \"nel\", \"max_age\": 86400, "
-          "\"endpoints\": [{\"url\": "
-          "\"https://www.example.org/upload/\"}]}\r\n");
-    }
+    reporting_header = MockRead(
+        "Report-To: {\"group\": \"nel\", \"max_age\": 86400, "
+        "\"endpoints\": [{\"url\": "
+        "\"https://www.example.org/upload/\"}]}\r\n");
     MockRead data_reads[] = {
         MockRead("HTTP/1.0 200 OK\r\n"),
         std::move(reporting_header),

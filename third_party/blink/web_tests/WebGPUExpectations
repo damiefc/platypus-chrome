@@ -185,6 +185,10 @@ wpt_internal/webgpu/cts.html?q=webgpu:api,validation,render_pass,storeOp:* [ Fai
 
 crbug.com/1192234 wpt_internal/webgpu/cts.html?q=webgpu:api,validation,encoding,cmds,setBindGroup:u32array_start_and_length:* [ Failure ]
 
+# crbug.com/1215024
+wpt_internal/webgpu/cts.html?q=webgpu:api,validation,createComputePipeline:enrty_point_name_must_match:stageEntryPoint="main%5Cu0000";* [ Failure ]
+wpt_internal/webgpu/cts.html?q=webgpu:api,validation,createComputePipeline:enrty_point_name_must_match:stageEntryPoint="main%5Cu0000a";* [ Failure ]
+
 # Crash with validation layer.
 wpt_internal/webgpu/cts.html?q=webgpu:api,operation,render_pipeline,primitive_topology:* [ Failure Crash ]
 
@@ -275,6 +279,10 @@ wpt_internal/webgpu/cts.html?q=webgpu:api,validation,query_set,create:count:* [ 
 # Unimplemented validation in Tint. Skipped because it causes test timeouts
 crbug.com/tint/480 wpt_internal/webgpu/cts.html?q=webgpu:shader,validation,variable_and_const:v_0033:* [ Skip ]
 crbug.com/tint/481 wpt_internal/webgpu/cts.html?q=webgpu:shader,validation,variable_and_const:v_0038:* [ Skip ]
+
+# Validation rules and supported texture format changed for CopyExternalImageToTexture/CopyImageBitmapToTexture
+crbug.com/1197369 wpt_internal/webgpu/cts.html?q=webgpu:api,validation,queue,copyToTexture,ImageBitmap,* [ Skip ]
+crbug.com/1197369 wpt_internal/webgpu/cts.html?q=webgpu:web_platform,copyToTexture,ImageBitmap:* [ Skip ]
 
 ###
 ### Mac (Metal) specific

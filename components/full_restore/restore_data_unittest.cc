@@ -28,6 +28,7 @@ constexpr char kAppId2[] = "bbb";
 constexpr int32_t kWindowId1 = 100;
 constexpr int32_t kWindowId2 = 200;
 constexpr int32_t kWindowId3 = 300;
+constexpr int32_t kWindowId4 = 400;
 
 constexpr int64_t kDisplayId1 = 22000000;
 constexpr int64_t kDisplayId2 = 11000000;
@@ -54,10 +55,6 @@ constexpr int32_t kDeskId3 = 3;
 constexpr bool kVisibleOnAllWorkspaces1 = false;
 constexpr bool kVisibleOnAllWorkspaces2 = false;
 constexpr bool kVisibleOnAllWorkspaces3 = true;
-
-constexpr gfx::Rect kRestoreBounds1(10, 20, 110, 120);
-constexpr gfx::Rect kRestoreBounds2(30, 40, 130, 140);
-constexpr gfx::Rect kRestoreBounds3(50, 60, 150, 160);
 
 constexpr gfx::Rect kCurrentBounds1(11, 21, 111, 121);
 constexpr gfx::Rect kCurrentBounds2(31, 41, 131, 141);
@@ -136,7 +133,6 @@ class RestoreDataTest : public testing::Test {
     WindowInfo window_info1;
     window_info1.activation_index = kActivationIndex1;
     window_info1.desk_id = kDeskId1;
-    window_info1.restore_bounds = kRestoreBounds1;
     window_info1.current_bounds = kCurrentBounds1;
     window_info1.window_state_type = kWindowStateType1;
     window_info1.display_id = kDisplayId2;
@@ -147,7 +143,6 @@ class RestoreDataTest : public testing::Test {
     WindowInfo window_info2;
     window_info2.activation_index = kActivationIndex2;
     window_info2.desk_id = kDeskId2;
-    window_info2.restore_bounds = kRestoreBounds2;
     window_info2.current_bounds = kCurrentBounds2;
     window_info2.window_state_type = kWindowStateType2;
     window_info2.display_id = kDisplayId1;
@@ -158,7 +153,6 @@ class RestoreDataTest : public testing::Test {
     window_info3.activation_index = kActivationIndex3;
     window_info3.desk_id = kDeskId3;
     window_info3.visible_on_all_workspaces = kVisibleOnAllWorkspaces3;
-    window_info3.restore_bounds = kRestoreBounds3;
     window_info3.current_bounds = kCurrentBounds3;
     window_info3.window_state_type = kWindowStateType3;
     window_info3.display_id = kDisplayId1;
@@ -184,7 +178,6 @@ class RestoreDataTest : public testing::Test {
                             int32_t activation_index,
                             int32_t desk_id,
                             bool visible_on_all_workspaces,
-                            const gfx::Rect& restore_bounds,
                             const gfx::Rect& current_bounds,
                             chromeos::WindowStateType window_state_type,
                             absl::optional<gfx::Size> max_size,
@@ -224,9 +217,6 @@ class RestoreDataTest : public testing::Test {
       EXPECT_EQ(visible_on_all_workspaces,
                 data->visible_on_all_workspaces.value());
     }
-
-    EXPECT_TRUE(data->restore_bounds.has_value());
-    EXPECT_EQ(restore_bounds, data->restore_bounds.value());
 
     EXPECT_TRUE(data->current_bounds.has_value());
     EXPECT_EQ(current_bounds, data->current_bounds.value());
@@ -282,9 +272,9 @@ class RestoreDataTest : public testing::Test {
         std::vector<base::FilePath>{base::FilePath(kFilePath1),
                                     base::FilePath(kFilePath2)},
         CreateIntent(kIntentActionSend, kMimeType, kShareText1),
-        kActivationIndex1, kDeskId1, kVisibleOnAllWorkspaces1, kRestoreBounds1,
-        kCurrentBounds1, kWindowStateType1, kMaxSize1, kMinSize1,
-        kPrimaryColor1, kStatusBarColor1);
+        kActivationIndex1, kDeskId1, kVisibleOnAllWorkspaces1, kCurrentBounds1,
+        kWindowStateType1, kMaxSize1, kMinSize1, kPrimaryColor1,
+        kStatusBarColor1);
 
     const auto app_restore_data_it2 = launch_list_it1->second.find(kWindowId2);
     EXPECT_TRUE(app_restore_data_it2 != launch_list_it1->second.end());
@@ -294,9 +284,9 @@ class RestoreDataTest : public testing::Test {
         WindowOpenDisposition::NEW_FOREGROUND_TAB, kDisplayId1,
         std::vector<base::FilePath>{base::FilePath(kFilePath2)},
         CreateIntent(kIntentActionView, kMimeType, kShareText2),
-        kActivationIndex2, kDeskId2, kVisibleOnAllWorkspaces2, kRestoreBounds2,
-        kCurrentBounds2, kWindowStateType2, absl::nullopt, kMinSize2,
-        kPrimaryColor2, kStatusBarColor2);
+        kActivationIndex2, kDeskId2, kVisibleOnAllWorkspaces2, kCurrentBounds2,
+        kWindowStateType2, absl::nullopt, kMinSize2, kPrimaryColor2,
+        kStatusBarColor2);
 
     // Verify for |kAppId2|.
     const auto launch_list_it2 =
@@ -311,8 +301,8 @@ class RestoreDataTest : public testing::Test {
         WindowOpenDisposition::NEW_POPUP, kDisplayId1,
         std::vector<base::FilePath>{base::FilePath(kFilePath1)},
         CreateIntent(kIntentActionView, kMimeType, kShareText1),
-        kActivationIndex3, kDeskId3, kVisibleOnAllWorkspaces3, kRestoreBounds3,
-        kCurrentBounds3, kWindowStateType3, absl::nullopt, absl::nullopt, 0, 0);
+        kActivationIndex3, kDeskId3, kVisibleOnAllWorkspaces3, kCurrentBounds3,
+        kWindowStateType3, absl::nullopt, absl::nullopt, 0, 0);
   }
 
   RestoreData& restore_data() { return restore_data_; }
@@ -340,6 +330,47 @@ TEST_F(RestoreDataTest, AddAppLaunchInfos) {
   ModifyWindowInfos();
   ModifyThemeColors();
   VerifyRestoreData(restore_data());
+}
+
+// Modify the window id from `kWindowId2` to `kWindowId4` for `kAppId1`. Verify
+// the restore data is correctly updated.
+TEST_F(RestoreDataTest, ModifyWindowId) {
+  AddAppLaunchInfos();
+  ModifyWindowInfos();
+  ModifyThemeColors();
+  VerifyRestoreData(restore_data());
+
+  restore_data().ModifyWindowId(kAppId1, kWindowId2, kWindowId4);
+
+  // Verify for |kAppId1|.
+  const auto launch_list_it1 =
+      app_id_to_launch_list(restore_data()).find(kAppId1);
+  EXPECT_TRUE(launch_list_it1 != app_id_to_launch_list(restore_data()).end());
+  EXPECT_EQ(2u, launch_list_it1->second.size());
+
+  // Verify the restore data for |kAppId1| and |kWindowId1| still exists.
+  EXPECT_TRUE(base::Contains(launch_list_it1->second, kWindowId1));
+
+  // Verify the restore data for |kAppId1| and |kWindowId2| doesn't exist.
+  EXPECT_TRUE(!base::Contains(launch_list_it1->second, kWindowId2));
+
+  // Verify the restore data for |kWindowId2| is migrated to |kWindowId4|.
+  const auto app_restore_data_it4 = launch_list_it1->second.find(kWindowId4);
+  EXPECT_TRUE(app_restore_data_it4 != launch_list_it1->second.end());
+  VerifyAppRestoreData(app_restore_data_it4->second,
+                       apps::mojom::LaunchContainer::kLaunchContainerTab,
+                       WindowOpenDisposition::NEW_FOREGROUND_TAB, kDisplayId1,
+                       std::vector<base::FilePath>{base::FilePath(kFilePath2)},
+                       CreateIntent(kIntentActionView, kMimeType, kShareText2),
+                       kActivationIndex2, kDeskId2, kVisibleOnAllWorkspaces2,
+                       kCurrentBounds2, kWindowStateType2, absl::nullopt,
+                       kMinSize2, kPrimaryColor2, kStatusBarColor2);
+
+  // Verify the restore data for |kAppId2| still exists.
+  const auto launch_list_it2 =
+      app_id_to_launch_list(restore_data()).find(kAppId2);
+  EXPECT_TRUE(launch_list_it2 != app_id_to_launch_list(restore_data()).end());
+  EXPECT_EQ(1u, launch_list_it2->second.size());
 }
 
 TEST_F(RestoreDataTest, RemoveAppRestoreData) {
@@ -415,7 +446,6 @@ TEST_F(RestoreDataTest, RemoveWindowInfo) {
   EXPECT_FALSE(window_info->activation_index.has_value());
   EXPECT_FALSE(window_info->desk_id.has_value());
   EXPECT_FALSE(window_info->visible_on_all_workspaces.has_value());
-  EXPECT_FALSE(window_info->restore_bounds.has_value());
   EXPECT_FALSE(window_info->current_bounds.has_value());
   EXPECT_FALSE(window_info->window_state_type.has_value());
   EXPECT_FALSE(window_info->arc_extra_info.has_value());
@@ -478,7 +508,6 @@ TEST_F(RestoreDataTest, GetWindowInfo) {
   EXPECT_TRUE(window_info);
   EXPECT_FALSE(window_info->activation_index.has_value());
   EXPECT_FALSE(window_info->desk_id.has_value());
-  EXPECT_FALSE(window_info->restore_bounds.has_value());
   EXPECT_FALSE(window_info->current_bounds.has_value());
   EXPECT_FALSE(window_info->window_state_type.has_value());
 
@@ -492,9 +521,6 @@ TEST_F(RestoreDataTest, GetWindowInfo) {
 
   EXPECT_TRUE(window_info->desk_id.has_value());
   EXPECT_EQ(kDeskId1, window_info->desk_id.value());
-
-  EXPECT_TRUE(window_info->restore_bounds.has_value());
-  EXPECT_EQ(kRestoreBounds1, window_info->restore_bounds.value());
 
   EXPECT_TRUE(window_info->current_bounds.has_value());
   EXPECT_EQ(kCurrentBounds1, window_info->current_bounds.value());

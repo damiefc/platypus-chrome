@@ -411,7 +411,7 @@ const base::Feature kClipboardHistoryScreenshotNudge{
 // Enables copying an image to the system clipboard to support pasting onto
 // different surfaces
 const base::Feature kEnableFilesAppCopyImage{"EnableFilesAppCopyImage",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable a D-Bus service for accessing gesture properties.
 const base::Feature kGesturePropertiesDBusService{
@@ -441,7 +441,7 @@ const base::Feature kHelpAppSearchServiceIntegration{
 
 // Enable or disable IME decoder via Mojo connection on Chrome OS.
 const base::Feature kImeMojoDecoder{"ImeMojoDecoder",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enable or disable system emoji picker.
 const base::Feature kImeSystemEmojiPicker{"SystemEmojiPicker",
@@ -459,11 +459,6 @@ const base::Feature kInstantTethering{"InstantTethering",
 // Enables or disables noise cancellation UI toggle.
 const base::Feature kEnableInputNoiseCancellationUi{
     "EnableInputNoiseCancellationUi", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables the Kerberos Section in ChromeOS settings. When disabled, Kerberos
-// settings will stay under People Section. https://crbug.com/983041
-const base::Feature kKerberosSettingsSection{"KerberosSettingsSection",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables to use lacros-chrome as a primary web browser on Chrome OS.
 // This works only when LacrosSupport below is enabled.
@@ -572,15 +567,6 @@ const base::Feature kPluginVmShowCameraPermissions{
 // VM app settings.
 const base::Feature kPluginVmShowMicrophonePermissions{
     "PluginVmShowMicrophonePermissions", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether to show printer statuses on the Print Preview destination
-// dialog.
-const base::Feature kPrinterStatusDialog{"PrinterStatusDialog",
-                                         base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Allows print servers to be selected when beyond a specified limit.
-const base::Feature kPrintServerScaling{"PrintServerScaling",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether to enable projector.
 const base::Feature kProjector{"Projector", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -871,10 +857,6 @@ bool IsInputNoiseCancellationUiEnabled() {
 bool IsInstantTetheringBackgroundAdvertisingSupported() {
   return base::FeatureList::IsEnabled(
       kInstantTetheringBackgroundAdvertisementSupport);
-}
-
-bool IsKerberosSettingsSectionEnabled() {
-  return base::FeatureList::IsEnabled(kKerberosSettingsSection);
 }
 
 bool IsMicMuteNotificationsEnabled() {

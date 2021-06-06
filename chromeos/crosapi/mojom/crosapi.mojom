@@ -23,7 +23,9 @@ import "chromeos/crosapi/mojom/keystore_service.mojom";
 import "chromeos/crosapi/mojom/local_printer.mojom";
 import "chromeos/crosapi/mojom/message_center.mojom";
 import "chromeos/crosapi/mojom/metrics_reporting.mojom";
+import "chromeos/crosapi/mojom/native_theme.mojom";
 import "chromeos/crosapi/mojom/prefs.mojom";
+import "chromeos/crosapi/mojom/remoting.mojom";
 import "chromeos/crosapi/mojom/screen_manager.mojom";
 import "chromeos/crosapi/mojom/select_file.mojom";
 import "chromeos/crosapi/mojom/system_display.mojom";
@@ -60,8 +62,8 @@ struct BrowserInfo {
 // please note the milestone when you added it, to help us reason about
 // compatibility between the client applications and older ash-chrome binaries.
 //
-// Next version: 30
-// Next method id: 35
+// Next version: 34
+// Next method id: 39
 [Stable, Uuid="8b79c34f-2bf8-4499-979a-b17cac522c1e",
  RenamedFrom="crosapi.mojom.AshChromeService"]
 interface Crosapi {
@@ -160,6 +162,11 @@ interface Crosapi {
   // Added in M86.
   BindMessageCenter@3(pending_receiver<MessageCenter> receiver);
 
+  // Binds the NativeThemeService interface for reading native theme changes.
+  // Added in M93.
+  [MinVersion=33]
+  BindNativeThemeService@38(pending_receiver<NativeThemeService> receiver);
+
   // Binds the MetricsReporting interface for metrics reporting consent.
   // Added in M89.
   [MinVersion=8]
@@ -168,6 +175,11 @@ interface Crosapi {
   // Binds the prefs service which allows get, set, and notify update of prefs.
   // Added in M89.
   [MinVersion=11] BindPrefs@16(pending_receiver<Prefs> receiver);
+
+  // Binds the Remoting service to allow websites running in Lacros to interact
+  // with Chrome Remote Desktop functionality available in ash-chrome.
+  // Added in M93.
+  [MinVersion=32] BindRemoting@37(pending_receiver<Remoting> receiver);
 
   // Binds the ScreenManager interface for interacting with windows, screens and
   // displays.
@@ -358,8 +370,8 @@ enum InitialBrowserAction {
 // If ash-chrome is newer than the browser, then some fields may not be
 // processed by the browser.
 //
-// Next version: 20
-// Next id: 20
+// Next version: 21
+// Next id: 21
 [Stable, RenamedFrom="crosapi.mojom.LacrosInitParams"]
 struct BrowserInitParams {
   // This is ash-chrome's version of the Crosapi interface. This is used by
@@ -489,6 +501,9 @@ struct BrowserInitParams {
   // on the assumption that Ash is always available as a browser.
   [MinVersion=19]
   bool standalone_browser_is_primary@19;
+
+  [MinVersion=20]
+  NativeThemeInfo? native_theme_info@20;
 };
 
 // BrowserService defines the APIs that live in a browser (such as

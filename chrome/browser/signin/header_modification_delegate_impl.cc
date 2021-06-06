@@ -12,7 +12,7 @@
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -59,7 +59,7 @@ void HeaderModificationDelegateImpl::ProcessRequest(
   const PrefService* prefs = profile_->GetPrefs();
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
+      SyncServiceFactory::GetForProfile(profile_);
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -81,12 +81,11 @@ void HeaderModificationDelegateImpl::ProcessRequest(
       identity_manager->GetPrimaryAccountInfo(consent_level);
   absl::optional<bool> is_child_account = absl::nullopt;
   if (!account.IsEmpty()) {
-    absl::optional<AccountInfo> extended_account_info =
-        identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-            account);
-    if (extended_account_info.has_value()) {
-      is_child_account = absl::make_optional<bool>(
-          extended_account_info.value().is_child_account);
+    AccountInfo extended_account_info =
+        identity_manager->FindExtendedAccountInfo(account);
+    if (!extended_account_info.IsEmpty()) {
+      is_child_account =
+          absl::make_optional<bool>(extended_account_info.is_child_account);
     }
   }
 

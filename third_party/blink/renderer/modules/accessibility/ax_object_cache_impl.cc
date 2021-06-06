@@ -126,13 +126,20 @@ Node* GetClosestNodeForLayoutObject(const LayoutObject* layout_object) {
   return node ? node : GetClosestNodeForLayoutObject(layout_object->Parent());
 }
 
-// Return true if display locked, false otherwise.
+// Return true if display locked or inside slot recalc, false otherwise.
 // Also returns false if not a safe time to perform the check.
 bool IsDisplayLocked(const Node* node) {
   if (!node)
     return false;
-  if (node->GetDocument().IsFlatTreeTraversalForbidden())
+  // The NearestLockedExclusiveAncestor() function will attempt to do
+  // a flat tree traversal of ancestors. If we're in a flat tree traversal
+  // forbidden scope, return false. Additionally, flat tree traversal
+  // might call AssignedSlot, so if we're in a slot assignment recalc
+  // forbidden scope, return false.
+  if (node->GetDocument().IsFlatTreeTraversalForbidden() ||
+      node->GetDocument().IsSlotAssignmentRecalcForbidden()) {
     return false;  // Cannot safely perform this check now.
+  }
   return DisplayLockUtilities::NearestLockedExclusiveAncestor(*node);
 }
 
@@ -1319,6 +1326,7 @@ void AXObjectCacheImpl::Remove(AXObject* object) {
     Remove(object->AXObjectID());
 }
 
+// This is safe to call even if there isn't a current mapping.
 void AXObjectCacheImpl::Remove(AXID ax_id) {
   if (!ax_id)
     return;
@@ -1347,48 +1355,77 @@ void AXObjectCacheImpl::Remove(AXID ax_id) {
   DCHECK_GE(objects_.size(), ids_in_use_.size());
 }
 
+// This is safe to call even if there isn't a current mapping.
 void AXObjectCacheImpl::Remove(AccessibleNode* accessible_node) {
   if (!accessible_node)
     return;
 
-  AXID ax_id = accessible_node_mapping_.at(accessible_node);
-  accessible_node_mapping_.erase(accessible_node);
+  auto iter = accessible_node_mapping_.find(accessible_node);
+  if (iter == accessible_node_mapping_.end())
+    return;
+
+  AXID ax_id = iter->value;
+  accessible_node_mapping_.erase(iter);
 
   Remove(ax_id);
 }
 
+// This is safe to call even if there isn't a current mapping.
 bool AXObjectCacheImpl::Remove(LayoutObject* layout_object) {
   if (!layout_object)
     return false;
 
-  AXID ax_id = layout_object_mapping_.at(layout_object);
-  if (!ax_id)
+  auto iter = layout_object_mapping_.find(layout_object);
+  if (iter == layout_object_mapping_.end())
     return false;
 
-  layout_object_mapping_.erase(layout_object);
+  AXID ax_id = iter->value;
+  DCHECK(ax_id);
+
+  layout_object_mapping_.erase(iter);
   Remove(ax_id);
 
   return true;
 }
 
+// This is safe to call even if there isn't a current mapping.
 void AXObjectCacheImpl::Remove(Node* node) {
   if (!node)
     return;
 
-  // This is all safe even if we didn't have a mapping.
-  AXID ax_id = node_object_mapping_.at(node);
-  node_object_mapping_.erase(node);
+  LayoutObject* layout_object = node->GetLayoutObject();
 
-  if (!Remove(node->GetLayoutObject()))
+  // A layout object will be used whenever it is available and relevant. It's
+  // the preferred backing object, rather than the DOM node.
+  if (Remove(node->GetLayoutObject())) {
+    DCHECK_EQ(node_object_mapping_.find(node), node_object_mapping_.end())
+        << "AXObject cannot be backed by both a layout object and node.";
+    return;
+  }
+
+  auto iter = node_object_mapping_.find(node);
+  if (iter != node_object_mapping_.end()) {
+    DCHECK(!layout_object || layout_object_mapping_.find(layout_object) ==
+                                 layout_object_mapping_.end())
+        << "AXObject cannot be backed by both a layout object and node.";
+    AXID ax_id = iter->value;
+    DCHECK(ax_id);
+    node_object_mapping_.erase(iter);
     Remove(ax_id);
+  }
 }
 
+// This is safe to call even if there isn't a current mapping.
 void AXObjectCacheImpl::Remove(AbstractInlineTextBox* inline_text_box) {
   if (!inline_text_box)
     return;
 
-  AXID ax_id = inline_text_box_object_mapping_.at(inline_text_box);
-  inline_text_box_object_mapping_.erase(inline_text_box);
+  auto iter = inline_text_box_object_mapping_.find(inline_text_box);
+  if (iter == inline_text_box_object_mapping_.end())
+    return;
+
+  AXID ax_id = iter->value;
+  inline_text_box_object_mapping_.erase(iter);
 
   Remove(ax_id);
 }
@@ -2984,27 +3021,6 @@ const Element* AXObjectCacheImpl::RootAXEditableElement(const Node* node) {
   }
 
   return result;
-}
-
-AXObject* AXObjectCacheImpl::FirstAccessibleObjectFromNode(const Node* node) {
-  if (!node)
-    return nullptr;
-
-  AXObject* accessible_object = GetOrCreate(node->GetLayoutObject());
-  while (accessible_object &&
-         !accessible_object->AccessibilityIsIncludedInTree()) {
-    node = NodeTraversal::Next(*node);
-
-    while (node && !node->GetLayoutObject())
-      node = NodeTraversal::NextSkippingChildren(*node);
-
-    if (!node)
-      return nullptr;
-
-    accessible_object = GetOrCreate(node->GetLayoutObject());
-  }
-
-  return accessible_object;
 }
 
 bool AXObjectCacheImpl::NodeIsTextControl(const Node* node) {

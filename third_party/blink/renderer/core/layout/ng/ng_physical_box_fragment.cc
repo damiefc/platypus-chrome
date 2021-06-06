@@ -26,6 +26,10 @@
 
 namespace blink {
 
+#if DCHECK_IS_ON()
+unsigned NGPhysicalBoxFragment::AllowPostLayoutScope::allow_count_ = 0;
+#endif
+
 namespace {
 
 struct SameSizeAsNGPhysicalBoxFragment : NGPhysicalFragment {
@@ -398,6 +402,9 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
       last_baseline_(other.last_baseline_),
       ink_overflow_(other.InkOverflowType(), other.ink_overflow_) {
   // To ensure the fragment tree is consistent, use the post-layout fragment.
+#if DCHECK_IS_ON()
+  AllowPostLayoutScope allow_post_layout_scope;
+#endif
   for (wtf_size_t i = 0; i < const_num_children_; ++i) {
     children_[i].offset = other.children_[i].offset;
     scoped_refptr<const NGPhysicalFragment> post_layout =
@@ -587,6 +594,9 @@ const NGPhysicalBoxFragment* NGPhysicalBoxFragment::PostLayout() const {
   const wtf_size_t fragment_count = box->PhysicalFragmentCount();
   if (UNLIKELY(fragment_count == 0)) {
     // This should not happen, but DCHECK hits. crbug.com/1107204
+#if DCHECK_IS_ON()
+    DCHECK(AllowPostLayoutScope::IsAllowed());
+#endif
     return nullptr;
   }
   if (fragment_count == 1) {
@@ -595,6 +605,9 @@ const NGPhysicalBoxFragment* NGPhysicalBoxFragment::PostLayout() const {
     if (UNLIKELY(post_layout != this)) {
       // This can happen at the relayout boundary crbug.com/829028
       // but DCHECKing |IsRelayoutBoundary()| hits. crbug.com/1107204
+#if DCHECK_IS_ON()
+      DCHECK(AllowPostLayoutScope::IsAllowed());
+#endif
       return post_layout;
     }
   }
@@ -728,7 +741,11 @@ bool NGPhysicalBoxFragment::MayIntersect(
 PhysicalRect NGPhysicalBoxFragment::ScrollableOverflow(
     TextHeightType height_type) const {
   DCHECK(GetLayoutObject());
-  DCHECK_EQ(PostLayout(), this);
+  // TODO(kojii): Scrollable overflow is computed after layout, and that the
+  // tree needs to be consistent, except for Ruby where it is computed during
+  // layout. It might be that |ComputeAnnotationOverflow| should move to layout
+  // overflow recalc, but it is to be thought out.
+  DCHECK(height_type == TextHeightType::kEmHeight || PostLayout() == this);
   if (UNLIKELY(IsLayoutObjectDestroyedOrMoved())) {
     NOTREACHED();
     return PhysicalRect();
@@ -762,7 +779,8 @@ PhysicalRect NGPhysicalBoxFragment::ScrollableOverflow(
 
 PhysicalRect NGPhysicalBoxFragment::ScrollableOverflowFromChildren(
     TextHeightType height_type) const {
-  DCHECK_EQ(PostLayout(), this);
+  // TODO(kojii): See |ScrollableOverflow|.
+  DCHECK(height_type == TextHeightType::kEmHeight || PostLayout() == this);
   const NGFragmentItems* items = Items();
   if (Children().empty() && !items)
     return PhysicalRect();
@@ -922,10 +940,9 @@ PhysicalRect NGPhysicalBoxFragment::ScrollableOverflowFromChildren(
   return context.children_overflow;
 }
 
-LayoutSize NGPhysicalBoxFragment::PixelSnappedScrolledContentOffset() const {
+IntPoint NGPhysicalBoxFragment::PixelSnappedScrolledContentOffset() const {
   DCHECK(GetLayoutObject());
-  const LayoutBox* box = To<LayoutBox>(GetLayoutObject());
-  return box->PixelSnappedScrolledContentOffset();
+  return To<LayoutBox>(*GetLayoutObject()).PixelSnappedScrolledContentOffset();
 }
 
 PhysicalSize NGPhysicalBoxFragment::ScrollSize() const {
@@ -1500,6 +1517,15 @@ NGPixelSnappedPhysicalBoxStrut NGPhysicalBoxFragment::BorderWidths() const {
 }
 
 #if DCHECK_IS_ON()
+NGPhysicalBoxFragment::AllowPostLayoutScope::AllowPostLayoutScope() {
+  ++allow_count_;
+}
+
+NGPhysicalBoxFragment::AllowPostLayoutScope::~AllowPostLayoutScope() {
+  DCHECK(allow_count_);
+  --allow_count_;
+}
+
 void NGPhysicalBoxFragment::CheckSameForSimplifiedLayout(
     const NGPhysicalBoxFragment& other,
     bool check_same_block_size) const {
@@ -1637,6 +1663,41 @@ void NGPhysicalBoxFragment::CheckIntegrity() const {
     // after a fragmentainer break.
     DCHECK(!has_floats || !IsFirstForNode());
     DCHECK(!has_list_markers);
+  }
+}
+
+void NGPhysicalBoxFragment::AssertFragmentTreeSelf() const {
+  DCHECK(!IsInlineBox());
+  DCHECK(OwnerLayoutBox());
+  DCHECK_EQ(this, PostLayout());
+}
+
+void NGPhysicalBoxFragment::AssertFragmentTreeChildren(
+    bool allow_destroyed) const {
+  if (const NGFragmentItems* items = Items()) {
+    for (NGInlineCursor cursor(*this, *items); cursor; cursor.MoveToNext()) {
+      const NGFragmentItem& item = *cursor.Current();
+      if (item.IsLayoutObjectDestroyedOrMoved()) {
+        DCHECK(allow_destroyed);
+        DCHECK(!item.BoxFragment() ||
+               item.BoxFragment()->IsLayoutObjectDestroyedOrMoved());
+        continue;
+      }
+      if (const auto* box = item.BoxFragment()) {
+        DCHECK(!box->IsLayoutObjectDestroyedOrMoved());
+        if (!box->IsInlineBox())
+          box->AssertFragmentTreeSelf();
+      }
+    }
+  }
+
+  for (const NGLink& child : Children()) {
+    if (child->IsLayoutObjectDestroyedOrMoved()) {
+      DCHECK(allow_destroyed);
+      continue;
+    }
+    if (const auto* box = DynamicTo<NGPhysicalBoxFragment>(child.fragment))
+      box->AssertFragmentTreeSelf();
   }
 }
 #endif

@@ -311,12 +311,8 @@ INSTANTIATE_TEST_SUITE_P(
             OutputLocation::kDirectoryWithBasenameUpdatedBeforeStop)));
 
 // TODO(crbug.com/1197278): Failing on Windows 7 debug builds.
-#if defined(OS_WIN) && DCHECK_IS_ON()
-#define MAYBE_TestEnableTracing DISABLED_TestEnableTracing
-#else
-#define MAYBE_TestEnableTracing TestEnableTracing
-#endif
-IN_PROC_BROWSER_TEST_P(StartupTracingTest, MAYBE_TestEnableTracing) {
+// TODO(crbug.com/1213441): Failing on Linux and Android.
+IN_PROC_BROWSER_TEST_P(StartupTracingTest, DISABLED_TestEnableTracing) {
   EXPECT_TRUE(NavigateToURL(shell(), GetTestUrl("", "title1.html")));
 
   if (GetOutputLocation() ==
@@ -341,7 +337,9 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(OutputLocation::kDirectoryWithDefaultBasename)));
 
 // TODO(crbug.com/1197278): Failing on Windows 7 debug builds.
-#if defined(OS_WIN) && DCHECK_IS_ON()
+// TODO(crbug.com/1211717): Failing on Linux TSAN builds.
+#if (defined(OS_WIN) && DCHECK_IS_ON()) || \
+    (defined(OS_LINUX) && defined(THREAD_SANITIZER))
 #define MAYBE_StopOnUIThread DISABLED_StopOnUIThread
 #else
 #define MAYBE_StopOnUIThread StopOnUIThread

@@ -328,6 +328,10 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     app->SetShareTarget(CreateRandomShareTarget(random.next_uint()));
   app->SetProtocolHandlers(CreateRandomProtocolHandlers(random.next_uint()));
   app->SetUrlHandlers(CreateRandomUrlHandlers(random.next_uint()));
+  if (random.next_bool()) {
+    app->SetNoteTakingNewNoteUrl(
+        scope.Resolve("new_note" + base::NumberToString(random.next_uint())));
+  }
   app->SetCaptureLinks(CreateRandomCaptureLinks(random.next_uint()));
 
   const int num_additional_search_terms = random.next_uint(8);
@@ -344,7 +348,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
       CreateRandomDownloadedShortcutsMenuIconsSizes(random));
   app->SetManifestUrl(base_url.Resolve("/manifest" + seed_str + ".json"));
 
-  if (IsChromeOs()) {
+  if (IsChromeOsDataMandatory()) {
     auto chromeos_data = absl::make_optional<WebAppChromeOsData>();
     chromeos_data->show_in_launcher = random.next_bool();
     chromeos_data->show_in_search = random.next_bool();
@@ -356,12 +360,16 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   app->SetFileHandlerPermissionBlocked(false);
 
+  app->SetWindowControlsOverlayEnabled(false);
+
   WebApp::SyncFallbackData sync_fallback_data;
   sync_fallback_data.name = "Sync" + name;
   sync_fallback_data.theme_color = synced_theme_color;
   sync_fallback_data.scope = app->scope();
   sync_fallback_data.icon_infos = app->icon_infos();
   app->SetSyncFallbackData(std::move(sync_fallback_data));
+
+  app->SetStorageIsolated(random.next_bool());
 
   return app;
 }

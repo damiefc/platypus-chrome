@@ -176,9 +176,8 @@ ToolbarView::ToolbarView(Browser* browser, BrowserView* browser_view)
     for (const auto& view_and_command : GetViewCommandMap())
       chrome::AddCommandObserver(browser_, view_and_command.second, this);
   }
-  views::FocusRing::SetColorContextForSubtree(
-      this, ThemeProperties::COLOR_TOOLBAR,
-      ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+  views::FocusRing::SetBackgroundColorIdForSubtree(
+      this, ThemeProperties::COLOR_TOOLBAR);
 }
 
 ToolbarView::~ToolbarView() {
@@ -301,9 +300,6 @@ void ToolbarView::Init() {
   home_ = AddChildView(std::move(home));
   location_bar_ = AddChildView(std::move(location_bar));
 
-  if (read_later_button)
-    read_later_button_ = AddChildView(std::move(read_later_button));
-
   if (extensions_container)
     extensions_container_ = AddChildView(std::move(extensions_container));
 
@@ -334,6 +330,9 @@ void ToolbarView::Init() {
 
   if (send_tab_to_self_button)
     send_tab_to_self_button_ = AddChildView(std::move(send_tab_to_self_button));
+
+  if (read_later_button)
+    read_later_button_ = AddChildView(std::move(read_later_button));
 
   if (toolbar_account_icon_container) {
     toolbar_account_icon_container_ =

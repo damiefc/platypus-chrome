@@ -24,12 +24,13 @@
 #include "components/full_restore/full_restore_info.h"
 #include "components/full_restore/full_restore_save_handler.h"
 #include "components/prefs/pref_service.h"
-#include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 
 namespace chromeos {
 namespace full_restore {
+
+bool g_restore_for_testing = true;
 
 const char kRestoreForCrashNotificationId[] = "restore_for_crash_notification";
 const char kRestoreNotificationId[] = "restore_notification";
@@ -44,6 +45,7 @@ const char kRestoreNotificationHistogramName[] = "Apps.RestoreNotification";
 const char kRestoreForCrashNotificationHistogramName[] =
     "Apps.RestoreForCrashNotification";
 const char kRestoreSettingHistogramName[] = "Apps.RestoreSetting";
+const char kRestoreInitSettingHistogramName[] = "Apps.RestoreInitSetting";
 
 // static
 FullRestoreService* FullRestoreService::GetForProfile(Profile* profile) {
@@ -64,6 +66,9 @@ FullRestoreService::FullRestoreService(Profile* profile)
 FullRestoreService::~FullRestoreService() = default;
 
 void FullRestoreService::LaunchBrowserWhenReady() {
+  if (!g_restore_for_testing)
+    return;
+
   app_launch_handler_->LaunchBrowserWhenReady();
 }
 
@@ -124,11 +129,12 @@ void FullRestoreService::Click(const absl::optional<int>& button_index,
 }
 
 void FullRestoreService::RestoreForTesting() {
-  // If there is no browser launch info, the browser won't be launched. So call
-  // SetForceLaunchBrowserForTesting to launch the browser for testing.
-  app_launch_handler_->SetForceLaunchBrowserForTesting();
+  if (!g_restore_for_testing)
+    return;
 
-  Restore();
+  // If there is no browser launch info, the browser won't be launched. So call
+  // ForceLaunchBrowserForTesting to launch the browser for testing.
+  app_launch_handler_->ForceLaunchBrowserForTesting();
 }
 
 void FullRestoreService::Init() {
@@ -157,9 +163,10 @@ void FullRestoreService::Init() {
     return;
   }
 
-  // If it is the first time to run Chrome OS, we don't have restore data, so we
-  // don't need to consider restoration.
-  if (user_manager::UserManager::Get()->IsCurrentUserNew()) {
+  // If either OS pref setting nor Chrome pref setting exist, that means we
+  // don't have restore data, so we don't need to consider restoration, and call
+  // NewUserRestorePrefHandler to set OS pref setting.
+  if (!HasRestorePref(prefs) && !HasSessionStartupPref(prefs)) {
     new_user_pref_handler_ =
         std::make_unique<NewUserRestorePrefHandler>(profile_);
     return;
@@ -174,6 +181,7 @@ void FullRestoreService::Init() {
 
   RestoreOption restore_pref = static_cast<RestoreOption>(
       prefs->GetInteger(kRestoreAppsAndPagesPrefName));
+  base::UmaHistogramEnumeration(kRestoreInitSettingHistogramName, restore_pref);
   switch (restore_pref) {
     case RestoreOption::kAlways:
       Restore();
@@ -272,6 +280,14 @@ void FullRestoreService::OnPreferenceChanged(const std::string& pref_name) {
     ::full_restore::FullRestoreInfo::GetInstance()->SetRestorePref(
         user->GetAccountId(), CanPerformRestore(profile_->GetPrefs()));
   }
+}
+
+ScopedRestoreForTesting::ScopedRestoreForTesting() {
+  g_restore_for_testing = false;
+}
+
+ScopedRestoreForTesting::~ScopedRestoreForTesting() {
+  g_restore_for_testing = true;
 }
 
 }  // namespace full_restore

@@ -131,27 +131,22 @@ PlatformKeysInternalGetPublicKeyBySpkiFunction::Run() {
 
   if (!chromeos::platform_keys::GetPublicKeyBySpki(key_info.public_key_spki_der,
                                                    &key_info.key_type,
-                                                   &key_info.key_size_bits) ||
-      (key_info.key_type != net::X509Certificate::kPublicKeyTypeRSA &&
-       key_info.key_type != net::X509Certificate::kPublicKeyTypeECDSA)) {
+                                                   &key_info.key_size_bits)) {
     return RespondNow(Error(StatusToString(
         chromeos::platform_keys::Status::kErrorAlgorithmNotSupported)));
   }
 
-  // Currently, the only supported combinations are either an SPKI declaring
-  // rsaEncryption used with the RSASSA-PKCS1-v1.5 algorithm or an SPKI
-  // declaring id-ecPublicKey used with P-256 curve name.
+  chromeos::platform_keys::Status check_result =
+      chromeos::platform_keys::CheckKeyTypeAndAlgorithm(key_info.key_type,
+                                                        params->algorithm_name);
+  if (check_result != chromeos::platform_keys::Status::kSuccess)
+    return RespondNow(Error(StatusToString(check_result)));
+
   api_pki::GetPublicKeyBySpki::Results::Algorithm algorithm;
-  if (params->algorithm_name == kWebCryptoRsassaPkcs1v15) {
-    chromeos::platform_keys::BuildWebCryptoRSAAlgorithmDictionary(
-        key_info, &algorithm.additional_properties);
-  } else if (params->algorithm_name == kWebCryptoEcdsa) {
-    chromeos::platform_keys::BuildWebCryptoEcdsaAlgorithmDictionary(
-        key_info, &algorithm.additional_properties);
-  } else {
-    return RespondNow(Error(StatusToString(
-        chromeos::platform_keys::Status::kErrorAlgorithmNotSupported)));
-  }
+  absl::optional<base::DictionaryValue> algorithm_dictionary =
+      chromeos::platform_keys::BuildWebCrypAlgorithmDictionary(key_info);
+  DCHECK(algorithm_dictionary);
+  algorithm.additional_properties = std::move(algorithm_dictionary.value());
 
   return RespondNow(ArgumentList(api_pki::GetPublicKeyBySpki::Results::Create(
       public_key_spki_der, algorithm)));
@@ -257,10 +252,6 @@ void PlatformKeysInternalSelectClientCertificatesFunction::
       LOG(ERROR) << "Could not retrieve public key info.";
       continue;
     }
-    if (key_info.key_type != net::X509Certificate::kPublicKeyTypeRSA) {
-      LOG(ERROR) << "Skipping unsupported certificate with non-RSA key.";
-      continue;
-    }
 
     api_pk::Match result_match;
     base::StringPiece der_encoded_cert =
@@ -268,8 +259,16 @@ void PlatformKeysInternalSelectClientCertificatesFunction::
     result_match.certificate.assign(der_encoded_cert.begin(),
                                     der_encoded_cert.end());
 
-    chromeos::platform_keys::BuildWebCryptoRSAAlgorithmDictionary(
-        key_info, &result_match.key_algorithm.additional_properties);
+    absl::optional<base::DictionaryValue> algorithm =
+        BuildWebCrypAlgorithmDictionary(key_info);
+    if (!algorithm) {
+      LOG(ERROR) << "Skipping unsupported certificate with key type "
+                 << key_info.key_type;
+      continue;
+    }
+    result_match.key_algorithm.additional_properties =
+        std::move(algorithm.value());
+
     result_matches.push_back(std::move(result_match));
   }
   Respond(ArgumentList(

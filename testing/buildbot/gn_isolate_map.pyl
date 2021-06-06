@@ -112,10 +112,6 @@
     "label": "//android_webview/test:android_webview_unittests",
     "type": "console_test_launcher",
   },
-  "angle_apks": {
-    "label": "//third_party/angle:angle_apks",
-    "type": "additional_compile_target",
-  },
   "angle_deqp_egl_tests": {
     "label": "//third_party/angle/src/tests:angle_deqp_egl_tests",
     "type": "script",
@@ -1128,6 +1124,10 @@
     "label": "//chrome/test:lacros_chrome_browsertests",
     "type": "windowed_test_launcher",
   },
+  "lacros_chrome_browsertests_run_in_series": {
+    "label": "//chrome/test:lacros_chrome_browsertests_run_in_series",
+    "type": "windowed_test_launcher",
+  },
   "lacros_chrome_unittests": {
     "label": "//chrome/test:lacros_chrome_unittests",
     "type": "console_test_launcher",
@@ -1537,6 +1537,16 @@
     "script": "//testing/scripts/run_rendering_benchmark_with_gated_performance.py",
     "type": "script",
   },
+  "rendering_representative_perf_tests_android_chrome": {
+    "args": [
+      "--output-format=csv",
+      "--browser=release",
+      "--upload-results",
+    ],
+    "label": "//chrome/test:rendering_representative_perf_tests_android_chrome",
+    "script": "//testing/scripts/run_rendering_benchmark_with_gated_performance.py",
+    "type": "script",
+  },
   "resource_sizes_chrome_modern_public_minimal_apks": {
     "label": "//chrome/android:resource_sizes_chrome_modern_public_minimal_apks",
     "type": "generated_script",
@@ -1674,6 +1684,22 @@
     "script": "//testing/scripts/run_gpu_integration_test_as_googletest.py",
     "type": "script",
   },
+  "telemetry_gpu_integration_test_android_chrome": {
+    "args": [
+      "../../content/test/gpu/run_gpu_integration_test.py",
+    ],
+    "label": "//chrome/test:telemetry_gpu_integration_test_android_chrome",
+    "script": "//testing/scripts/run_gpu_integration_test_as_googletest.py",
+    "type": "script",
+  },
+  "telemetry_gpu_integration_test_android_webview": {
+    "args": [
+      "../../content/test/gpu/run_gpu_integration_test.py",
+    ],
+    "label": "//chrome/test:telemetry_gpu_integration_test_android_webview",
+    "script": "//testing/scripts/run_gpu_integration_test_as_googletest.py",
+    "type": "script",
+  },
   "telemetry_gpu_integration_test_scripts_only": {
     "label": "//chrome/test:telemetry_gpu_integration_test_scripts_only",
     "type": "additional_compile_target",
@@ -1703,6 +1729,24 @@
       "-v",
     ],
     "label": "//chrome/test:telemetry_perf_unittests",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "type": "script",
+  },
+  "telemetry_perf_unittests_android_chrome": {
+    "args": [
+      "../../tools/perf/run_tests",
+      "-v",
+    ],
+    "label": "//chrome/test:telemetry_perf_unittests_android_chrome",
+    "script": "//testing/scripts/run_telemetry_as_googletest.py",
+    "type": "script",
+  },
+  "telemetry_perf_unittests_android_monochrome": {
+    "args": [
+      "../../tools/perf/run_tests",
+      "-v",
+    ],
+    "label": "//chrome/test:telemetry_perf_unittests_android_monochrome",
     "script": "//testing/scripts/run_telemetry_as_googletest.py",
     "type": "script",
   },

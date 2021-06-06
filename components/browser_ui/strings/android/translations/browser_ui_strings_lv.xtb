@@ -58,6 +58,7 @@
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{Atļautas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> un vēl <ph name="NUM_MORE" />}zero{Atļautas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> un vēl <ph name="NUM_MORE" />}one{Atļautas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> un vēl <ph name="NUM_MORE" />}other{Atļautas: <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> un vēl <ph name="NUM_MORE" />}}</translation>
 <translation id="2434158240863470628">Lejupielāde pabeigta: <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
 <translation id="2482878487686419369">Paziņojumi</translation>
+<translation id="2485422356828889247">Atinstalēt</translation>
 <translation id="2490684707762498678">Pārvalda <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Palīdzība un atsauksmes</translation>
 <translation id="2501278716633472235">Doties atpakaļ</translation>
@@ -77,6 +78,7 @@
 <translation id="2903493209154104877">Adreses</translation>
 <translation id="2910701580606108292">Jautāt, pirms atļaut vietnēm atskaņot aizsargātu saturu</translation>
 <translation id="2913331724188855103">Atļaut vietnēm saglabāt un lasīt sīkfailu datus (ieteicams)</translation>
+<translation id="2932883381142163287">Ziņot par ļaunprātīgu izmantošanu</translation>
 <translation id="2968755619301702150">Sertifikātu skatītājs</translation>
 <translation id="300526633675317032">Tādējādi tiks notīrīti visi vietnes krātuves dati (<ph name="SIZE_IN_KB" />).</translation>
 <translation id="3008272652534848354">Atiestatīt atļaujas</translation>
@@ -199,6 +201,7 @@
 <translation id="6196640612572343990">Bloķēt trešo pušu sīkfailus</translation>
 <translation id="6206551242102657620">Savienojums ir drošs. Vietnes informācija</translation>
 <translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" />: iespējas</translation>
+<translation id="6231752747840485235">Vai atinstalēt lietotni <ph name="APP_NAME" />?</translation>
 <translation id="6260852843601447737">Aizvērt un ziņot par ļaunprātīgu izmantošanu</translation>
 <translation id="6262279340360821358">Bloķētas: <ph name="PERMISSION_1" /> un <ph name="PERMISSION_2" /></translation>
 <translation id="6270391203985052864">Vietnēs var lūgt atļauju sūtīt paziņojumus</translation>

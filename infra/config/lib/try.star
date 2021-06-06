@@ -46,7 +46,7 @@ def tryjob(
         add_default_excludes = True):
     """Specifies the details of a tryjob verifier.
 
-    See https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/main/lucicfg/doc/README.md#luci.cq_tryjob_verifier
+    See https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/master/lucicfg/doc/README.md#luci.cq_tryjob_verifier
     for details on the most of the arguments.
 
     Arguments:
@@ -118,6 +118,9 @@ def try_builder(
     experiments.setdefault("chromium.resultdb.result_sink", 100)
     experiments.setdefault("chromium.resultdb.result_sink.junit_tests", 100)
 
+    # Migrate executable to bbagent incrementally.
+    experiments.setdefault("luci.buildbucket.use_bbagent", 10)
+
     merged_resultdb_bigquery_exports = [
         resultdb.export_test_results(
             bq_table = "luci-resultdb.chromium.try_test_results",
@@ -159,6 +162,9 @@ def try_builder(
             kwargs["goma_enable_ats"] = False
         if kwargs["goma_enable_ats"] != False:
             fail("Try Windows builder {} must disable ATS".format(name))
+
+    # TODO(crbug.com/1143122): remove this after migration.
+    experiments["use_rbe_cas"] = 5
 
     # Define the builder first so that any validation of luci.builder arguments
     # (e.g. bucket) occurs before we try to use it

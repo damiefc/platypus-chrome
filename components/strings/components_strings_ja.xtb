@@ -219,6 +219,7 @@
 <translation id="168841957122794586">サーバー証明書に脆弱な暗号鍵が含まれています。</translation>
 <translation id="1696290444144917273">仮想カードの詳細を表示します</translation>
 <translation id="1697532407822776718">設定が完了しました。</translation>
+<translation id="1699570257714336246">情報が不足しています</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{このサーバーが <ph name="DOMAIN" /> であることを確認できませんでした。セキュリティ証明書はおそらく明日以降に利用できるようになります。原因として、設定が不適切であるか、悪意のあるユーザーが接続を妨害していることが考えられます。}other{このサーバーが <ph name="DOMAIN" /> であることを確認できませんでした。セキュリティ証明書はおそらく # 日後から利用できるようになります。原因として、設定が不適切であるか、悪意のあるユーザーが接続を妨害していることが考えられます。}}</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -728,6 +729,7 @@
 <translation id="3631244953324577188">生体認証システム</translation>
 <translation id="3633738897356909127">Chrome を更新するボタンです。Enter キーを押すと Chrome の設定で Chrome を更新します</translation>
 <translation id="3634530185120165534">トレイ 5</translation>
+<translation id="3637662659967048211">Google アカウントに保存</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">アプリケーション:</translation>
 <translation id="3650584904733503804">検証が正常に完了しました</translation>
@@ -1016,6 +1018,7 @@
 <translation id="4731967714531604179">Prc2（封筒）</translation>
 <translation id="4733082559415072992"><ph name="URL" /> から、デバイスの現在地情報の使用許可を求められています</translation>
 <translation id="4736825316280949806">Chromium を再起動する</translation>
+<translation id="4736934858538408121">仮想カード</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4738601419177586157"><ph name="TEXT" /> の検索候補</translation>
 <translation id="4742407542027196863">パスワードを管理…</translation>
@@ -1400,6 +1403,7 @@
 <translation id="6106989379647458772">ウェブページ（<ph name="PAGE" />）は一時的に利用できなくなっているか、新しいウェブアドレスに移動した可能性があります。</translation>
 <translation id="6107012941649240045">発行先</translation>
 <translation id="610911394827799129">お使いの Google アカウントの <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> に、他の形式の閲覧履歴が記録されている場合があります</translation>
+<translation id="6113594885686374546">ジャーニーを再開するボタンです。Enter キーを押すと、ジャーニーを再開して、Chrome 履歴で関連するアクティビティを確認できます</translation>
 <translation id="6116338172782435947">クリップボードにコピーしたテキストや画像へのアクセス</translation>
 <translation id="6120179357481664955">UPI ID を保存しますか？</translation>
 <translation id="6123290840358279103">仮想カードを表示</translation>
@@ -1475,6 +1479,7 @@
 <translation id="6423385022588644828">今後 Touch ID を使用して、カードの確認をより迅速に行います</translation>
 <translation id="6425092077175753609">マテリアル</translation>
 <translation id="6427730057873428458">観音折り</translation>
+<translation id="6428146287756735566">ジャーニーを再開して、Chrome 履歴で関連するアクティビティを確認します</translation>
 <translation id="6428450836711225518">電話番号の確認</translation>
 <translation id="6433490469411711332">連絡先情報の編集</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> で接続が拒否されました。</translation>
@@ -1526,6 +1531,7 @@
 <translation id="6643016212128521049">削除</translation>
 <translation id="6645291930348198241">Cookie とサイトデータへのアクセス</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{なし}=1{1 件のサイト（Google アカウントへのログイン状態は維持されます）}other{# 件のサイト（Google アカウントへのログイン状態は維持されます）}}</translation>
+<translation id="6647197322759179819">ジャーニーを再開</translation>
 <translation id="6648459603387803038">管理者はブラウザの設定をリモートで変更できます。このデバイスでのアクティビティは、Chrome 以外でも管理されている可能性があります。</translation>
 <translation id="6648524591329069940">Serif フォント</translation>
 <translation id="6651270836885078973">管理者:</translation>
@@ -1709,7 +1715,7 @@
 <translation id="7378594059915113390">メディアの操作</translation>
 <translation id="7378627244592794276">いいえ</translation>
 <translation id="7378810950367401542">/</translation>
-<translation id="7386364858855961704">該当なし</translation>
+<translation id="7386364858855961704">対象外です</translation>
 <translation id="7390545607259442187">カードの確認</translation>
 <translation id="7392089738299859607">住所を更新</translation>
 <translation id="7399802613464275309">安全確認</translation>
@@ -2178,6 +2184,7 @@
 <translation id="9114524666733003316">カードを確認しています…</translation>
 <translation id="9114581008513152754">このブラウザは、会社またはその他の組織によって管理されていません。このデバイスでのアクティビティは、Chrome 以外で管理されている可能性があります。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">フレッシュ</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" /> です。Tab キー、Enter キーの順に押すと、ジャーニーを再開して、Chrome 履歴で関連するアクティビティを確認できます</translation>
 <translation id="9119042192571987207">アップロード済み</translation>
 <translation id="9128016270925453879">ポリシーが読み込まれました</translation>
 <translation id="9128870381267983090">ネットワークに接続する</translation>

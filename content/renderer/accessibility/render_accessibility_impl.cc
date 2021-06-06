@@ -34,7 +34,6 @@
 #include "content/renderer/accessibility/render_accessibility_manager.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
-#include "content/renderer/render_view_impl.h"
 #include "services/image_annotation/public/mojom/image_annotation.mojom.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -217,19 +216,16 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
 #if !defined(OS_ANDROID)
   // Inline text boxes can be enabled globally on all except Android.
   // On Android they can be requested for just a specific node.
-  RenderView* render_view = render_frame_->GetRenderView();
-  if (render_view) {
-    WebView* web_view = render_view->GetWebView();
-    if (web_view) {
-      WebSettings* settings = web_view->GetSettings();
-      if (settings) {
-        if (mode.has_mode(ui::AXMode::kInlineTextBoxes)) {
-          settings->SetInlineTextBoxAccessibilityEnabled(true);
-          tree_source_->GetRoot().MaybeUpdateLayoutAndCheckValidity();
-          tree_source_->GetRoot().LoadInlineTextBoxes();
-        } else {
-          settings->SetInlineTextBoxAccessibilityEnabled(false);
-        }
+  WebView* web_view = render_frame_->GetWebView();
+  if (web_view) {
+    WebSettings* settings = web_view->GetSettings();
+    if (settings) {
+      if (mode.has_mode(ui::AXMode::kInlineTextBoxes)) {
+        settings->SetInlineTextBoxAccessibilityEnabled(true);
+        tree_source_->GetRoot().MaybeUpdateLayoutAndCheckValidity();
+        tree_source_->GetRoot().LoadInlineTextBoxes();
+      } else {
+        settings->SetInlineTextBoxAccessibilityEnabled(false);
       }
     }
   }
@@ -433,7 +429,6 @@ void RenderAccessibilityImpl::Reset(int32_t reset_token) {
   reset_token_ = reset_token;
   serializer_->Reset();
   pending_events_.clear();
-  dirty_objects_.clear();
 
   const WebDocument& document = GetMainDocument();
   if (!document.IsNull()) {
@@ -455,10 +450,12 @@ void RenderAccessibilityImpl::HandleWebAccessibilityEvent(
 void RenderAccessibilityImpl::MarkWebAXObjectDirty(
     const WebAXObject& obj,
     bool subtree,
-    ax::mojom::Action event_from_action,
-    std::vector<ui::AXEventIntent> event_intents) {
-  EnqueueDirtyObject(obj, ax::mojom::EventFrom::kAction, event_from_action,
-                     event_intents);
+    ax::mojom::Action event_from_action) {
+  DirtyObject dirty_object;
+  dirty_object.obj = obj;
+  dirty_object.event_from = ax::mojom::EventFrom::kAction;
+  dirty_object.event_from_action = event_from_action;
+  dirty_objects_.push_back(dirty_object);
 
   if (subtree)
     serializer_->InvalidateSubtree(obj);
@@ -511,10 +508,6 @@ void RenderAccessibilityImpl::HandleAXEvent(const ui::AXEvent& event) {
   pending_events_.push_back(event);
   if (IsImmediateProcessingRequiredForEvent(event))
     event_schedule_mode_ = EventScheduleMode::kProcessEventsImmediately;
-
-  if (ShouldSerializeNodeForEvent(obj, event))
-    MarkWebAXObjectDirty(obj, false, event.event_from_action,
-                         event.event_intents);
 
   ScheduleSendPendingAccessibilityEvents();
 }
@@ -603,17 +596,6 @@ bool RenderAccessibilityImpl::ShouldSerializeNodeForEvent(
   if (obj.IsDetached())
     return false;
 
-  // If we were to return true for kLayoutComplete, that means calling
-  // MarkWebAXObjectDirty on the root node (since kLayoutComplete is fired
-  // on the root), and because the root is focusable, MarkWebAXObjectDirty
-  // sets the event schedule mode to kProcessEventsImmediately, which is
-  // inefficient. So it's best to not actually serialize a node in response
-  // to a kLayoutComplete event, but note that it will still ensure that a
-  // lower-priority update is scheduled, which will serialize any nodes whose
-  // bounding boxes have changed.
-  if (event.event_type == ax::mojom::Event::kLayoutComplete)
-    return false;
-
   if (event.event_type == ax::mojom::Event::kTextSelectionChanged &&
       !obj.IsAtomicTextField()) {
     // Selection changes on non-atomic text fields cause no change to the
@@ -628,19 +610,6 @@ bool RenderAccessibilityImpl::ShouldSerializeNodeForEvent(
   }
 
   return true;
-}
-
-void RenderAccessibilityImpl::EnqueueDirtyObject(
-    const blink::WebAXObject& obj,
-    ax::mojom::EventFrom event_from,
-    ax::mojom::Action event_from_action,
-    std::vector<ui::AXEventIntent> event_intents) {
-  DirtyObject* dirty_object = new DirtyObject();
-  dirty_object->obj = obj;
-  dirty_object->event_from = event_from;
-  dirty_object->event_from_action = event_from_action;
-  dirty_object->event_intents = event_intents;
-  dirty_objects_.push_back(base::WrapUnique<DirtyObject>(dirty_object));
 }
 
 int RenderAccessibilityImpl::GetDeferredEventsDelay() {
@@ -800,7 +769,6 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
     pending_events_.insert(
         pending_events_.begin(),
         ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
-    MarkWebAXObjectDirty(root_obj, false);
 
     // If loaded and has some content, insert load complete at the top, so that
     // screen readers are informed a new document is ready.
@@ -834,6 +802,10 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   // The serialized list of updates and events to send to the browser.
   std::vector<ui::AXTreeUpdate> updates;
   std::vector<ui::AXEvent> events;
+
+  // Keep track of nodes in the tree that need to be updated.
+  std::vector<DirtyObject> dirty_objects = dirty_objects_;
+  dirty_objects_.clear();
 
   // If there's a layout complete or a scroll changed message, we need to send
   // location changes.
@@ -902,21 +874,89 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
       continue;
     }
 
+    auto obj = WebAXObject::FromWebDocumentByID(document, event.id);
+
+    // Make sure the object still exists.
+    // TODO(accessibility) Change this to CheckValidity() if there aren't crash
+    // reports of illegal lifecycle changes from WebDisallowTransitionScope.
+    if (!obj.MaybeUpdateLayoutAndCheckValidity())
+      continue;
+
+      // Make sure it's a descendant of our root node - exceptions include the
+      // scroll area that's the parent of the main document (we ignore it), and
+      // possibly nodes attached to a different document.
+      // TODO(accessibility) Remove once it's clear this never triggers.
+#if defined(AX_FAIL_FAST_BUILD)
+    SANITIZER_CHECK(tree_source_->IsInTree(obj))
+        << "\n* Object not in tree: " << obj.ToString(true).Utf8();
+#endif
+
+    // If it's ignored, find the first ancestor that's not ignored.
+    //
+    // Note that "IsDetached()" also calls "IsNull()". Additionally,
+    // "ParentObject()" always gets the first ancestor that is included in tree
+    // (ignored or unignored), so it will never return objects that are not
+    // included in the tree at all.
+    if (!obj.IsDetached() && !obj.AccessibilityIsIncludedInTree())
+      obj = obj.ParentObject();
+    for (; !obj.IsDetached() && obj.AccessibilityIsIgnored();
+         obj = obj.ParentObject()) {
+      // There are 3 states of nodes that we care about here.
+      // (x) Unignored, included in tree
+      // [x] Ignored, included in tree
+      // <x> Ignored, excluded from tree
+      //
+      // Consider the following tree :
+      // ++(0) Role::kRootWebArea
+      // ++++<1> Role::kNone
+      // ++++++[2] Role::kGenericContainer <body>
+      // ++++++++[3] Role::kGenericContainer with 'visibility: hidden'
+      //
+      // If we modify [3] to be 'visibility: visible', we will receive
+      // Event::kChildrenChanged here for the Ignored parent [2].
+      // We must re-serialize the Unignored parent node (0) due to this
+      // change, but we must also re-serialize [2] since its children
+      // have changed. <1> was never part of the ax tree, and therefore
+      // does not need to be serialized.
+      // Note that [3] will be serialized to (3) during :
+      // |AXTreeSerializer<>::SerializeChangedNodes| when node [2] is
+      // being serialized, since it will detect the Ignored state had
+      // changed.
+      //
+      // Similarly, during Event::kTextChanged, if any Ignored,
+      // but included in tree ancestor uses NameFrom::kContents,
+      // they must also be re-serialized in case the name changed.
+      if (ShouldSerializeNodeForEvent(obj, event)) {
+        DirtyObject dirty_object;
+        dirty_object.obj = obj;
+        dirty_object.event_from = event.event_from;
+        dirty_object.event_from_action = event.event_from_action;
+        dirty_object.event_intents = event.event_intents;
+        dirty_objects.push_back(dirty_object);
+      }
+    }
+
     events.push_back(event);
 
     VLOG(1) << "Accessibility event: " << ui::ToString(event.event_type)
             << " on node id " << event.id;
+
+    // Some events don't cause any changes to their associated objects.
+    if (ShouldSerializeNodeForEvent(obj, event)) {
+      DirtyObject dirty_object;
+      dirty_object.obj = obj;
+      dirty_object.event_from = event.event_from;
+      dirty_object.event_from_action = event.event_from_action;
+      dirty_object.event_intents = event.event_intents;
+      dirty_objects.push_back(dirty_object);
+    }
   }
 
   // Now serialize all dirty objects. Keep track of IDs serialized
   // so we don't have to serialize the same node twice.
   std::set<int32_t> already_serialized_ids;
-  while (!dirty_objects_.empty()) {
-    std::unique_ptr<DirtyObject> current_dirty_object =
-        std::move(dirty_objects_.front());
-    dirty_objects_.pop_front();
-    auto obj = current_dirty_object->obj;
-
+  for (const DirtyObject& current_dirty_object : dirty_objects) {
+    auto obj = current_dirty_object.obj;
     // Dirty objects can be added using MarkWebAXObjectDirty(obj) from other
     // parts of the code as well, so we need to ensure the object still exists.
     // TODO(accessibility) Change this to CheckValidity() if there aren't crash
@@ -937,50 +977,10 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
     if (already_serialized_ids.find(obj.AxID()) != already_serialized_ids.end())
       continue;
 
-    // If it's ignored, find the first ancestor that's not ignored and
-    // mark all ancestors along the way as dirty.
-    if (obj.AccessibilityIsIgnored()) {
-      WebAXObject ancestor = obj;
-      for (; !ancestor.IsDetached() && ancestor.AccessibilityIsIgnored();
-           ancestor = ancestor.ParentObject()) {
-        // There are 3 states of nodes that we care about here.
-        // (x) Unignored, included in tree
-        // [x] Ignored, included in tree
-        // <x> Ignored, excluded from tree
-        //
-        // Consider the following tree :
-        // ++(0) Role::kRootWebArea
-        // ++++<1> Role::kNone
-        // ++++++[2] Role::kGenericContainer <body>
-        // ++++++++[3] Role::kGenericContainer with 'visibility: hidden'
-        //
-        // If we modify [3] to be 'visibility: visible', we will receive
-        // Event::kChildrenChanged here for the Ignored parent [2].
-        // We must re-serialize the Unignored parent node (0) due to this
-        // change, but we must also re-serialize [2] since its children
-        // have changed. <1> was never part of the ax tree, and therefore
-        // does not need to be serialized.
-        // Note that [3] will be serialized to (3) during :
-        // |AXTreeSerializer<>::SerializeChangedNodes| when node [2] is
-        // being serialized, since it will detect the Ignored state had
-        // changed.
-        //
-        // Similarly, during Event::kTextChanged, if any Ignored,
-        // but included in tree ancestor uses NameFrom::kContents,
-        // they must also be re-serialized in case the name changed.
-        EnqueueDirtyObject(ancestor, current_dirty_object->event_from,
-                           current_dirty_object->event_from_action,
-                           current_dirty_object->event_intents);
-      }
-      EnqueueDirtyObject(ancestor, current_dirty_object->event_from,
-                         current_dirty_object->event_from_action,
-                         current_dirty_object->event_intents);
-    }
-
     ui::AXTreeUpdate update;
-    update.event_from = current_dirty_object->event_from;
-    update.event_from_action = current_dirty_object->event_from_action;
-    update.event_intents = current_dirty_object->event_intents;
+    update.event_from = current_dirty_object.event_from;
+    update.event_from_action = current_dirty_object.event_from_action;
+    update.event_intents = current_dirty_object.event_intents;
     // If there's a plugin, force the tree data to be generated in every
     // message so the plugin can merge its own tree data changes.
     if (plugin_tree_source_)

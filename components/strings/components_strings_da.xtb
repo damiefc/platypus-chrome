@@ -219,6 +219,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="168841957122794586">Servercertifikatet indeholder en svag kryptografisk nøgle.</translation>
 <translation id="1696290444144917273">Se virtuelle kortoplysninger</translation>
 <translation id="1697532407822776718">Fuldført</translation>
+<translation id="1699570257714336246">Der mangler oplysninger</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Denne server kunne ikke bevise, at den er <ph name="DOMAIN" />, da dens sikkerhedscertifikat tilsyneladende først gælder fra i morgen. Dette kan skyldes en fejlkonfiguration, eller at en hacker har opfanget din forbindelse.}one{Denne server kunne ikke bevise, at den er <ph name="DOMAIN" />, da dens sikkerhedscertifikat tilsyneladende først gælder fra om # dag. Dette kan skyldes en fejlkonfiguration, eller at en hacker har opfanget din forbindelse.}other{Denne server kunne ikke bevise, at den er <ph name="DOMAIN" />, da dens sikkerhedscertifikat tilsyneladende først gælder fra om # dage. Dette kan skyldes en fejlkonfiguration, eller at en hacker har opfanget din forbindelse.}}</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -734,6 +735,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="3631244953324577188">Biometri</translation>
 <translation id="3633738897356909127">Knappen Opdater Chrome – tryk på Enter for at opdatere Chrome i dine Chrome-indstillinger</translation>
 <translation id="3634530185120165534">Bakke 5</translation>
+<translation id="3637662659967048211">Gem på Google-konto</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Program:</translation>
 <translation id="3650584904733503804">Valideringen er fuldført</translation>
@@ -1027,6 +1029,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="4731967714531604179">Prc2 (Envelope)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> anmoder om at bruge enhedens placering</translation>
 <translation id="4736825316280949806">Genstart Chromium</translation>
+<translation id="4736934858538408121">Virtuelt kort</translation>
 <translation id="473775607612524610">Opdater</translation>
 <translation id="4738601419177586157"><ph name="TEXT" />-søgeforslag</translation>
 <translation id="4742407542027196863">Administrer adgangskoder…</translation>
@@ -1411,6 +1414,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="6106989379647458772">Websiden på <ph name="PAGE" /> kan være midlertidigt nede, eller også er den permanent flyttet til en ny webadresse.</translation>
 <translation id="6107012941649240045">Udstedt til</translation>
 <translation id="610911394827799129">Din Google-konto kan have andre former for browserhistorik på <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /></translation>
+<translation id="6113594885686374546">Knappen Genoptag søgning, tryk på Enter for at genoptage søgningen og se relevant aktivitet i din Chrome-historik</translation>
 <translation id="6116338172782435947">Se tekst og billeder, der er kopieret til udklipsholderen</translation>
 <translation id="6120179357481664955">Skal dit UPI-id huskes?</translation>
 <translation id="6123290840358279103">Se virtuelt kort</translation>
@@ -1486,6 +1490,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="6423385022588644828">Bekræft dine kort hurtigere ved hjælp af Touch ID fra nu af</translation>
 <translation id="6425092077175753609">Material</translation>
 <translation id="6427730057873428458">Portfals</translation>
+<translation id="6428146287756735566">Genoptag søgningen for at se relevant aktivitet i din Chrome-historik</translation>
 <translation id="6428450836711225518">Bekræft dit telefonnummer</translation>
 <translation id="6433490469411711332">Rediger kontaktoplysninger</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> nægtede at oprette forbindelse.</translation>
@@ -1537,6 +1542,7 @@ Ellers vil det blive blokeret af dine privatlivsindstillinger. Det giver det ind
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="6645291930348198241">Adgang til cookies og websitedata.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Ingen}=1{Fra 1 website (du logges ikke ud af din Google-konto)}one{Fra # website (du logges ikke ud af din Google-konto)}other{Fra # websites (du logges ikke ud af din Google-konto)}}</translation>
+<translation id="6647197322759179819">Genoptag søgning</translation>
 <translation id="6648459603387803038">Din administrator kan ændre konfigurationen af din browser via fjernadgang. Aktivitet på denne enhed administreres muligvis også uden for Chrome.</translation>
 <translation id="6648524591329069940">Serif-skrifttype</translation>
 <translation id="6651270836885078973">Administreres af:</translation>
@@ -2189,6 +2195,7 @@ Yderligere oplysninger:
 <translation id="9114524666733003316">Bekræfter kort...</translation>
 <translation id="9114581008513152754">Denne browser administreres ikke af en virksomhed eller en anden organisation. Aktivitet på denne enhed administreres muligvis uden for Chrome. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Frisk</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" /> – tryk på Tab-tasten og derefter Enter for at genoptage søgningen og se relevant aktivitet i din Chrome-historik</translation>
 <translation id="9119042192571987207">Uploadet</translation>
 <translation id="9128016270925453879">Politikkerne er indlæst</translation>
 <translation id="9128870381267983090">Opret forbindelse til netværk</translation>

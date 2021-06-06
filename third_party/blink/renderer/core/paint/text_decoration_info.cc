@@ -28,7 +28,7 @@ static ResolvedUnderlinePosition ResolveUnderlinePosition(
       if (style.TextUnderlinePosition() & kTextUnderlinePositionFromFont)
         return ResolvedUnderlinePosition::kNearAlphabeticBaselineFromFont;
       return ResolvedUnderlinePosition::kNearAlphabeticBaselineAuto;
-    case kIdeographicBaseline: {
+    case kCentralBaseline: {
       // Compute language-appropriate default underline position.
       // https://drafts.csswg.org/css-text-decor-3/#default-stylesheet
       UScriptCode script = style.GetFontDescription().GetScript();
@@ -158,7 +158,6 @@ static int TextDecorationToLineDataIndex(TextDecoration line) {
 }  // anonymous namespace
 
 TextDecorationInfo::TextDecorationInfo(
-    const PhysicalOffset& box_origin,
     PhysicalOffset local_origin,
     LayoutUnit width,
     FontBaseline baseline_type,

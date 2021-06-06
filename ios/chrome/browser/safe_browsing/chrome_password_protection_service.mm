@@ -39,7 +39,7 @@
 #import "ios/chrome/browser/safe_browsing/verdict_cache_manager_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
-#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/sync_service_factory.h"
 #include "ios/web/public/navigation/navigation_item.h"
 #include "ios/web/public/navigation/navigation_manager.h"
 #include "ios/web/public/thread/web_thread.h"
@@ -371,10 +371,8 @@ AccountInfo ChromePasswordProtectionService::GetAccountInfo() const {
       IdentityManagerFactory::GetForBrowserState(browser_state_);
   if (!identity_manager)
     return AccountInfo();
-  absl::optional<AccountInfo> primary_account_info =
-      identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync));
-  return primary_account_info.value_or(AccountInfo());
+  return identity_manager->FindExtendedAccountInfo(
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync));
 }
 
 AccountInfo ChromePasswordProtectionService::GetSignedInNonSyncAccount(
@@ -396,9 +394,7 @@ AccountInfo ChromePasswordProtectionService::GetSignedInNonSyncAccount(
   if (account_iterator == signed_in_accounts.end())
     return AccountInfo();
 
-  return identity_manager
-      ->FindExtendedAccountInfoForAccountWithRefreshToken(*account_iterator)
-      .value_or(AccountInfo());
+  return identity_manager->FindExtendedAccountInfo(*account_iterator);
 }
 
 LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
@@ -471,7 +467,7 @@ bool ChromePasswordProtectionService::IsExtendedReporting() {
 
 bool ChromePasswordProtectionService::IsPrimaryAccountSyncing() const {
   syncer::SyncService* sync =
-      ProfileSyncServiceFactory::GetForBrowserState(browser_state_);
+      SyncServiceFactory::GetForBrowserState(browser_state_);
   return sync && sync->IsSyncFeatureActive() && !sync->IsLocalSyncEnabled();
 }
 
@@ -802,4 +798,3 @@ PrefService* ChromePasswordProtectionService::GetPrefs() const {
 bool ChromePasswordProtectionService::IsSafeBrowsingEnabled() {
   return ::safe_browsing::IsSafeBrowsingEnabled(*GetPrefs());
 }
-

@@ -106,6 +106,7 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     proto->set_report_board_status(enable_reporting);
     proto->set_report_app_info(enable_reporting);
     proto->set_report_print_jobs(enable_reporting);
+    proto->set_report_login_logout(enable_reporting);
     proto->set_device_status_frequency(frequency);
     BuildAndInstallDevicePolicy();
   }
@@ -183,6 +184,7 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
         kReportDeviceCrashReportInfo,
         kReportDeviceAppInfo,
         kReportDevicePrintJobs,
+        kReportDeviceLoginLogout,
         kReportOsUpdateStatus,
         kReportRunningKioskApp,
     };
@@ -391,6 +393,14 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     for (auto const& value : values) {
       proto->add_allowlist(value);
     }
+  }
+
+  // Helper routine that sets the DeviceScheduledReboot policy.
+  void SetDeviceScheduledReboot(const std::string& json_string) {
+    em::DeviceScheduledRebootProto* proto =
+        device_policy_->payload().mutable_device_scheduled_reboot();
+    proto->set_device_scheduled_reboot_settings(json_string);
+    BuildAndInstallDevicePolicy();
   }
 
   void VerifyDevicePrinterList(const char* policy_key,
@@ -1258,4 +1268,21 @@ TEST_F(DeviceSettingsProviderTest, DeviceAllowedBluetoothServices) {
   allowlist.Append(base::Value("0x1124"));
   EXPECT_EQ(allowlist, *provider_->Get(kDeviceAllowedBluetoothServices));
 }
+
+// Check valid JSON for DeviceScheduledReboot.
+TEST_F(DeviceSettingsProviderTest, DeviceScheduledReboot) {
+  const std::string json_string =
+      "{\"reboot_time\": {\"hour\": 22, \"minute\": 30}, "
+      "\"frequency\": \"MONTHLY\", \"day_of_week\": \"MONDAY\", "
+      "\"day_of_month\": 15}";
+  base::DictionaryValue expected_val;
+  expected_val.SetPath({"reboot_time", "hour"}, base::Value(22));
+  expected_val.SetPath({"reboot_time", "minute"}, base::Value(30));
+  expected_val.Set("frequency", std::make_unique<base::Value>("MONTHLY"));
+  expected_val.Set("day_of_week", std::make_unique<base::Value>("MONDAY"));
+  expected_val.Set("day_of_month", std::make_unique<base::Value>(15));
+  SetDeviceScheduledReboot(json_string);
+  VerifyPolicyValue(kDeviceScheduledReboot, &expected_val);
+}
+
 }  // namespace ash

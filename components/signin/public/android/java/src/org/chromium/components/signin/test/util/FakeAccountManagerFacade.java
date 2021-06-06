@@ -22,6 +22,7 @@ import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ProfileDataSource;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -70,11 +71,6 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     }
 
     @Override
-    public boolean isCachePopulated() {
-        return true;
-    }
-
-    @Override
     public Optional<List<Account>> getGoogleAccounts() {
         List<Account> accounts = new ArrayList<>();
         synchronized (mLock) {
@@ -87,7 +83,7 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
 
     @Override
     public List<Account> tryGetGoogleAccounts() {
-        return getGoogleAccounts().get();
+        return getGoogleAccounts().or(Collections.emptyList());
     }
 
     @Override
@@ -140,11 +136,6 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     @Override
     public String getAccountGaiaId(String accountEmail) {
         return "gaia-id-" + accountEmail.replace("@", "_at_");
-    }
-
-    @Override
-    public boolean isGooglePlayServicesAvailable() {
-        return true;
     }
 
     /**

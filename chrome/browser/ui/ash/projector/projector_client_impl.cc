@@ -46,11 +46,11 @@ void ProjectorClientImpl::StartSpeechRecognition() {
              kEnglishLanguageCode) ||
          ShouldUseWebSpeechFallback());
   DCHECK_EQ(speech_recognizer_.get(), nullptr);
+  recognizer_status_ = SPEECH_RECOGNIZER_OFF;
   speech_recognizer_ = std::make_unique<OnDeviceSpeechRecognizer>(
       weak_ptr_factory_.GetWeakPtr(), ProfileManager::GetPrimaryUserProfile(),
       kEnglishLanguageCode, /*recognition_mode_ime=*/false,
       /*enable_formatting=*/true);
-  speech_recognizer_->Start();
 }
 
 void ProjectorClientImpl::StopSpeechRecognition() {
@@ -73,24 +73,26 @@ bool ProjectorClientImpl::IsSelfieCamVisible() const {
 void ProjectorClientImpl::OnSpeechResult(
     const std::u16string& text,
     bool is_final,
-    const absl::optional<SpeechRecognizerDelegate::TranscriptTiming>& timing) {
-  DCHECK(timing.has_value() || ShouldUseWebSpeechFallback());
-
-  if (timing.has_value()) {
-    ash::ProjectorController::Get()->OnTranscription(
-        text, timing->audio_start_time, timing->audio_end_time,
-        timing->word_offsets, is_final);
-  } else {
-    // This is only used for development.
-    ash::ProjectorController::Get()->OnTranscription(
-        text, absl::nullopt, absl::nullopt, absl::nullopt, is_final);
-  }
+    const absl::optional<media::SpeechRecognitionResult>& full_result) {
+  DCHECK(full_result.has_value());
+  ash::ProjectorController::Get()->OnTranscription(full_result.value());
 }
 
 void ProjectorClientImpl::OnSpeechRecognitionStateChanged(
     SpeechRecognizerStatus new_state) {
+  if (new_state == SPEECH_RECOGNIZER_ERROR) {
+    speech_recognizer_.reset();
+    recognizer_status_ = SPEECH_RECOGNIZER_OFF;
+    ash::ProjectorController::Get()->OnTranscriptionError();
+  } else if (new_state == SPEECH_RECOGNIZER_READY) {
+    if (recognizer_status_ == SPEECH_RECOGNIZER_OFF && speech_recognizer_) {
+      // The SpeechRecognizer was initialized after being created, and
+      // is ready to start recognizing speech.
+      speech_recognizer_->Start();
+    }
+  }
+
   recognizer_status_ = new_state;
-  // TODO(yilkal): Handle the new state appropriately.
 }
 
 void ProjectorClientImpl::OnSodaInstalled() {

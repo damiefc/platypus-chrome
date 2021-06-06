@@ -219,6 +219,7 @@ I motsatt fall blir dette blokkert av personverninnstillingene. Dette gjør at i
 <translation id="168841957122794586">Tjenersertifikatet inneholder en svak kryptografisk nøkkel.</translation>
 <translation id="1696290444144917273">Se virtuelle kortopplysninger</translation>
 <translation id="1697532407822776718">Da er alt klart!</translation>
+<translation id="1699570257714336246">Informasjon mangler</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Denne tjeneren kunne ikke bevise at den er <ph name="DOMAIN" />, ettersom sikkerhetssertifikatet ser ut til å være fra i morgen. Dette kan skyldes en feilkonfigurasjon eller at en angriper avskjærer tilkoblingen mellom deg og nettstedet.}other{Denne tjeneren kunne ikke bevise at den er <ph name="DOMAIN" />, ettersom sikkerhetssertifikatet ser ut til å være fra # dager frem i tid. Dette kan skyldes en feilkonfigurasjon eller at en angriper avskjærer tilkoblingen mellom deg og nettstedet.}}</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -734,6 +735,7 @@ brukere av denne nettleseren.</translation>
 <translation id="3631244953324577188">Biometri</translation>
 <translation id="3633738897356909127">Knappen «Oppdater Chrome» – trykk på Enter for å oppdatere Chrome fra Chrome-innstillingene</translation>
 <translation id="3634530185120165534">Skuff 5</translation>
+<translation id="3637662659967048211">Lagre i Google-kontoen</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Program:</translation>
 <translation id="3650584904733503804">Valideringen var vellykket</translation>
@@ -1027,6 +1029,7 @@ brukere av denne nettleseren.</translation>
 <translation id="4731967714531604179">Prc2 (konvolutt)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> ber om å bruke posisjonen til enheten din</translation>
 <translation id="4736825316280949806">Start Chromium på nytt</translation>
+<translation id="4736934858538408121">Virtuelt kort</translation>
 <translation id="473775607612524610">Oppdater</translation>
 <translation id="4738601419177586157">Søkeforslag for <ph name="TEXT" /></translation>
 <translation id="4742407542027196863">Administrer passord…</translation>
@@ -1411,6 +1414,7 @@ brukere av denne nettleseren.</translation>
 <translation id="6106989379647458772">Det kan hende at nettsiden på <ph name="PAGE" /> er midlertidig nede eller flyttet permanent til en ny nettadresse.</translation>
 <translation id="6107012941649240045">Utstedt til</translation>
 <translation id="610911394827799129">Det kan hende Google-kontoen din har andre typer nettleserlogger på <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" />.</translation>
+<translation id="6113594885686374546">Fortsett ferden-knappen – trykk på Enter for å fortsette ferden og se relevant aktivitet i Chrome-loggen</translation>
 <translation id="6116338172782435947">Se tekst og bilder som er kopiert til utklippstavlen</translation>
 <translation id="6120179357481664955">Husker du UPI-ID-en din?</translation>
 <translation id="6123290840358279103">Se virtuelt kort</translation>
@@ -1486,6 +1490,7 @@ brukere av denne nettleseren.</translation>
 <translation id="6423385022588644828">Bekreft kortene dine raskere ved å bruke Touch ID fra nå av</translation>
 <translation id="6425092077175753609">Materiale</translation>
 <translation id="6427730057873428458">Vindusfals</translation>
+<translation id="6428146287756735566">Fortsett ferden for å se relevant aktivitet i Chrome-loggen</translation>
 <translation id="6428450836711225518">Bekreft telefonnummeret ditt</translation>
 <translation id="6433490469411711332">Endre kontaktinformasjonen</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avviste tilkoblingsforsøket.</translation>
@@ -1537,6 +1542,7 @@ brukere av denne nettleseren.</translation>
 <translation id="6643016212128521049">Tøm</translation>
 <translation id="6645291930348198241">få tilgang til informasjonskapsler og nettstedsdata</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Ingen}=1{Fra 1 nettsted (du blir ikke logget av Google-kontoen din)}other{Fra # nettsteder (du blir ikke logget av Google-kontoen din)}}</translation>
+<translation id="6647197322759179819">Fortsett ferden</translation>
 <translation id="6648459603387803038">Administratoren kan endre nettleseroppsettet eksternt. Aktiviteten på denne enheten kan også administreres utenfor Chrome.</translation>
 <translation id="6648524591329069940">Med seriffer</translation>
 <translation id="6651270836885078973">Administreres av:</translation>
@@ -2187,6 +2193,7 @@ Mer informasjon:
 <translation id="9114524666733003316">Bekrefter kortet …</translation>
 <translation id="9114581008513152754">Denne nettleseren administreres ikke av et selskap eller en annen organisasjon. Aktiviteten på denne enheten kan bli administrert utenfor Chrome. <ph name="BEGIN_LINK" />Finn ut mer<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Frisk</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" /> – trykk på Tab og deretter på Enter for å fortsette ferden og se relevant aktivitet i Chrome-loggen</translation>
 <translation id="9119042192571987207">Opplastet</translation>
 <translation id="9128016270925453879">Regler er lastet inn</translation>
 <translation id="9128870381267983090">Koble til nettverk</translation>

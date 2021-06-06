@@ -1530,8 +1530,6 @@ Element* Document::scrollingElement() {
 Element* Document::ScrollingElementNoLayout() {
   if (RuntimeEnabledFeatures::ScrollTopLeftInteropEnabled()) {
     if (InQuirksMode()) {
-      DCHECK(!IsActive() || InStyleRecalc() ||
-             lifecycle_.GetState() >= DocumentLifecycle::kStyleClean);
       HTMLBodyElement* body = FirstBodyElement();
       if (body && body->GetLayoutObject() &&
           body->GetLayoutObject()->IsScrollContainer())
@@ -2712,8 +2710,8 @@ void Document::Shutdown() {
 
   markers_->PrepareForDestruction();
 
-  if (GetFrame()->GetTextFragmentSelectorGenerator())
-    GetFrame()->GetTextFragmentSelectorGenerator()->ClearSelection();
+  if (TextFragmentHandler* handler = GetFrame()->GetTextFragmentHandler())
+    handler->DidDetachDocumentOrFrame();
 
   GetPage()->DocumentDetached(this);
 
@@ -3038,7 +3036,7 @@ void Document::open(LocalDOMWindow* entered_window,
       new_url.SetFragmentIdentifier(String());
     SetURL(new_url);
     if (Loader())
-      Loader()->UpdateUrlForDocumentOpen(new_url);
+      Loader()->DidOpenDocumentInputStream(new_url);
 
     if (dom_window_ != entered_window) {
       // We inherit the sandbox flags of the entered document, so mask on
@@ -3298,8 +3296,7 @@ Element* Document::ViewportDefiningElement() const {
   const ComputedStyle* root_style = root_element->GetComputedStyle();
   if (!root_style || root_style->IsEnsuredInDisplayNone())
     return nullptr;
-  if (body_element && root_style->IsOverflowVisibleAlongBothAxes() &&
-      IsA<HTMLHtmlElement>(root_element))
+  if (body_element && root_style->IsOverflowVisibleAlongBothAxes())
     return body_element;
   return root_element;
 }
@@ -8081,7 +8078,7 @@ const Node* Document::GetFindInPageActiveMatchNode() const {
   return find_in_page_active_match_node_;
 }
 
-void Document::ActivateForPrerendering() {
+void Document::ActivateForPrerendering(base::TimeTicks activation_start) {
   DCHECK(RuntimeEnabledFeatures::Prerender2Enabled());
 
   // For subframes, this can be called before the navigation commit, and this
@@ -8097,7 +8094,7 @@ void Document::ActivateForPrerendering() {
   is_prerendering_ = false;
 
   if (DocumentLoader* loader = Loader())
-    loader->NotifyPrerenderingDocumentActivated();
+    loader->NotifyPrerenderingDocumentActivated(activation_start);
 
   Vector<base::OnceClosure> callbacks;
   callbacks.swap(will_dispatch_prerenderingchange_callbacks_);

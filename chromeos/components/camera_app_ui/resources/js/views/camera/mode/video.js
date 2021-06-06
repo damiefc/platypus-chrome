@@ -15,6 +15,8 @@ import {
 import * as dom from '../../../dom.js';
 // eslint-disable-next-line no-unused-vars
 import * as h264 from '../../../h264.js';
+// eslint-disable-next-line no-unused-vars
+import {I18nString} from '../../../i18n_string.js';
 import {Filenamer} from '../../../models/file_namer.js';
 import * as loadTimeData from '../../../models/load_time_data.js';
 import {
@@ -27,6 +29,7 @@ import * as toast from '../../../toast.js';
 import {
   CanceledError,
   Facing,  // eslint-disable-line no-unused-vars
+  NoChunkError,
   PerfEvent,
   Resolution,
   ResolutionList,  // eslint-disable-line no-unused-vars
@@ -53,6 +56,9 @@ const encoderPreference = new Map([
  * @type {?h264.EncoderParameters}
  */
 let avc1Parameters = null;
+
+// The minimum duration of videos captured via cca.
+const MINIMUM_VIDEO_DURATION_IN_MILLISECONDS = 500;
 
 /**
  * Sets avc1 parameter used in video recording.
@@ -355,29 +361,50 @@ export class Video extends ModeBase {
       }
       this.mediaRecorder_ = new MediaRecorder(this.stream_, option);
     } catch (e) {
-      toast.show('error_msg_record_start_failed');
+      toast.show(I18nString.ERROR_MSG_RECORD_START_FAILED);
       throw e;
     }
 
     this.recordTime_.start({resume: false});
     let /** ?VideoSaver */ videoSaver = null;
-    let /** number */ duration = 0;
+    const isVideoTooShort = () => this.recordTime_.inMilliseconds() <
+        MINIMUM_VIDEO_DURATION_IN_MILLISECONDS;
+
     try {
-      videoSaver = await this.captureVideo_();
+      try {
+        videoSaver = await this.captureVideo_();
+      } finally {
+        this.recordTime_.stop({pause: false});
+        sound.play(dom.get('#sound-rec-end', HTMLAudioElement));
+        await this.snapshots_.flush();
+      }
     } catch (e) {
-      toast.show('error_msg_empty_recording');
-      throw e;
-    } finally {
-      duration = this.recordTime_.stop({pause: false});
+      // Tolerates the error if it is due to the very short duration. Reports
+      // for other errors.
+      if (!(e instanceof NoChunkError && isVideoTooShort())) {
+        toast.show(I18nString.ERROR_MSG_EMPTY_RECORDING);
+        throw e;
+      }
     }
-    sound.play(dom.get('#sound-rec-end', HTMLAudioElement));
+
+    if (isVideoTooShort()) {
+      toast.show(I18nString.ERROR_MSG_VIDEO_TOO_SHORT);
+      if (videoSaver !== null) {
+        await videoSaver.cancel();
+      }
+      return;
+    }
 
     const settings = this.stream_.getVideoTracks()[0].getSettings();
     const resolution = new Resolution(settings.width, settings.height);
     state.set(PerfEvent.VIDEO_CAPTURE_POST_PROCESSING, true);
     try {
-      await this.handler_.handleResultVideo(new VideoResult(
-          {resolution, duration, videoSaver, everPaused: this.everPaused_}));
+      await this.handler_.handleResultVideo(new VideoResult({
+        resolution,
+        duration: this.recordTime_.inMinutes(),
+        videoSaver,
+        everPaused: this.everPaused_,
+      }));
       state.set(
           PerfEvent.VIDEO_CAPTURE_POST_PROCESSING, false,
           {resolution, facing: this.facing_});
@@ -386,8 +413,6 @@ export class Video extends ModeBase {
           PerfEvent.VIDEO_CAPTURE_POST_PROCESSING, false, {hasError: true});
       throw e;
     }
-
-    await this.snapshots_.flush();
   }
 
   /**
@@ -413,45 +438,51 @@ export class Video extends ModeBase {
   async captureVideo_() {
     const saver = await this.handler_.createVideoSaver();
 
-    return new Promise((resolve, reject) => {
-      let noChunk = true;
+    try {
+      await new Promise((resolve, reject) => {
+        let noChunk = true;
 
-      const ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          noChunk = false;
-          saver.write(event.data);
-        }
-      };
-      const onstop = (event) => {
-        state.set(state.State.RECORDING, false);
+        const ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            noChunk = false;
+            saver.write(event.data);
+          }
+        };
+        const onstop = async (event) => {
+          state.set(state.State.RECORDING, false);
+          state.set(state.State.RECORDING_PAUSED, false);
+          state.set(state.State.RECORDING_UI_PAUSED, false);
+
+          this.mediaRecorder_.removeEventListener(
+              'dataavailable', ondataavailable);
+          this.mediaRecorder_.removeEventListener('stop', onstop);
+
+          if (noChunk) {
+            reject(new NoChunkError());
+          } else {
+            // TODO(yuli): Handle insufficient storage.
+            resolve(saver);
+          }
+        };
+        const onstart = () => {
+          state.set(state.State.RECORDING, true);
+          this.mediaRecorder_.removeEventListener('start', onstart);
+        };
+        this.mediaRecorder_.addEventListener('dataavailable', ondataavailable);
+        this.mediaRecorder_.addEventListener('stop', onstop);
+        this.mediaRecorder_.addEventListener('start', onstart);
+
+        window.addEventListener('beforeunload', beforeUnloadListener);
+
+        this.mediaRecorder_.start(100);
         state.set(state.State.RECORDING_PAUSED, false);
         state.set(state.State.RECORDING_UI_PAUSED, false);
-
-        this.mediaRecorder_.removeEventListener(
-            'dataavailable', ondataavailable);
-        this.mediaRecorder_.removeEventListener('stop', onstop);
-
-        if (noChunk) {
-          reject(new Error('Video blob error.'));
-        } else {
-          // TODO(yuli): Handle insufficient storage.
-          resolve(saver);
-        }
-      };
-      const onstart = () => {
-        state.set(state.State.RECORDING, true);
-        this.mediaRecorder_.removeEventListener('start', onstart);
-      };
-      this.mediaRecorder_.addEventListener('dataavailable', ondataavailable);
-      this.mediaRecorder_.addEventListener('stop', onstop);
-      this.mediaRecorder_.addEventListener('start', onstart);
-
-      window.addEventListener('beforeunload', beforeUnloadListener);
-
-      this.mediaRecorder_.start(100);
-      state.set(state.State.RECORDING_PAUSED, false);
-      state.set(state.State.RECORDING_UI_PAUSED, false);
-    });
+      });
+      return saver;
+    } catch (e) {
+      await saver.cancel();
+      throw e;
+    }
   }
 }
 

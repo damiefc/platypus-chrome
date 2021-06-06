@@ -5,8 +5,9 @@
 #ifndef CONTENT_BROWSER_CONVERSIONS_CONVERSION_TEST_UTILS_H_
 #define CONTENT_BROWSER_CONVERSIONS_CONVERSION_TEST_UTILS_H_
 
+#include <stdint.h>
+
 #include <list>
-#include <string>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
@@ -90,6 +91,7 @@ class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
   RateLimitConfig GetRateLimits() const override;
   StorableImpression::AttributionLogic SelectAttributionLogic(
       const StorableImpression& impression) const override;
+  int GetMaxAttributionDestinationsPerEventSource() const override;
 
   void set_max_conversions_per_impression(int max) {
     max_conversions_per_impression_ = max;
@@ -101,6 +103,10 @@ class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
 
   void set_max_conversions_per_origin(int max) {
     max_conversions_per_origin_ = max;
+  }
+
+  void set_max_attribution_destinations_per_event_source(int max) {
+    max_attribution_destinations_per_event_source_ = max;
   }
 
   void set_rate_limits(RateLimitConfig c) { rate_limits_ = c; }
@@ -118,6 +124,7 @@ class ConfigurableStorageDelegate : public ConversionStorage::Delegate {
   int max_conversions_per_impression_ = INT_MAX;
   int max_impressions_per_origin_ = INT_MAX;
   int max_conversions_per_origin_ = INT_MAX;
+  int max_attribution_destinations_per_event_source_ = INT_MAX;
 
   RateLimitConfig rate_limits_ = {
       .time_window = base::TimeDelta::Max(),
@@ -250,7 +257,7 @@ class ImpressionBuilder {
 
 // Returns a StorableConversion with default data which matches the default
 // impressions created by ImpressionBuilder.
-StorableConversion DefaultConversion();
+StorableConversion DefaultConversion(uint64_t event_source_trigger_data = 0);
 
 testing::AssertionResult ImpressionsEqual(const StorableImpression& expected,
                                           const StorableImpression& actual);

@@ -670,6 +670,7 @@
 <translation id="1706625117072057435">ଜୁମ୍-ସ୍ତର</translation>
 <translation id="1708338024780164500">(ନିଷ୍କ୍ରିୟ)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">ପରୀକ୍ଷାମୂଳକ ବ୍ରାଉଜର୍! ଡାଟା ହରାଇ ପାରନ୍ତି କିମ୍ବା ଗୋପନୀୟତା ବା ସୁରକ୍ଷା ଭଙ୍ଗ ହୋଇପାରେ। ଦୟାକରି ସମସ୍ୟାଗୁଡ଼ିକ ବିଷୟରେ ଏଠାରେ ରିପୋର୍ଟ କରନ୍ତୁ: ସହାୟତା &gt; "ଏକ ସମସ୍ୟା ବିଷୟରେ ରିପୋର୍ଟ କରନ୍ତୁ..."।</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (ମୂଳ)</translation>
 <translation id="1709217939274742847">ପ୍ରାମାଣିକତା ପାଇଁ ବ୍ୟବହାର କରିବାକୁ ଏକ ଟିକେଟ୍ ବାଛନ୍ତୁ। <ph name="LINK_BEGIN" />ଅଧିକ ଜାଣନ୍ତୁ<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">ସେୟାର୍ କରାଯାଇପାରିବ ନାହିଁ</translation>
@@ -1085,6 +1086,7 @@
 <translation id="2144557304298909478">Linux Android ଆପ୍ ଡେଭଲପମେଣ୍ଟ</translation>
 <translation id="2146263598007866206">ଆପଣଙ୍କ ସମୟ ବଞ୍ଚାଇବା ପାଇଁ ସାଇଟଗୁଡ଼ିକ ସମ୍ବନ୍ଧିତ ଫାଇଲଗୁଡ଼ିକୁ ଏକାଠି ସ୍ୱଚାଳିତ ଭାବେ ଡାଉନଲୋଡ୍ କରିପାରେ</translation>
 <translation id="2147151613919729065">ଅତିଥି ମୋଡର ଇତିହାସକୁ ଖାଲି କରିବା ପାଇଁ, ସମସ୍ତ ଅତିଥି ୱିଣ୍ଡୋ ବନ୍ଦ କରନ୍ତୁ।</translation>
+<translation id="2147218225094845757">ସାଇଡ୍ ପ୍ୟାନେଲକୁ ଲୁଚାନ୍ତୁ</translation>
 <translation id="2148219725039824548">ସେୟାର୍ ଖଞ୍ଜିବାରେ ତ୍ରୁଟି। ନେଟ୍‌ୱର୍କରେ ଧାର୍ଯ୍ୟ କରାଯାଇଥିବା ସେୟାର୍ ମିଳିଲା ନାହିଁ।</translation>
 <translation id="2148756636027685713">ଫର୍ମାଟିଂ ଶେଷ ହୋଇଛି</translation>
 <translation id="2148892889047469596">ଟାବ୍ କାଷ୍ଟ କରନ୍ତୁ</translation>
@@ -3161,6 +3163,7 @@
 <translation id="4410545552906060960">ଆପଣଙ୍କର ଡିଭାଇସ୍ ଅନ୍‌ଲକ୍ କରିବା ପାଇଁ ଏକ ପାସ୍‌ୱର୍ଡ ବଦଳରେ ଏକ ନମ୍ବର (PIN) ବ୍ୟବହାର କରନ୍ତୁ। ପରେ ଆପଣଙ୍କ PIN ସେଟ୍ କରିବା ପାଇଁ, ସେଟିଂସ୍‌କୁ ଯାଆନ୍ତୁ।</translation>
 <translation id="4411578466613447185">କୋଡ୍ ସାଇନର୍</translation>
 <translation id="4412698727486357573">ସହାୟତା କେନ୍ଦ୍ର</translation>
+<translation id="4413088271097062326">ଆପଣ କେଉଁ ଆପ୍ଲିକେସନକୁ ବ୍ୟବହାର କରିବାକୁ ଚାହୁଁଛନ୍ତି?</translation>
 <translation id="44141919652824029">ଆପଣଙ୍କର ସଂଯୁକ୍ତ USB ଡିଭାଇସ୍‍ଗୁଡ଼ିକର ତାଲିକା ପ୍ରାପ୍ତ କରିବାକୁ <ph name="APP_NAME" />କୁ ଅନୁମତି ଦେବେ?</translation>
 <translation id="4414232939543644979">ନୂଆ &amp;ଇନ୍‌କଗ୍ନିଟୋ ୱିଣ୍ଡୋ</translation>
 <translation id="4414515549596849729">କୁକୀ ଏବଂ ସାଇଟ୍ ଡାଟା</translation>
@@ -3934,6 +3937,7 @@
 <translation id="5269977353971873915">ପ୍ରିଣ୍ଟ ହେଲାନାହିଁ</translation>
 <translation id="5275352920323889391">ଶ୍ୱାନ</translation>
 <translation id="527605982717517565">ସର୍ବଦା <ph name="HOST" />ରେ JavaScriptକୁ ଅନୁମତି ଦିଅନ୍ତୁ</translation>
+<translation id="5277127016695466621">ସାଇଡ୍ ପ୍ୟାନେଲ୍ ଦେଖାନ୍ତୁ</translation>
 <translation id="5278823018825269962">ସ୍ଥିତି Id</translation>
 <translation id="5280064835262749532"><ph name="SHARE_PATH" /> ପାଇଁ କ୍ରେଡେନ୍ସିଆଲଗୁଡ଼ିକ ଅପଡେଟ୍ କରନ୍ତୁ</translation>
 <translation id="5280243692621919988">ଆପଣ ସମସ୍ତ ୱିଣ୍ଡୋ ବନ୍ଦ କରିବା ସମୟରେ କୁକୀଗୁଡ଼ିକୁ ଏବଂ ସାଇଟ୍ ଡାଟା ଖାଲି କରନ୍ତୁ</translation>
@@ -6116,7 +6120,6 @@ Google Chrome ଆପଣଙ୍କ ମୋବାଇଲ୍ ଡାଟା ବ୍ୟବ
 <translation id="7685049629764448582">JavaScript ମେମୋରି</translation>
 <translation id="7685087414635069102">ପିନ୍ ଆବଶ୍ୟକ ଅଟେ</translation>
 <translation id="768549422429443215">ଭାଷାଗୁଡ଼ିକୁ ଯୋଗ କରନ୍ତୁ କିମ୍ବା ତାଲିକାକୁ ପୁନଃକ୍ରମରେ ରଖନ୍ତୁ।</translation>
-<translation id="7686424868232681412">Lacros ଏକ ପରୀକ୍ଷାମୂଳକ ବ୍ରାଉଜର୍ ଅଟେ। ଦୟାକରି ସମସ୍ୟାଗୁଡ଼ିକ ବିଷୟରେ ଏଠାରେ ରିପୋର୍ଟ କରନ୍ତୁ: ସହାୟତା &gt; "ଏକ ସମସ୍ୟା ବିଷୟରେ ରିପୋର୍ଟ କରନ୍ତୁ..."।</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">ନୂଆ ପାସ୍‌ୱାର୍ଡ ସୁନିଶ୍ଚିତ କରନ୍ତୁ</translation>
 <translation id="7690378713476594306">ତାଲିକାରୁ ବାଛନ୍ତୁ</translation>

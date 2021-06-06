@@ -140,6 +140,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
                       int32_t result) override;
   void SendMessage(base::Value message) override;
+  void SaveAs() override;
   void InitImageData(const gfx::Size& size) override;
   Image GetPluginImageData() const override;
   void SetFormFieldInFocus(bool in_focus) override;
@@ -162,21 +163,12 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void HandleLoadPreviewPageMessage(const pp::VarDictionary& dict);
   void HandleResetPrintPreviewModeMessage(const pp::VarDictionary& dict);
   void HandleSaveAttachmentMessage(const pp::VarDictionary& dict);
-  void HandleSaveMessage(const pp::VarDictionary& dict);
 
   void ResetRecentlySentFindUpdate(int32_t);
 
   bool CanSaveEdits() const;
-  void SaveToFile(const std::string& token);
 
   void FormDidOpen(int32_t result);
-
-  // Must match SaveRequestType in chrome/browser/resources/pdf/constants.js.
-  enum class SaveRequestType {
-    kAnnotation = 0,
-    kOriginal = 1,
-    kEdited = 2,
-  };
 
   // Reduces the document to 1 page and appends `print_preview_page_count_` - 1
   // blank pages to the document for print preview.

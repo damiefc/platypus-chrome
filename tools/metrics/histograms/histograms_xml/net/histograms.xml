@@ -1248,7 +1248,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.DNS.ProbeSequence.ConfigChange.Failure.AttemptTime"
-    units="ms" expires_after="2021-09-26">
+    units="ms" expires_after="2021-11-28">
   <owner>ericorth@chromium.org</owner>
   <owner>doh-core@google.com</owner>
   <summary>
@@ -1753,7 +1753,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Fetch.UploadStreamingProtocolAllowH1"
-    enum="HttpProtocolScheme" expires_after="2021-06-29">
+    enum="HttpProtocolScheme" expires_after="2021-10-19">
   <owner>yoichio@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
@@ -1764,7 +1764,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.Fetch.UploadStreamingProtocolNotAllowH1"
-    enum="HttpProtocolScheme" expires_after="2021-06-29">
+    enum="HttpProtocolScheme" expires_after="2021-10-19">
   <owner>yoichio@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <owner>yhirano@chromium.org</owner>
@@ -3834,7 +3834,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.QuicSession.PathValidationSuccess" enum="BooleanSuccess"
-    expires_after="2021-07-11">
+    expires_after="2022-07-11">
   <owner>renjietang@chromium.org</owner>
   <owner>src/net/quic/OWNERS</owner>
   <summary>
@@ -5018,7 +5018,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Net.SpdySessionErrorDetails2" enum="SpdyProtocolErrorDetails2"
-    expires_after="2021-09-26">
+    expires_after="2021-11-28">
   <owner>dschinazi@chromium.org</owner>
   <owner>src/net/OWNERS</owner>
   <summary>The type of SPDY Protocol error encountered.</summary>

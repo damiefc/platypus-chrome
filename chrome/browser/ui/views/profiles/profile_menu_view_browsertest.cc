@@ -28,7 +28,7 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
 #include "chrome/browser/sync/test/integration/status_change_checker.h"
@@ -555,8 +555,8 @@ class ProfileMenuClickTestBase : public SyncTest,
     return IdentityManagerFactory::GetForProfile(browser()->profile());
   }
 
-  syncer::ProfileSyncService* sync_service() {
-    return ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
+  syncer::SyncServiceImpl* sync_service() {
+    return SyncServiceFactory::GetAsSyncServiceImplForProfile(
         browser()->profile());
   }
 

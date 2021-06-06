@@ -17,6 +17,7 @@ static_library("internal") {
   sources = [
     "database/metadata_utils.cc",
     "database/metadata_utils.h",
+    "database/segment_info_database.cc",
     "database/segment_info_database.h",
     "database/user_action_database.h",
     "execution/model_execution_status.h",
@@ -49,6 +50,9 @@ static_library("internal") {
 
   if (build_with_tflite_lib) {
     sources += [
+      "execution/model_execution_manager.h",
+      "execution/model_execution_manager_impl.cc",
+      "execution/model_execution_manager_impl.h",
       "execution/segmentation_model_executor.cc",
       "execution/segmentation_model_executor.h",
       "execution/segmentation_model_handler.cc",
@@ -73,6 +77,7 @@ source_set("unit_tests") {
   # tests in //components/segmentation_platform/components_unittests.filter
   sources = [
     "database/metadata_utils_unittest.cc",
+    "database/segment_info_database_unittest.cc",
     "database/test_segment_info_database.cc",
     "database/test_segment_info_database.h",
     "scheduler/model_execution_scheduler_unittest.cc",
@@ -95,7 +100,10 @@ source_set("unit_tests") {
   if (build_with_tflite_lib) {
     # IMPORTANT NOTE: When adding new tests, also remember to update the list of
     # tests in //components/segmentation_platform/components_unittests.filter
-    sources += [ "execution/segmentation_model_executor_unittest.cc" ]
+    sources += [
+      "execution/model_execution_manager_impl_unittest.cc",
+      "execution/segmentation_model_executor_unittest.cc",
+    ]
 
     deps += [
       "//base",

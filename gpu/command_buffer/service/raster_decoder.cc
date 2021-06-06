@@ -16,11 +16,11 @@
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/containers/flat_map.h"
+#include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_cache.h"
@@ -3176,6 +3176,15 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLuint sk_color,
   if (!shared_image_) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glBeginRasterCHROMIUM",
                        "passed invalid mailbox.");
+    return;
+  }
+
+  // This check only fails on validating decoder since clear tracking for
+  // passthrough textures is done by ANGLE. Nonetheless the check is important
+  // so that clients cannot use uninitialized textures with validating decoder.
+  if (!needs_clear && !shared_image_->IsCleared()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBeginRasterCHROMIUM",
+                       "SharedImage not cleared before use.");
     return;
   }
 

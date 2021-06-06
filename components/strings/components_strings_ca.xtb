@@ -219,6 +219,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="168841957122794586">El certificat de servidor conté una clau criptogràfica dèbil.</translation>
 <translation id="1696290444144917273">Mostra les dades de la targeta virtual</translation>
 <translation id="1697532407822776718">Ja estàs a punt!</translation>
+<translation id="1699570257714336246">Falta informació</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Aquest servidor no ha pogut demostrar que sigui <ph name="DOMAIN" /> perquè, suposadament, el seu certificat de seguretat té la data de demà. Això pot ser a causa d'una configuració incorrecta o d'un atacant que intercepta la vostra connexió.}other{Aquest servidor no ha pogut demostrar que sigui <ph name="DOMAIN" />; perquè, suposadament, el seu certificat de seguretat té una data que és d'aquí a # dies. Això pot ser a causa d'una configuració incorrecta o d'un atacant que intercepta la vostra connexió.}}</translation>
 <translation id="1710259589646384581">SO</translation>
@@ -728,6 +729,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="3631244953324577188">Biometria</translation>
 <translation id="3633738897356909127">Botó Actualitza Chrome; prem Retorn per actualitzar Chrome des de la configuració de Chrome</translation>
 <translation id="3634530185120165534">Safata 5</translation>
+<translation id="3637662659967048211">Desa al Compte de Google</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Aplicació:</translation>
 <translation id="3650584904733503804">Validació correcta</translation>
@@ -1016,6 +1018,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="4731967714531604179">Prc2 (sobre)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> vol utilitzar la ubicació del dispositiu</translation>
 <translation id="4736825316280949806">Reinicia Chromium</translation>
+<translation id="4736934858538408121">Targeta virtual</translation>
 <translation id="473775607612524610">Actualitza</translation>
 <translation id="4738601419177586157">Suggeriment de cerca de <ph name="TEXT" /></translation>
 <translation id="4742407542027196863">Gestiona les contrasenyes…</translation>
@@ -1263,7 +1266,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="5586446728396275693">No hi ha cap adreça desada</translation>
 <translation id="5593349413089863479">La connexió no és totalment segura</translation>
 <translation id="5595485650161345191">Edita l'adreça</translation>
-<translation id="5598944008576757369">Selecciona una forma de pagament</translation>
+<translation id="5598944008576757369">Tria la forma de pagament</translation>
 <translation id="560412284261940334">Gestió no compatible</translation>
 <translation id="5605670050355397069">Ledger</translation>
 <translation id="5607240918979444548">Architecture-C</translation>
@@ -1400,6 +1403,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="6106989379647458772">És possible que la pàgina web <ph name="PAGE" /> estigui temporalment fora de servei o s'hagi traslladat permanentment a una adreça web nova.</translation>
 <translation id="6107012941649240045">Emès per a</translation>
 <translation id="610911394827799129">A <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> trobaràs altres maneres d'explorar l'historial de navegació del teu Compte de Google</translation>
+<translation id="6113594885686374546">Botó Reprèn el camí: prem Retorn per reprendre el camí i veure activitat rellevant a l'historial de Chrome</translation>
 <translation id="6116338172782435947">Veure el text i les imatges copiats al porta-retalls</translation>
 <translation id="6120179357481664955">Recordes el teu identificador d'UPI?</translation>
 <translation id="6123290840358279103">Mostra la targeta virtual</translation>
@@ -1475,6 +1479,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="6423385022588644828">A partir d'ara, confirma les targetes més ràpidament amb Touch ID</translation>
 <translation id="6425092077175753609">Material</translation>
 <translation id="6427730057873428458">Plegat en finestra</translation>
+<translation id="6428146287756735566">Reprèn el camí per veure activitat rellevant a l'historial de Chrome</translation>
 <translation id="6428450836711225518">Verifica el número de telèfon</translation>
 <translation id="6433490469411711332">Edita la informació de contacte</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> no ens ha permès establir la connexió.</translation>
@@ -1526,6 +1531,7 @@ En cas contrari, la configuració de privadesa el bloquejarà. Això permetrà q
 <translation id="6643016212128521049">Esborra</translation>
 <translation id="6645291930348198241">Accedir a les galetes i a les dades del lloc web.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Cap}=1{D'1 lloc web (no se't tancarà la sessió del Compte de Google)}other{De # llocs web (no se't tancarà la sessió del Compte de Google)}}</translation>
+<translation id="6647197322759179819">Reprèn el camí</translation>
 <translation id="6648459603387803038">L'administrador pot modificar la configuració del navegador de manera remota. És possible que l'activitat d'aquest dispositiu també es gestioni fora de Chrome.</translation>
 <translation id="6648524591329069940">Tipus de lletra Serif</translation>
 <translation id="6651270836885078973">Gestionades per:</translation>
@@ -2177,6 +2183,7 @@ Detalls addicionals:
 <translation id="9114524666733003316">S'està confirmant la targeta...</translation>
 <translation id="9114581008513152754">Cap empresa ni cap altra organització no gestiona aquest navegador. És possible que l'activitat d'aquest dispositiu es gestioni fora de Chrome. <ph name="BEGIN_LINK" />Més informació<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Fresca</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />: prem Tab i després Retorn per reprendre el camí i veure activitat rellevant a l'historial de Chrome</translation>
 <translation id="9119042192571987207">Penjat</translation>
 <translation id="9128016270925453879">Les polítiques s'han carregat</translation>
 <translation id="9128870381267983090">Connecta't a la xarxa</translation>

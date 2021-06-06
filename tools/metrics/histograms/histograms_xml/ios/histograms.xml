@@ -507,6 +507,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="IOS.IsDefaultBrowser" enum="Boolean" expires_after="never">
 <!-- expires-never: used internally for filtering -->
 
+  <owner>javierrobles@chromium.org</owner>
   <owner>thegreenfrog@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <owner>chrome-metrics-team@google.com</owner>
@@ -516,7 +517,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     likely to change certain stability metrics. Thus, it will be good to filter
     those metrics by default browser status. This metrics records whether the
     user was deemed to have set Chrome as the device's default browser. This
-    metric will be logged once per metrics log upload.
+    metric will be logged once per metrics log upload. As long as link is opened
+    in Chrome in the last 21 days, the user will be considered a default user.
+    Before M93 instead of 21 days, 7 days was used.
   </summary>
 </histogram>
 
@@ -1058,7 +1061,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="IOS.Snapshots.ImageSize" units="KB" expires_after="2021-09-12">
+<histogram name="IOS.Snapshots.ImageSize" units="KB" expires_after="2021-11-28">
   <owner>ajuma@chromium.org</owner>
   <owner>edchin@chromium.org</owner>
   <summary>
@@ -1067,7 +1070,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="IOS.Snapshots.PDFSize" units="KB" expires_after="2021-09-12">
+<histogram name="IOS.Snapshots.PDFSize" units="KB" expires_after="2021-11-28">
   <owner>ajuma@chromium.org</owner>
   <owner>edchin@chromium.org</owner>
   <summary>

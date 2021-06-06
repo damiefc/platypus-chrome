@@ -10,13 +10,13 @@
 #include "base/bind_post_task.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/cxx17_backports.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
-#include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_controller.h"
@@ -442,11 +442,6 @@ InterfaceEndpointClient::InterfaceEndpointClient(
           base::BindOnce(&InterfaceEndpointClient::OnAssociationEvent,
                          weak_ptr_factory_.GetWeakPtr())));
     }
-  } else if (!task_runner_->RunsTasksInCurrentSequence()) {
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&InterfaceEndpointClient::InitControllerIfNecessary,
-                       weak_ptr_factory_.GetWeakPtr()));
   } else {
     InitControllerIfNecessary();
   }
@@ -775,6 +770,17 @@ void InterfaceEndpointClient::MaybeSendNotifyIdle() {
       idle_tracking_connection_group_.HasZeroRefs()) {
     control_message_proxy_.NotifyIdle();
   }
+}
+
+void InterfaceEndpointClient::ResetFromAnotherSequenceUnsafe() {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+
+  if (controller_) {
+    controller_ = nullptr;
+    handle_.group_controller()->DetachEndpointClient(handle_);
+  }
+
+  handle_.reset();
 }
 
 void InterfaceEndpointClient::InitControllerIfNecessary() {

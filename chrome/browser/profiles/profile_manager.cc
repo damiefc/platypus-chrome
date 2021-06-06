@@ -70,7 +70,7 @@
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
@@ -365,7 +365,7 @@ void NukeProfileFromDisk(const base::FilePath& profile_path,
 void ProfileCleanedUp(base::Value profile_path_value) {
   ListPrefUpdate deleted_profiles(g_browser_process->local_state(),
                                   prefs::kProfilesDeleted);
-  deleted_profiles->Remove(profile_path_value, nullptr);
+  deleted_profiles->EraseListValue(profile_path_value);
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -396,7 +396,7 @@ size_t GetEnabledAppCount(Profile* profile) {
 // It might get called more than once with different values of
 // |status| but only once the profile is fully initialized will
 // |client_callback| be run.
-void OnProfileLoaded(ProfileManager::ProfileLoadedCallback* client_callback,
+void OnProfileLoaded(ProfileManager::ProfileLoadedCallback& client_callback,
                      bool incognito,
                      Profile* profile,
                      Profile::CreateStatus status) {
@@ -407,11 +407,11 @@ void OnProfileLoaded(ProfileManager::ProfileLoadedCallback* client_callback,
   }
   if (status != Profile::CREATE_STATUS_INITIALIZED) {
     LOG(WARNING) << "Profile not loaded correctly";
-    std::move(*client_callback).Run(nullptr);
+    std::move(client_callback).Run(nullptr);
     return;
   }
   DCHECK(profile);
-  std::move(*client_callback)
+  std::move(client_callback)
       .Run(incognito ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
                      : profile);
 }
@@ -517,11 +517,18 @@ ProfileManager::ProfileManager(const base::FilePath& user_data_dir)
 
 ProfileManager::~ProfileManager() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  for (auto& observer : observers_) {
+    observer.OnProfileManagerDestroying();
+  }
   if (base::FeatureList::IsEnabled(features::kDestroyProfileOnBrowserClose)) {
     // Ideally, all the keepalives should've been cleared already. Report
     // metrics for incorrect usage of ScopedProfileKeepAlive.
     for (const auto& path_and_profile_info : profiles_info_) {
       const ProfileInfo* profile_info = path_and_profile_info.second.get();
+
+      if (profile_info->profile && profile_info->profile->IsSystemProfile())
+        continue;
+
       for (const auto& origin_and_count : profile_info->keep_alives) {
         ProfileKeepAliveOrigin origin = origin_and_count.first;
         int count = origin_and_count.second;
@@ -784,9 +791,7 @@ bool ProfileManager::LoadProfileByPath(const base::FilePath& profile_path,
       base::BindRepeating(&OnProfileLoaded,
                           // OnProfileLoaded may be called multiple times, but
                           // |callback| will be called only once.
-                          base::Owned(std::make_unique<ProfileLoadedCallback>(
-                              std::move(callback))),
-                          incognito));
+                          base::OwnedRef(std::move(callback)), incognito));
   return true;
 }
 
@@ -1623,7 +1628,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   AccountReconcilorFactory::GetForProfile(profile);
 
   // Initialization needs to happen after the browser context is available
-  // because ProfileSyncService needs the URL context getter.
+  // because SyncService needs the URL context getter.
   UnifiedConsentServiceFactory::GetForProfile(profile);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1890,9 +1895,9 @@ void ProfileManager::OnLoadProfileForProfileDeletion(
       observer.OnProfileMarkedForPermanentDeletion(profile);
 
     // Disable sync for doomed profile.
-    if (ProfileSyncServiceFactory::HasSyncService(profile)) {
+    if (SyncServiceFactory::HasSyncService(profile)) {
       syncer::SyncService* sync_service =
-          ProfileSyncServiceFactory::GetForProfile(profile);
+          SyncServiceFactory::GetForProfile(profile);
       // Ensure data is cleared even if sync was already off.
       sync_service->StopAndClear();
     }

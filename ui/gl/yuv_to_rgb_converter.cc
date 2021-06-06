@@ -160,8 +160,15 @@ YUVToRGBConverter::YUVToRGBConverter(const GLVersionInfo& gl_version_info,
   glGenFramebuffersEXT(1, &framebuffer_);
 
   {
+    // In contexts that are in WebGL compatibility mode, we need to temporarily
+    // enable GL_ANGLE_TEXTURE_RECTANGLE in order to compile the fragment
+    // shader.  Furthermore, in ES2 contexts, the GL_ANGLE_webgl_compatibility
+    // extension is required for using GL_ANGLE_TEXTURE_RECTANGLE as an argument
+    // to glEnable/Disable.  Therefore the GL_ANGLE_webgl_compatibility
+    // extension is a necessary and sufficient condition for determining whether
+    // GL_ANGLE_TEXTURE_RECTANGLE needs to be temporarily enabled.
     ScopedEnableTextureRectangleInShaderCompiler enable(
-        g_current_gl_driver->ext.b_GL_ANGLE_texture_rectangle
+        (is_rect && g_current_gl_driver->ext.b_GL_ANGLE_webgl_compatibility)
             ? g_current_gl_context
             : nullptr);
     vertex_buffer_ = GLHelper::SetupQuadVertexBuffer();

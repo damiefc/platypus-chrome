@@ -38,7 +38,6 @@
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
 #include "chrome/browser/metrics/oom/out_of_memory_reporter.h"
-#include "chrome/browser/metrics/renderer_uptime_web_contents_observer.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_preconnect_client.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/optimization_guide/blink/blink_optimization_guide_web_contents_observer.h"
@@ -131,6 +130,7 @@
 #include "chrome/browser/video_tutorials/video_tutorial_tab_helper.h"
 #include "components/autofill_assistant/browser/features.h"
 #else
+#include "chrome/browser/accuracy_tips/accuracy_service_factory.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 #include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
@@ -140,6 +140,7 @@
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/sync/browser_synced_tab_delegate.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "components/accuracy_tips/accuracy_web_contents_observer.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
@@ -278,8 +279,6 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
     MediaEngagementService::CreateWebContentsObserver(web_contents);
   if (base::FeatureList::IsEnabled(media::kUseMediaHistoryStore))
     MediaHistoryContentsObserver::CreateForWebContents(web_contents);
-  metrics::RendererUptimeWebContentsObserver::CreateForWebContents(
-      web_contents);
   MixedContentSettingsTabHelper::CreateForWebContents(web_contents);
   NavigationMetricsRecorder::CreateForWebContents(web_contents);
   NavigationPredictorPreconnectClient::CreateForWebContents(web_contents);
@@ -374,6 +373,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
         web_contents);
   }
 #else
+  if (accuracy_tips::AccuracyWebContentsObserver::IsEnabled(web_contents)) {
+    accuracy_tips::AccuracyWebContentsObserver::CreateForWebContents(
+        web_contents, AccuracyServiceFactory::GetForProfile(profile));
+  }
   if (web_app::AreWebAppsUserInstallable(profile))
     webapps::AppBannerManagerDesktop::CreateForWebContents(web_contents);
   BookmarkTabHelper::CreateForWebContents(web_contents);

@@ -73,11 +73,6 @@ class WebAppsChromeOs : public WebAppsBase,
   void Initialize();
 
   // apps::mojom::Publisher overrides.
-  void LaunchAppWithIntent(const std::string& app_id,
-                           int32_t event_flags,
-                           apps::mojom::IntentPtr intent,
-                           apps::mojom::LaunchSource launch_source,
-                           apps::mojom::WindowInfoPtr window_info) override;
   void Uninstall(const std::string& app_id,
                  apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
@@ -88,11 +83,17 @@ class WebAppsChromeOs : public WebAppsBase,
                     apps::mojom::MenuType menu_type,
                     int64_t display_id,
                     GetMenuModelCallback callback) override;
+  void GetMenuModelFromWebAppProvider(const std::string& app_id,
+                                      apps::mojom::MenuType menu_type,
+                                      apps::mojom::MenuItemsPtr menu_items,
+                                      GetMenuModelCallback callback);
   // menu_type is stored as |shortcut_id|.
   void ExecuteContextMenuCommand(const std::string& app_id,
                                  int command_id,
                                  const std::string& shortcut_id,
                                  int64_t display_id) override;
+  void SetWindowMode(const std::string& app_id,
+                     apps::mojom::WindowMode window_mode) override;
 
   // AppRegistrarObserver:
   void OnWebAppInstalled(const AppId& app_id) override;
@@ -100,6 +101,8 @@ class WebAppsChromeOs : public WebAppsBase,
   void OnWebAppDisabledStateChanged(const AppId& app_id,
                                     bool is_disabled) override;
   void OnWebAppsDisabledModeChanged() override;
+  void OnWebAppUserDisplayModeChanged(const AppId& app_id,
+                                      DisplayMode user_display_mode) override;
 
   // Updates app visibility.
   void UpdateAppDisabledMode(apps::mojom::AppPtr& app);
@@ -149,24 +152,11 @@ class WebAppsChromeOs : public WebAppsBase,
   void StartPublishingWebApps(
       mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote);
 
-  apps::IconEffects GetIconEffects(const WebApp* web_app,
-                                   bool paused,
-                                   bool is_disabled);
-
   // Get the equivalent Chrome app from |arc_package_name| and set the Chrome
   // app badge on the icon effects for the equivalent Chrome apps. If the
   // equivalent ARC app is installed, add the Chrome app badge, otherwise,
   // remove the Chrome app badge.
   void ApplyChromeBadge(const std::string& arc_package_name);
-
-  void SetIconEffect(const std::string& app_id);
-
-  // Launches an app in a way specified by |params|. If the app is a system web
-  // app, or not opened in tabs, saves the launch parameters.
-  content::WebContents* LaunchAppWithParams(
-      apps::AppLaunchParams params) override;
-
-  bool Accepts(const std::string& app_id) override;
 
   // Returns whether the app should show a badge.
   apps::mojom::OptionalBool ShouldShowBadge(
@@ -177,8 +167,6 @@ class WebAppsChromeOs : public WebAppsBase,
   bool IsWebAppInDisabledList(const std::string& app_id) const;
 
   apps::InstanceRegistry* instance_registry_;
-
-  apps::PausedApps paused_apps_;
 
   ArcAppListPrefs* arc_prefs_ = nullptr;
 

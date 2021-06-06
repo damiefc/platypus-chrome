@@ -59,14 +59,14 @@
 #include "chrome/browser/chromeos/extensions/extension_tab_util_delegate_chromeos.h"
 #include "chrome/browser/chromeos/extensions/permissions_updater_delegate_chromeos.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/crostini_ansible_playbook_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/print_servers_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/printers_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/user_avatar_image_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/wallpaper_image_external_data_handler.h"
-#include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
-#include "chrome/browser/chromeos/policy/user_network_configuration_updater.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/crostini_ansible_playbook_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/print_servers_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/printers_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/user_avatar_image_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/wallpaper_image_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/networking/device_network_configuration_updater.h"
+#include "chrome/browser/chromeos/policy/networking/policy_cert_service_factory.h"
+#include "chrome/browser/chromeos/policy/networking/user_network_configuration_updater.h"
 #include "chrome/browser/chromeos/session_length_limiter.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
@@ -1317,8 +1317,9 @@ void ChromeUserManagerImpl::AddReportingUser(const AccountId& account_id) {
 
 void ChromeUserManagerImpl::RemoveReportingUser(const AccountId& account_id) {
   ListPrefUpdate users_update(GetLocalState(), ::prefs::kReportingUsers);
-  users_update->Remove(
-      base::Value(FullyCanonicalize(account_id.GetUserEmail())), NULL);
+  users_update->EraseListIter(
+      std::find(users_update->GetList().begin(), users_update->GetList().end(),
+                base::Value(FullyCanonicalize(account_id.GetUserEmail()))));
 }
 
 const AccountId& ChromeUserManagerImpl::GetGuestAccountId() const {

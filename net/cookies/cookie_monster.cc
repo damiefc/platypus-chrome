@@ -50,6 +50,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -59,7 +60,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -619,7 +619,6 @@ void CookieMonster::GetCookieListWithOptions(const GURL& url,
     std::sort(cookie_ptrs.begin(), cookie_ptrs.end(), CookieSorter);
 
     included_cookies.reserve(cookie_ptrs.size());
-    std::vector<CanonicalCookie*> included_cookie_ptrs;
     FilterCookiesWithOptions(url, options, &cookie_ptrs, &included_cookies,
                              &excluded_cookies);
   }

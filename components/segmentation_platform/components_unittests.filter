@@ -1,7 +1,9 @@
 MetadataUtilsTest.*
+ModelExecutionManagerTest.*
 ModelExecutionSchedulerTest.*
 SegmentationModelExecutorTest.*
 SegmentationPlatformServiceImplTest.*
+SegmentInfoDatabaseTest.*
 SegmentSelectorTest.*
 SignalFilterProcessorTest.*
 UserActionSignalHandlerTest.*

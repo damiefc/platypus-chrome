@@ -27,57 +27,72 @@ const GROUP_TABS = [
     name: 'Recently Used',
     icon: 'emoji_picker:schedule',
     groupId: 'history',
-    active: true
+    active: false,
+    disabled: true,
   },
   {
     name: 'Smileys & Emotion',
     icon: 'emoji_picker:insert_emoticon',
     groupId: '0',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'People',
     icon: 'emoji_picker:emoji_people',
     groupId: '1',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Animals & Nature',
     icon: 'emoji_picker:emoji_nature',
     groupId: '2',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Food & Drink',
     icon: 'emoji_picker:emoji_food_beverage',
     groupId: '3',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Travel & Places',
     icon: 'emoji_picker:emoji_transportation',
     groupId: '4',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Activities',
     icon: 'emoji_picker:emoji_events',
     groupId: '5',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Objects',
     icon: 'emoji_picker:emoji_objects',
     groupId: '6',
-    active: false
+    active: false,
+    disabled: false
   },
   {
     name: 'Symbols',
     icon: 'emoji_picker:emoji_symbols',
     groupId: '7',
-    active: false
+    active: false,
+    disabled: false
   },
-  {name: 'Flags', icon: 'emoji_picker:flag', groupId: '8', active: false},
+  {
+    name: 'Flags',
+    icon: 'emoji_picker:flag',
+    groupId: '8',
+    active: false,
+    disabled: false
+  },
 ];
 
 /**
@@ -88,10 +103,11 @@ const GROUP_TABS = [
  * @return {!Array<EmojiVariants>} list of emoji data structures
  */
 function makeRecentlyUsed(recentEmoji) {
-  return recentEmoji.map(emoji => ({
-                           base: {string: emoji.base, name: '', keywords: []},
-                           alternates: emoji.alternates
-                         }));
+  return recentEmoji.map(
+      emoji => ({
+        base: {string: emoji.base, name: emoji.name, keywords: []},
+        alternates: emoji.alternates
+      }));
 }
 
 export class EmojiPicker extends PolymerElement {
@@ -165,7 +181,7 @@ export class EmojiPicker extends PolymerElement {
         EMOJI_BUTTON_CLICK,
         ev => this.insertEmoji(
             ev.detail.emoji, ev.detail.isVariant, ev.detail.baseEmoji,
-            ev.detail.allVariants));
+            ev.detail.allVariants, ev.detail.name));
     this.addEventListener(
         EMOJI_CLEAR_RECENTS_CLICK, ev => this.clearRecentEmoji());
     // variant popup related handlers
@@ -197,6 +213,8 @@ export class EmojiPicker extends PolymerElement {
       this.set(
           ['preferenceMapping'], this.recentEmojiStore.getPreferenceMapping());
     }
+    this.set(
+        ['emojiGroupTabs', 0, 'disabled'], this.history.emoji.length === 0);
     // Make highlight bar visible (now we know where it should be) and
     // add smooth sliding.
     this.updateActiveGroup(/*updateTabsScroll=*/ true);
@@ -255,15 +273,17 @@ export class EmojiPicker extends PolymerElement {
    * @param {boolean} isVariant
    * @param {!string} baseEmoji
    * @param {!Array<!string>} allVariants
+   * @param {!string} name
    */
-  async insertEmoji(emoji, isVariant, baseEmoji, allVariants) {
+  async insertEmoji(emoji, isVariant, baseEmoji, allVariants, name) {
     document.activeElement.blur();
     this.apiProxy_.closeUI();
     this.$['search-container'].clearSearch();
     this.$.message.textContent = emoji + ' inserted.';
     const incognito = (await this.apiProxy_.isIncognitoTextField()).incognito;
     if (!incognito) {
-      this.recentEmojiStore.bumpEmoji({base: emoji, alternates: allVariants});
+      this.recentEmojiStore.bumpEmoji(
+          {base: emoji, alternates: allVariants, name: name});
       this.recentEmojiStore.savePreferredVariant(baseEmoji, emoji);
 
       this.set(
@@ -285,6 +305,7 @@ export class EmojiPicker extends PolymerElement {
 
   clearRecentEmoji() {
     this.set(['history', 'emoji'], makeRecentlyUsed([]));
+    this.set(['emojiGroupTabs', 0, 'disabled'], true);
     this.set(['preferenceMapping'], {});
     this.recentEmojiStore.clearRecents();
     afterNextRender(

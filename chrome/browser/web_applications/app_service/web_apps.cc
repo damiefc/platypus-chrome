@@ -47,16 +47,12 @@ apps::mojom::AppPtr WebApps::Convert(const WebApp* web_app,
   apps::mojom::AppPtr app =
       publisher_helper().ConvertWebApp(web_app, readiness);
 
-  app->icon_key = icon_key_factory().MakeIconKey(GetIconEffects(web_app));
+  app->icon_key = publisher_helper().MakeIconKey(web_app);
 
   app->has_badge = apps::mojom::OptionalBool::kFalse;
   app->paused = apps::mojom::OptionalBool::kFalse;
 
   return app;
-}
-
-bool WebApps::Accepts(const std::string& app_id) {
-  return true;
 }
 
 }  // namespace web_app

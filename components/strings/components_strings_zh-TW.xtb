@@ -219,6 +219,7 @@
 <translation id="168841957122794586">伺服器憑證含有防護力薄弱的加密編譯金鑰。</translation>
 <translation id="1696290444144917273">查看虛擬卡片資料</translation>
 <translation id="1697532407822776718">大功告成！</translation>
+<translation id="1699570257714336246">缺少資訊</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{這個伺服器無法證明所在網域是 <ph name="DOMAIN" />；伺服器的安全性憑證預定明天才生效。這可能是因為設定錯誤，或是有攻擊者攔截您的連線。}other{這個伺服器無法證明所在網域是 <ph name="DOMAIN" />；伺服器的安全性憑證預定 # 天後才生效。這可能是因為設定錯誤，或是有攻擊者攔截您的連線。}}</translation>
 <translation id="1710259589646384581">作業系統</translation>
@@ -728,6 +729,7 @@
 <translation id="3631244953324577188">生物特徵辨識</translation>
 <translation id="3633738897356909127">「更新 Chrome」按鈕，按下 Enter 鍵即可透過 Chrome 設定來更新 Chrome</translation>
 <translation id="3634530185120165534">紙匣 5</translation>
+<translation id="3637662659967048211">儲存至 Google 帳戶</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">應用程式：</translation>
 <translation id="3650584904733503804">驗證成功</translation>
@@ -970,7 +972,7 @@
 <translation id="4515275063822566619">信用卡和地址資訊皆來自 Chrome 和你的 Google 帳戶 (<ph name="ACCOUNT_EMAIL" />)。你可以在<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />頁面管理這些資訊。</translation>
 <translation id="4517607026994743406">Comm-10 (信封)</translation>
 <translation id="4521157617044179198"><ph name="WIDTH" /> × <ph name="HEIGHT" /> 公釐 (<ph name="ORIENTATION" />)</translation>
-<translation id="4522570452068850558">詳細資訊</translation>
+<translation id="4522570452068850558">詳細資料</translation>
 <translation id="4524138615196389145">現在就開始使用 WebAuthn，加快卡片驗證速度</translation>
 <translation id="4524805452350978254">管理卡片</translation>
 <translation id="4542971377163063093">紙匣 6</translation>
@@ -1016,6 +1018,7 @@
 <translation id="4731967714531604179">Prc2 (信封)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> 要求使用裝置的位置資訊</translation>
 <translation id="4736825316280949806">重新啟動 Chromium</translation>
+<translation id="4736934858538408121">虛擬卡片</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4738601419177586157">「<ph name="TEXT" />」搜尋建議</translation>
 <translation id="4742407542027196863">管理密碼…</translation>
@@ -1400,6 +1403,7 @@
 <translation id="6106989379647458772">位於 <ph name="PAGE" /> 的網頁可能暫時無法使用，或是已永久移至新的網址。</translation>
 <translation id="6107012941649240045">核發對象</translation>
 <translation id="610911394827799129">你的 Google 帳戶仍可能保留了其他類型的瀏覽記錄 (可前往 <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> 查詢)。</translation>
+<translation id="6113594885686374546">「繼續歷程」按鈕；按下 Enter 鍵即可繼續歷程，查看 Chrome 歷史記錄中的相關活動</translation>
 <translation id="6116338172782435947">讀取已複製到剪貼簿的文字和圖片</translation>
 <translation id="6120179357481664955">還記得你的 UPI ID 嗎？</translation>
 <translation id="6123290840358279103">查看虛擬卡片</translation>
@@ -1475,6 +1479,7 @@
 <translation id="6423385022588644828">現在就開始使用 Touch ID，加快卡片驗證速度</translation>
 <translation id="6425092077175753609">質感</translation>
 <translation id="6427730057873428458">開門摺</translation>
+<translation id="6428146287756735566">繼續歷程即可查看 Chrome 歷史記錄中的相關活動</translation>
 <translation id="6428450836711225518">驗證你的電話號碼</translation>
 <translation id="6433490469411711332">編輯聯絡資訊</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
@@ -1526,6 +1531,7 @@
 <translation id="6643016212128521049">清除</translation>
 <translation id="6645291930348198241">存取 Cookie 和網站資料。</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{無}=1{1 個網站 (你不會因此登出 Google 帳戶)}other{# 個網站 (你不會因此登出 Google 帳戶)}}</translation>
+<translation id="6647197322759179819">繼續歷程</translation>
 <translation id="6648459603387803038">你的系統管理員可以遠端變更瀏覽器設定。這部裝置上的活動也可以透過 Chrome 以外的服務管理。</translation>
 <translation id="6648524591329069940">Serif 字型</translation>
 <translation id="6651270836885078973">管理網域/帳戶：</translation>
@@ -2177,6 +2183,7 @@
 <translation id="9114524666733003316">正在驗證信用卡...</translation>
 <translation id="9114581008513152754">這個瀏覽器未受到任何公司或其他機構管理。這部裝置上的活動可透過 Chrome 以外的服務管理。<ph name="BEGIN_LINK" />瞭解詳情<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">新鮮</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />；按下 Tab 鍵再按下 Enter 鍵即可繼續歷程，查看 Chrome 歷史記錄中的相關活動</translation>
 <translation id="9119042192571987207">已上傳</translation>
 <translation id="9128016270925453879">已載入政策</translation>
 <translation id="9128870381267983090">連線至網路</translation>

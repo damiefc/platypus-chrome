@@ -274,11 +274,8 @@ void NativeInputMethodEngine::ImeObserver::OnActivate(
     remote_to_engine_.reset();
     receiver_from_engine_.reset();
 
-    // Pass an extra parameter to indicate that this connection is from
-    // NativeInputMethodEngine.
-    remote_manager_->ConnectToImeEngine(
+    remote_manager_->ConnectToInputMethod(
         new_engine_id, remote_to_engine_.BindNewPipeAndPassReceiver(),
-        receiver_from_engine_.BindNewPipeAndPassRemote(), /*extra=*/{0},
         base::BindOnce(&ImeObserver::OnConnected, base::Unretained(this),
                        base::Time::Now(), new_engine_id));
 
@@ -522,6 +519,11 @@ void NativeInputMethodEngine::ImeObserver::OnAssistiveWindowButtonClicked(
     case ui::ime::ButtonId::kUndo:
       autocorrect_manager_->UndoAutocorrect();
       break;
+    case ui::ime::ButtonId::kIgnoreSuggestion:
+      if (grammar_manager_->IsOnDeviceGrammarEnabled()) {
+        grammar_manager_->IgnoreSuggestion();
+      }
+      break;
     case ui::ime::ButtonId::kAddToDictionary:
     case ui::ime::ButtonId::kNone:
       ime_base_observer_->OnAssistiveWindowButtonClicked(button);
@@ -644,7 +646,7 @@ void NativeInputMethodEngine::ImeObserver::RecordUkm(
 
 void NativeInputMethodEngine::ImeObserver::FlushForTesting() {
   remote_manager_.FlushForTesting();
-  if (remote_to_engine_.is_bound())
+  if (receiver_from_engine_.is_bound())
     receiver_from_engine_.FlushForTesting();
   if (remote_to_engine_.is_bound())
     remote_to_engine_.FlushForTesting();

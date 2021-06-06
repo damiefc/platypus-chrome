@@ -31,7 +31,9 @@
 #include "chrome/browser/ash/crosapi/local_printer_ash.h"
 #include "chrome/browser/ash/crosapi/message_center_ash.h"
 #include "chrome/browser/ash/crosapi/metrics_reporting_ash.h"
+#include "chrome/browser/ash/crosapi/native_theme_service_ash.h"
 #include "chrome/browser/ash/crosapi/prefs_ash.h"
+#include "chrome/browser/ash/crosapi/remoting_ash.h"
 #include "chrome/browser/ash/crosapi/screen_manager_ash.h"
 #include "chrome/browser/ash/crosapi/select_file_ash.h"
 #include "chrome/browser/ash/crosapi/system_display_ash.h"
@@ -103,9 +105,11 @@ CrosapiAsh::CrosapiAsh()
       message_center_ash_(std::make_unique<MessageCenterAsh>()),
       metrics_reporting_ash_(std::make_unique<MetricsReportingAsh>(
           g_browser_process->local_state())),
+      native_theme_service_ash_(std::make_unique<NativeThemeServiceAsh>()),
       prefs_ash_(
           std::make_unique<PrefsAsh>(g_browser_process->profile_manager(),
                                      g_browser_process->local_state())),
+      remoting_ash_(std::make_unique<RemotingAsh>()),
       screen_manager_ash_(std::make_unique<ScreenManagerAsh>()),
       select_file_ash_(std::make_unique<SelectFileAsh>()),
       system_display_ash_(std::make_unique<SystemDisplayAsh>()),
@@ -204,6 +208,11 @@ void CrosapiAsh::BindMetricsReporting(
   metrics_reporting_ash_->BindReceiver(std::move(receiver));
 }
 
+void CrosapiAsh::BindNativeThemeService(
+    mojo::PendingReceiver<crosapi::mojom::NativeThemeService> receiver) {
+  native_theme_service_ash_->BindReceiver(std::move(receiver));
+}
+
 void CrosapiAsh::BindSelectFile(
     mojo::PendingReceiver<mojom::SelectFile> receiver) {
   select_file_ash_->BindReceiver(std::move(receiver));
@@ -295,6 +304,10 @@ void CrosapiAsh::BindSensorHalClient(
 
 void CrosapiAsh::BindPrefs(mojo::PendingReceiver<mojom::Prefs> receiver) {
   prefs_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindRemoting(mojo::PendingReceiver<mojom::Remoting> receiver) {
+  remoting_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindUrlHandler(

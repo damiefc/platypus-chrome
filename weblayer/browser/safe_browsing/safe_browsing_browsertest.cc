@@ -6,7 +6,7 @@
 
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler.h"
-#include "components/safe_browsing/content/base_blocking_page.h"
+#include "components/safe_browsing/content/browser/base_blocking_page.h"
 #include "components/safe_browsing/core/browser/safe_browsing_token_fetcher.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/security_interstitials/content/security_interstitial_page.h"
@@ -60,6 +60,11 @@ class TestAccessTokenFetchDelegate
     } else {
       outstanding_request_ = std::move(callback);
     }
+  }
+
+  void OnAccessTokenIdentifiedAsInvalid(const std::set<std::string>& scopes,
+                                        const std::string& token) override {
+    NOTREACHED();
   }
 
   void set_should_respond_to_request(bool should_respond) {

@@ -682,6 +682,7 @@
 <translation id="1706625117072057435">Tingkat perbesar/perkecil</translation>
 <translation id="1708338024780164500">(Tidak aktif)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Browser eksperimental. Bisa kehilangan data atau membahayakan privasi atau keamanan. Laporkan masalah melalui: Bantuan &gt; "Laporkan masalah ...".</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (Asli)</translation>
 <translation id="1709217939274742847">Pilih tiket untuk digunakan dalam proses autentikasi. <ph name="LINK_BEGIN" />Pelajari lebih lanjut<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Tidak dapat berbagi</translation>
@@ -1100,6 +1101,7 @@ Anda dapat mengelola setelan akun ini dengan menginstal aplikasi Family Link di 
 <translation id="2144557304298909478">Pengembangan aplikasi Android di Linux</translation>
 <translation id="2146263598007866206">Situs mungkin dapat otomatis mendownload file yang berkaitan sekaligus untuk menghemat waktu Anda</translation>
 <translation id="2147151613919729065">Untuk menghapus histori mode Tamu, tutup semua jendela Tamu.</translation>
+<translation id="2147218225094845757">Sembunyikan panel samping</translation>
 <translation id="2148219725039824548">Error saat memasang URL berbagi. URL berbagi yang ditentukan tidak ditemukan di jaringan.</translation>
 <translation id="2148756636027685713">Pemformatan selesai</translation>
 <translation id="2148892889047469596">Transmisikan tab</translation>
@@ -3179,6 +3181,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="4410545552906060960">Gunakan nomor (PIN), bukan sandi, untuk membuka kunci perangkat Anda. Untuk menyetel PIN di lain waktu, buka Setelan.</translation>
 <translation id="4411578466613447185">Penandatangan Kode</translation>
 <translation id="4412698727486357573">Pusat bantuan</translation>
+<translation id="4413088271097062326">Aplikasi mana yang ingin Anda gunakan?</translation>
 <translation id="44141919652824029">Izinkan "<ph name="APP_NAME" />" untuk mendapatkan daftar perangkat USB yang terpasang?</translation>
 <translation id="4414232939543644979">Jendela &amp;Penyamaran Baru</translation>
 <translation id="4414515549596849729">cookie dan data situs</translation>
@@ -3952,6 +3955,7 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="5269977353971873915">Gagal Mencetak</translation>
 <translation id="5275352920323889391">Anjing</translation>
 <translation id="527605982717517565">Selalu izinkan JavaScript di <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Tampilkan panel samping</translation>
 <translation id="5278823018825269962">ID Status</translation>
 <translation id="5280064835262749532">Perbarui kredensial untuk <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Hapus cookie dan data situs saat Anda menutup semua jendela</translation>
@@ -6132,7 +6136,6 @@ dan Ctrl+Alt+Kurangi kecerahan untuk memperkecil.</translation>
 <translation id="7685049629764448582">Memori JavaScript</translation>
 <translation id="7685087414635069102">Perlu PIN</translation>
 <translation id="768549422429443215">Tambahkan bahasa atau urutkan ulang daftar.</translation>
-<translation id="7686424868232681412">Lacros adalah Browser eksperimental. Laporkan masalah melalui: Bantuan &gt; "Laporkan masalah ...".</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Konfirmasi sandi baru</translation>
 <translation id="7690378713476594306">Pilih dari daftar</translation>

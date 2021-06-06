@@ -21,6 +21,7 @@ class Window;
 
 namespace base {
 class CommandLine;
+struct SystemMemoryInfoKB;
 }  // namespace base
 
 namespace user_manager {
@@ -56,6 +57,9 @@ enum class ArcVmUreadaheadMode {
   // ARCVM ureadahead is turned off for disabled mode.
   DISABLED,
 };
+
+using SystemMemoryInfoCallback =
+    base::RepeatingCallback<bool(base::SystemMemoryInfoKB*)>;
 
 // Upstart Job Description
 struct JobDesc {
@@ -102,8 +106,8 @@ bool IsArcVmUseHugePages();
 bool IsArcVmDevConfIgnored();
 
 // Returns mode of operation for ureadahead during the ARCVM boot flow.
-// Valid modes are readahead (default), generate, or disabled.
-ArcVmUreadaheadMode GetArcVmUreadaheadMode();
+// Valid modes are readahead, generate, or disabled.
+ArcVmUreadaheadMode GetArcVmUreadaheadMode(SystemMemoryInfoCallback callback);
 
 // Returns true if ARC should always start within the primary user session
 // (opted in user or not), and other supported mode such as guest and Kiosk
@@ -169,10 +173,13 @@ bool IsArcOptInVerificationDisabled();
 
 constexpr int kNoTaskId = -1;
 constexpr int kSystemWindowTaskId = 0;
-// Returns the task id given by the exo shell's application id, or |kNoTaskId|
-// if not an ARC window.
-int GetWindowTaskId(const aura::Window* window);
-int GetTaskIdFromWindowAppId(const std::string& app_id);
+// Returns the task id given by the exo shell's application id, or
+// absl::nullopt if not an ARC window.
+absl::optional<int> GetWindowTaskId(const aura::Window* window);
+absl::optional<int> GetTaskIdFromWindowAppId(const std::string& app_id);
+absl::optional<int> GetWindowSessionId(const aura::Window* window);
+absl::optional<int> GetSessionIdFromWindowAppId(const std::string& app_id);
+absl::optional<int> GetWindowTaskOrSessionId(const aura::Window* window);
 
 // Returns true if ARC app icons are forced to cache.
 bool IsArcForceCacheAppIcon();

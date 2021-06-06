@@ -219,6 +219,7 @@
 <translation id="168841957122794586">ใบรับรองของเซิร์ฟเวอร์มีคีย์การเข้ารหัสที่ไม่รัดกุม</translation>
 <translation id="1696290444144917273">ดูรายละเอียดบัตรเสมือน</translation>
 <translation id="1697532407822776718">คุณพร้อมแล้ว!</translation>
+<translation id="1699570257714336246">ข้อมูลไม่ครบ</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{เซิร์ฟเวอร์นี้พิสูจน์ไม่ได้ว่าเป็น <ph name="DOMAIN" /> เพราะใบรับรองความปลอดภัยควรจะเริ่มใช้งานได้ตั้งแต่วันพรุ่งนี้ โดยอาจเกิดจากการกำหนดค่าผิดหรือผู้บุกรุกที่ขัดขวางการเชื่อมต่อของคุณ}other{เซิร์ฟเวอร์นี้พิสูจน์ไม่ได้ว่าเป็น <ph name="DOMAIN" /> เพราะใบรับรองความปลอดภัยควรจะเริ่มใช้งานได้ในอีก # วันข้างหน้า โดยอาจเกิดจากการกำหนดค่าผิดหรือผู้บุกรุกที่ขัดขวางการเชื่อมต่อของคุณ}}</translation>
 <translation id="1710259589646384581">ระบบปฏิบัติการ</translation>
@@ -727,6 +728,7 @@
 <translation id="3631244953324577188">ข้อมูลไบโอเมตริก</translation>
 <translation id="3633738897356909127">ปุ่มอัปเดต Chrome กด Enter เพื่ออัปเดต Chrome จากการตั้งค่า Chrome</translation>
 <translation id="3634530185120165534">ถาด 5</translation>
+<translation id="3637662659967048211">บันทึกลงในบัญชี Google</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">แอปพลิเคชัน:</translation>
 <translation id="3650584904733503804">การตรวจสอบสำเร็จ</translation>
@@ -1015,6 +1017,7 @@
 <translation id="4731967714531604179">Prc2 (ซองจดหมาย)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> ต้องการใช้ตำแหน่งอุปกรณ์ของคุณ</translation>
 <translation id="4736825316280949806">รีสตาร์ท Chromium</translation>
+<translation id="4736934858538408121">บัตรเสมือน</translation>
 <translation id="473775607612524610">อัปเดต</translation>
 <translation id="4738601419177586157">การแนะนำการค้นหา <ph name="TEXT" /></translation>
 <translation id="4742407542027196863">จัดการรหัสผ่าน…</translation>
@@ -1181,7 +1184,7 @@
 <translation id="5299298092464848405">ข้อผิดพลาดในการแยกวิเคราะห์นโยบาย</translation>
 <translation id="5300589172476337783">แสดง</translation>
 <translation id="5306593769196050043">ทั้ง 2 แผ่นงาน</translation>
-<translation id="5307166000025436103">ตกลง</translation>
+<translation id="5307166000025436103">ปกติ</translation>
 <translation id="5308380583665731573">เชื่อมต่อ</translation>
 <translation id="5308689395849655368">การรายงานข้อขัดข้องถูกปิดใช้งาน</translation>
 <translation id="5314967030527622926">เครื่องทำจุลสาร</translation>
@@ -1399,6 +1402,7 @@
 <translation id="6106989379647458772">หน้าเว็บที่ <ph name="PAGE" /> อาจใช้งานไม่ได้ชั่วคราวหรืออาจมีการย้ายไปยังที่อยู่เว็บใหม่อย่างถาวรแล้ว</translation>
 <translation id="6107012941649240045">ออกให้แก่</translation>
 <translation id="610911394827799129">บัญชี Google อาจมีประวัติการท่องเว็บรูปแบบอื่นๆ ที่ <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /></translation>
+<translation id="6113594885686374546">ปุ่มดำเนินการสำรวจต่อ กด Enter เพื่อดำเนินการสำรวจต่อและดูกิจกรรมที่เกี่ยวข้องในประวัติการเข้าชมใน Chrome</translation>
 <translation id="6116338172782435947">ดูข้อความและรูปภาพที่คัดลอกไปที่คลิปบอร์ด</translation>
 <translation id="6120179357481664955">จำรหัส UPI ไหม</translation>
 <translation id="6123290840358279103">ดูบัตรเสมือน</translation>
@@ -1474,6 +1478,7 @@
 <translation id="6423385022588644828">ยืนยันบัตรได้เร็วขึ้นโดยใช้ Touch ID จากนี้ไป</translation>
 <translation id="6425092077175753609">วัสดุ</translation>
 <translation id="6427730057873428458">พับทบ</translation>
+<translation id="6428146287756735566">ดำเนินการสำรวจต่อเพื่อดูกิจกรรมที่เกี่ยวข้องในประวัติการเข้าชมใน Chrome</translation>
 <translation id="6428450836711225518">ยืนยันเบอร์โทรศัพท์</translation>
 <translation id="6433490469411711332">แก้ไขข้อมูลติดต่อ</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> ปฏิเสธการเชื่อมต่อ</translation>
@@ -1525,6 +1530,7 @@
 <translation id="6643016212128521049">ล้าง</translation>
 <translation id="6645291930348198241">เข้าถึงคุกกี้และข้อมูลเว็บไซต์</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{ไม่มี}=1{จาก 1 เว็บไซต์ (คุณจะไม่ออกจากระบบบัญชี Google)}other{จาก # เว็บไซต์ (คุณจะไม่ออกจากระบบบัญชี Google)}}</translation>
+<translation id="6647197322759179819">ดำเนินการสำรวจต่อ</translation>
 <translation id="6648459603387803038">ผู้ดูแลระบบจะเปลี่ยนการตั้งค่าเบราว์เซอร์จากระยะไกลได้ กิจกรรมในอุปกรณ์นี้อาจมีการจัดการภายนอก Chrome ได้ด้วย</translation>
 <translation id="6648524591329069940">แบบอักษร Serif</translation>
 <translation id="6651270836885078973">จัดการโดย:</translation>
@@ -2177,6 +2183,7 @@
 <translation id="9114524666733003316">กำลังยืนยันบัตร…</translation>
 <translation id="9114581008513152754">เบราว์เซอร์นี้ไม่ได้จัดการโดยบริษัทหรือองค์กรอื่นๆ กิจกรรมในอุปกรณ์นี้อาจมีการจัดการภายนอก Chrome <ph name="BEGIN_LINK" />ดูข้อมูลเพิ่มเติม<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">สดชื่น</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" /> กด Tab ตามด้วย Enter เพื่อดำเนินการสำรวจต่อและดูกิจกรรมที่เกี่ยวข้องในประวัติการเข้าชมใน Chrome</translation>
 <translation id="9119042192571987207">อัปโหลดแล้ว</translation>
 <translation id="9128016270925453879">โหลดนโยบายแล้ว</translation>
 <translation id="9128870381267983090">เชื่อมต่อกับเครือข่าย</translation>

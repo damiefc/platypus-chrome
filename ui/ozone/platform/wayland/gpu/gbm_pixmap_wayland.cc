@@ -33,11 +33,12 @@ GbmPixmapWayland::GbmPixmapWayland(WaylandBufferManagerGpu* buffer_manager)
       buffer_id_(buffer_manager->AllocateBufferID()) {}
 
 GbmPixmapWayland::~GbmPixmapWayland() {
-  if (gbm_bo_)
+  if (gbm_bo_ && widget_ != gfx::kNullAcceleratedWidget)
     buffer_manager_->DestroyBuffer(widget_, buffer_id_);
 }
 
 bool GbmPixmapWayland::InitializeBuffer(
+    gfx::AcceleratedWidget widget,
     gfx::Size size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
@@ -46,6 +47,8 @@ bool GbmPixmapWayland::InitializeBuffer(
          ((visible_area_size.value().width() <= size.width()) &&
           (visible_area_size.value().height() <= size.height())));
   TRACE_EVENT0("wayland", "GbmPixmapWayland::InitializeBuffer");
+
+  widget_ = widget;
 
   if (!buffer_manager_->gbm_device())
     return false;
@@ -80,14 +83,9 @@ bool GbmPixmapWayland::InitializeBuffer(
            << " usage=" << gfx::BufferUsageToString(usage);
 
   visible_area_size_ = visible_area_size ? visible_area_size.value() : size;
-  CreateDmabufBasedBuffer();
+  if (widget_ != gfx::kNullAcceleratedWidget)
+    CreateDmabufBasedBuffer();
   return true;
-}
-
-void GbmPixmapWayland::SetAcceleratedWiget(gfx::AcceleratedWidget widget) {
-  DCHECK(widget != gfx::kNullAcceleratedWidget);
-  DCHECK(widget_ == gfx::kNullAcceleratedWidget);
-  widget_ = widget;
 }
 
 bool GbmPixmapWayland::AreDmaBufFdsValid() const {
@@ -148,7 +146,8 @@ bool GbmPixmapWayland::ScheduleOverlayPlane(
   //   implemented.
   z_order_ = z_order_set_ ? z_order_ : plane_z_order;
   if (widget_ != widget || z_order_ != plane_z_order) {
-    buffer_manager_->DestroyBuffer(widget_, buffer_id_);
+    if (widget_ != gfx::kNullAcceleratedWidget)
+      buffer_manager_->DestroyBuffer(widget_, buffer_id_);
     CreateDmabufBasedBuffer();
     widget_ = widget;
     z_order_ = plane_z_order;

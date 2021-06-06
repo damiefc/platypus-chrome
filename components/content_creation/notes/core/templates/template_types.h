@@ -54,7 +54,7 @@ class Background {
 
   ARGBColor color() const { return color_; }
 
-  const std::vector<ARGBColor>* colors() const { return &colors_; }
+  const std::vector<ARGBColor>& colors() const { return colors_; }
   LinearGradientDirection direction() const { return direction_; }
 
   bool is_linear_gradient() const { return is_linear_gradient_; }
@@ -72,6 +72,10 @@ class Background {
 // counterpart of the same name.
 enum class TextAlignment { kInvalid = 0, kStart = 1, kCenter = 2, kEnd = 3 };
 
+// Represents the different supported text highlight styles. Keep this enum in
+// sync with its Java counterpart of the same name.
+enum class HighlightStyle { kNone = 0, kFull = 1, kHalf = 2 };
+
 // Parameters dictating how to display text.
 class TextStyle {
  public:
@@ -81,11 +85,21 @@ class TextStyle {
                      bool all_caps,
                      TextAlignment alignment);
 
-  const std::string font_name() const { return font_name_; }
+  explicit TextStyle(const std::string& font_name,
+                     ARGBColor font_color,
+                     uint16_t weight,
+                     bool all_caps,
+                     TextAlignment alignment,
+                     ARGBColor highlight_color,
+                     HighlightStyle highlight_style);
+
+  const std::string& font_name() const { return font_name_; }
   ARGBColor font_color() const { return font_color_; }
   uint16_t weight() const { return weight_; }
   bool all_caps() const { return all_caps_; }
   TextAlignment alignment() const { return alignment_; }
+  ARGBColor highlight_color() const { return highlight_color_; }
+  HighlightStyle highlight_style() const { return highlight_style_; }
 
  private:
   std::string font_name_;
@@ -93,6 +107,8 @@ class TextStyle {
   uint16_t weight_;
   bool all_caps_;
   TextAlignment alignment_;
+  ARGBColor highlight_color_;
+  HighlightStyle highlight_style_;
 };
 
 // Parameters to control the appearance of the elements in a note's footer.

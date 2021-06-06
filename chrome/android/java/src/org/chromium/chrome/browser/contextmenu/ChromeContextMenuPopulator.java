@@ -31,7 +31,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.contextmenu.ChromeContextMenuItem.Item;
 import org.chromium.chrome.browser.contextmenu.ContextMenuCoordinator.ListItemType;
@@ -41,6 +40,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lens.LensEntryPoint;
 import org.chromium.chrome.browser.lens.LensMetrics;
+import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -810,7 +810,9 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         } else if (itemId == R.id.contextmenu_direct_share_image) {
             recordContextMenuSelection(ContextMenuUma.Action.DIRECT_SHARE_IMAGE);
             mNativeDelegate.retrieveImageForShare(ContextMenuImageFormat.ORIGINAL, (Uri uri) -> {
-                ShareHelper.shareImage(getWindow(), ShareHelper.getLastShareComponentName(), uri);
+                ShareHelper.shareImage(getWindow(),
+                        Profile.fromWebContents(mItemDelegate.getWebContents()),
+                        ShareHelper.getLastShareComponentName(), uri);
             });
         } else if (itemId == R.id.contextmenu_open_in_chrome) {
             recordContextMenuSelection(ContextMenuUma.Action.OPEN_IN_CHROME);
@@ -893,7 +895,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private void shareImage() {
         mNativeDelegate.retrieveImageForShare(ContextMenuImageFormat.ORIGINAL, (Uri imageUri) -> {
             if (!mShareDelegateSupplier.get().isSharingHubEnabled()) {
-                ShareHelper.shareImage(getWindow(), null, imageUri);
+                ShareHelper.shareImage(getWindow(),
+                        Profile.fromWebContents(mItemDelegate.getWebContents()), null, imageUri);
                 return;
             }
             ContentResolver contentResolver =
@@ -1253,6 +1256,6 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         return isSrcDownloadableScheme && templateUrlServiceInstance.isLoaded()
                 && templateUrlServiceInstance.isSearchByImageAvailable()
                 && templateUrlServiceInstance.getDefaultSearchEngineTemplateUrl() != null
-                && !AppHooks.get().getLocaleManager().needToCheckForSearchEnginePromo();
+                && !LocaleManager.getInstance().needToCheckForSearchEnginePromo();
     }
 }

@@ -11,7 +11,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/grit/generated_resources.h"
@@ -284,12 +284,10 @@ SaveUpdateWithAccountStoreBubbleController::GetPrimaryAccountAvatar(
       IdentityManagerFactory::GetForProfile(profile);
   if (!identity_manager)
     return ui::ImageModel();
-  absl::optional<AccountInfo> primary_account_info =
-      identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager->GetPrimaryAccountInfo(
-              signin::ConsentLevel::kSignin));
-  DCHECK(primary_account_info.has_value());
-  gfx::Image account_icon = primary_account_info->account_image;
+  AccountInfo primary_account_info = identity_manager->FindExtendedAccountInfo(
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin));
+  DCHECK(!primary_account_info.IsEmpty());
+  gfx::Image account_icon = primary_account_info.account_image;
   if (account_icon.IsEmpty()) {
     account_icon = ui::ResourceBundle::GetSharedInstance().GetImageNamed(
         profiles::GetPlaceholderAvatarIconResourceID());
@@ -349,8 +347,7 @@ void SaveUpdateWithAccountStoreBubbleController::ReportInteractions() {
     if (profile) {
       user_state = password_manager::features_util::
           ComputePasswordAccountStorageUserState(
-              profile->GetPrefs(),
-              ProfileSyncServiceFactory::GetForProfile(profile));
+              profile->GetPrefs(), SyncServiceFactory::GetForProfile(profile));
     }
     metrics_util::LogSaveUIDismissalReason(dismissal_reason_, user_state);
   }

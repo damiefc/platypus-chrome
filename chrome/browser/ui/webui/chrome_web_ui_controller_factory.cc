@@ -179,6 +179,8 @@
 #include "chrome/browser/chromeos/secure_channel/secure_channel_client_provider.h"
 #include "chrome/browser/feedback/feedback_dialog_utils.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service_factory.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
+#include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
 #include "chrome/browser/ui/webui/chromeos/account_manager/account_manager_error_ui.h"
 #include "chrome/browser/ui/webui/chromeos/account_manager/account_manager_welcome_ui.h"
 #include "chrome/browser/ui/webui/chromeos/account_manager/account_migration_welcome_ui.h"
@@ -200,6 +202,7 @@
 #include "chrome/browser/ui/webui/chromeos/in_session_password_change/password_change_ui.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
+#include "chrome/browser/ui/webui/chromeos/launcher_internals/launcher_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_internals/multidevice_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
@@ -452,8 +455,12 @@ WebUIController* NewWebUI<ash::ScanningUI>(WebUI* web_ui, const GURL& url) {
 template <>
 WebUIController* NewWebUI<chromeos::DiagnosticsDialogUI>(WebUI* web_ui,
                                                          const GURL& url) {
+  ash::HoldingSpaceKeyedService* holding_space_keyed_service =
+      ash::HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(
+          web_ui->GetWebContents()->GetBrowserContext());
   return new chromeos::DiagnosticsDialogUI(
-      web_ui, base::BindRepeating(&CreateChromeSelectFilePolicy));
+      web_ui, base::BindRepeating(&CreateChromeSelectFilePolicy),
+      holding_space_keyed_service->client());
 }
 
 void BindMultiDeviceSetup(
@@ -780,6 +787,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::CryptohomeUI>;
   if (url.host_piece() == chrome::kChromeUIDriveInternalsHost)
     return &NewWebUI<chromeos::DriveInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUILauncherInternalsHost)
+    return &NewWebUI<chromeos::LauncherInternalsUI>;
   if (url.host_piece() == chromeos::kChromeUIHelpAppHost)
     return &NewComponentUI<chromeos::HelpAppUI, ChromeHelpAppUIDelegate>;
   if (url.host_piece() == chrome::kChromeUIMobileSetupHost)

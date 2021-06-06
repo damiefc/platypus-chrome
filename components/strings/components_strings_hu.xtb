@@ -219,6 +219,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="168841957122794586">A szervertanúsítvány gyenge titkosítási kulcsot tartalmaz.</translation>
 <translation id="1696290444144917273">Virtuális kártya adatainak megtekintése</translation>
 <translation id="1697532407822776718">Máris elkészült!</translation>
+<translation id="1699570257714336246">Hiányzó információ</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{A szerver nem tudta bizonyítani, hogy valóban a(z) <ph name="DOMAIN" /> domainbe tartozik; biztonsági tanúsítványa elméletileg holnaptól érvényes. Ennek oka lehet konfigurációs hiba, de az is lehet, hogy egy támadó eltérítette az Ön kapcsolódását.}other{A szerver nem tudta bizonyítani, hogy valóban a(z) <ph name="DOMAIN" /> domainbe tartozik; biztonsági tanúsítványa elméletileg # nap múlva lép érvénybe. Ennek oka lehet konfigurációs hiba, de az is lehet, hogy egy támadó eltérítette az Ön kapcsolódását.}}</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -730,6 +731,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="3631244953324577188">Biometria</translation>
 <translation id="3633738897356909127">Chrome frissítése gomb, nyomja le az Enter billentyűt a Chrome-nak a Chrome beállításaiban való frissítéséhez</translation>
 <translation id="3634530185120165534">5. tálca</translation>
+<translation id="3637662659967048211">Mentés Google-fiókba</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Alkalmazás:</translation>
 <translation id="3650584904733503804">Sikeres érvényesítés</translation>
@@ -1023,6 +1025,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="4731967714531604179">Prc2 (boríték)</translation>
 <translation id="4733082559415072992">A(z) <ph name="URL" /> az eszköz helyadatait szeretné használni</translation>
 <translation id="4736825316280949806">Indítsa újra a Chromiumot</translation>
+<translation id="4736934858538408121">Virtuális kártya</translation>
 <translation id="473775607612524610">Frissítés</translation>
 <translation id="4738601419177586157"><ph name="TEXT" /> keresési javaslat</translation>
 <translation id="4742407542027196863">Jelszavak kezelése…</translation>
@@ -1407,6 +1410,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="6106989379647458772">Előfordulhat, hogy a(z) <ph name="PAGE" /> webhelyen található oldal ideiglenesen nem érhető el, vagy véglegesen új címre költözött.</translation>
 <translation id="6107012941649240045">Tulajdonos</translation>
 <translation id="610911394827799129">Előfordulhat, hogy a böngészési előzmények más formái még megtalálhatók Google-fiókjában a <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /> webhelyen</translation>
+<translation id="6113594885686374546">Keresés folytatása gomb, nyomja le az Enter billentyűt, ha folytatni szeretné a keresést, és meg szeretné tekinteni a releváns tevékenységet Chrome-előzményei között</translation>
 <translation id="6116338172782435947">Megtekinteni a vágólapra másolt szövegeket és képeket</translation>
 <translation id="6120179357481664955">Emlékszik UPI-azonosítójára?</translation>
 <translation id="6123290840358279103">Virtuális kártya megtekintése</translation>
@@ -1482,6 +1486,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="6423385022588644828">Mostantól gyorsabban igazolhatja kártyáit a Touch ID használatával</translation>
 <translation id="6425092077175753609">Anyag</translation>
 <translation id="6427730057873428458">Kihajtható</translation>
+<translation id="6428146287756735566">Keresés folytatása a Chrome-előzmények között található releváns tevékenységek megtekintéséhez</translation>
 <translation id="6428450836711225518">Telefonszám ellenőrzése</translation>
 <translation id="6433490469411711332">Kapcsolattartási adatok szerkesztése</translation>
 <translation id="6433595998831338502">A(z) <ph name="HOST_NAME" /> visszautasította a csatlakozást.</translation>
@@ -1533,6 +1538,7 @@ Ezt egyéb esetben letiltják az Ön adatvédelmi beállításai. Az engedélyez
 <translation id="6643016212128521049">Törlés</translation>
 <translation id="6645291930348198241">Hozzáférés a cookie-khoz és a webhelyadatokhoz.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Nincs}=1{1 webhelyről (a böngésző nem jelentkezteti ki Google-fiókjából)}other{# webhelyről (a böngésző nem jelentkezteti ki Google-fiókjából)}}</translation>
+<translation id="6647197322759179819">Keresés folytatása</translation>
 <translation id="6648459603387803038">A rendszergazda távolról módosítani tudja a böngészőbeállításokat. Az is lehetséges, hogy az eszközön végzett tevékenységeket a Chrome-on kívülről felügyelik.</translation>
 <translation id="6648524591329069940">Serif betűtípus</translation>
 <translation id="6651270836885078973">Kezelő:</translation>
@@ -2185,6 +2191,7 @@ További részletek:
 <translation id="9114524666733003316">Kártya ellenőrzése…</translation>
 <translation id="9114581008513152754">Ezt a böngészőt nem kezeli cég vagy más szervezet. Lehetséges, hogy az eszközön végzett tevékenységeket a Chrome-on kívülről felügyelik. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" />.</translation>
 <translation id="9117930699067497412">Friss</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />, nyomja le a Tab, majd az Enter billentyűt, ha folytatni szeretné a keresést, és meg szeretné tekinteni a releváns tevékenységet Chrome-előzményei között</translation>
 <translation id="9119042192571987207">Feltöltve</translation>
 <translation id="9128016270925453879">Házirendek betöltve</translation>
 <translation id="9128870381267983090">Csatlakozás hálózathoz</translation>

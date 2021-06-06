@@ -7,13 +7,14 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "ash/constants/app_types.h"
 #include "ash/constants/ash_switches.h"
-#include "ash/public/cpp/app_types.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/process/launch.h"
+#include "base/process/process_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "chromeos/dbus/concierge/concierge_client.h"
@@ -50,6 +51,12 @@ constexpr const char kCrosSystemPath[] = "/usr/bin/crossystem";
 // ArcVmUreadaheadMode param value strings.
 constexpr char kGenerate[] = "generate";
 constexpr char kDisabled[] = "disabled";
+
+// Do not run ureadahead in vm for devices with less than 8GB due to memory
+// pressure issues since system will likely drop caches in this case.
+// The value should match platform2/arc/vm/scripts/init/arcvm-ureadahead.conf
+// in Chrome OS.
+constexpr int kReadaheadTotalMinMemoryInKb = 7500000;
 
 void SetArcCpuRestrictionCallback(
     login_manager::ContainerCpuRestrictionState state,
@@ -198,8 +205,16 @@ bool IsArcVmDevConfIgnored() {
       chromeos::switches::kIgnoreArcVmDevConf);
 }
 
-ArcVmUreadaheadMode GetArcVmUreadaheadMode() {
-  ArcVmUreadaheadMode mode = ArcVmUreadaheadMode::READAHEAD;
+ArcVmUreadaheadMode GetArcVmUreadaheadMode(SystemMemoryInfoCallback callback) {
+  base::SystemMemoryInfoKB mem_info;
+  DCHECK(callback);
+  if (!callback.Run(&mem_info)) {
+    LOG(ERROR) << "Failed to get system memory info";
+    return ArcVmUreadaheadMode::DISABLED;
+  }
+  ArcVmUreadaheadMode mode = (mem_info.total > kReadaheadTotalMinMemoryInKb)
+                                 ? ArcVmUreadaheadMode::READAHEAD
+                                 : ArcVmUreadaheadMode::DISABLED;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kArcVmUreadaheadMode)) {
     const std::string value =
@@ -305,20 +320,48 @@ bool IsArcOptInVerificationDisabled() {
       chromeos::switches::kDisableArcOptInVerification);
 }
 
-int GetWindowTaskId(const aura::Window* window) {
+absl::optional<int> GetWindowTaskId(const aura::Window* window) {
   if (!window)
-    return kNoTaskId;
+    return absl::nullopt;
   const std::string* arc_app_id = exo::GetShellApplicationId(window);
   if (!arc_app_id)
-    return kNoTaskId;
+    return absl::nullopt;
   return GetTaskIdFromWindowAppId(*arc_app_id);
 }
 
-int GetTaskIdFromWindowAppId(const std::string& app_id) {
+absl::optional<int> GetTaskIdFromWindowAppId(const std::string& app_id) {
   int task_id;
   if (std::sscanf(app_id.c_str(), "org.chromium.arc.%d", &task_id) != 1)
-    return kNoTaskId;
+    return absl::nullopt;
   return task_id;
+}
+
+absl::optional<int> GetWindowSessionId(const aura::Window* window) {
+  if (!window)
+    return absl::nullopt;
+  const std::string* arc_app_id = exo::GetShellApplicationId(window);
+  if (!arc_app_id)
+    return absl::nullopt;
+  return GetSessionIdFromWindowAppId(*arc_app_id);
+}
+
+absl::optional<int> GetSessionIdFromWindowAppId(const std::string& app_id) {
+  int session_id;
+  if (std::sscanf(app_id.c_str(), "org.chromium.arc.session.%d", &session_id) !=
+      1) {
+    return absl::nullopt;
+  }
+  return session_id;
+}
+
+absl::optional<int> GetWindowTaskOrSessionId(const aura::Window* window) {
+  if (!window)
+    return absl::nullopt;
+  const std::string* arc_app_id = exo::GetShellApplicationId(window);
+  if (!arc_app_id)
+    return absl::nullopt;
+  auto task_id = GetTaskIdFromWindowAppId(*arc_app_id);
+  return task_id ? *task_id : GetSessionIdFromWindowAppId(*arc_app_id);
 }
 
 void SetArcCpuRestriction(CpuRestrictionState cpu_restriction_state) {

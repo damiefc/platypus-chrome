@@ -288,9 +288,7 @@ class MediaNotificationServiceTest : public ChromeRenderViewHostTestHarness {
 
     // Now, close the tab. The session may have been destroyed with
     // |SimulateFocusLost()| above.
-    auto item_itr = sessions().find(id.ToString());
-    if (item_itr != sessions().end())
-      item_itr->second.WebContentsDestroyed();
+    service_->media_session_notification_producer_->OnRequestIdReleased(id);
   }
 
   void SimulatePlaybackStateChanged(const base::UnguessableToken& id,
@@ -456,7 +454,7 @@ class MediaNotificationServiceCastTest : public MediaNotificationServiceTest {
     EXPECT_TRUE(item);
     auto* pr_item =
         static_cast<PresentationRequestNotificationItem*>(item.get());
-    EXPECT_EQ(pr_item->context()->presentation_request(), presentation_request);
+    EXPECT_EQ(pr_item->request(), presentation_request);
     return notification_id;
   }
 

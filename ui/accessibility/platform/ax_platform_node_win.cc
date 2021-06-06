@@ -5280,9 +5280,6 @@ int AXPlatformNodeWin::MSAARole() {
     case ax::mojom::Role::kAlertDialog:
       return ROLE_SYSTEM_DIALOG;
 
-    case ax::mojom::Role::kAnchor:
-      return ROLE_SYSTEM_LINK;
-
     case ax::mojom::Role::kComment:
     case ax::mojom::Role::kSuggestion:
       return ROLE_SYSTEM_GROUPING;
@@ -5830,7 +5827,7 @@ int32_t AXPlatformNodeWin::ComputeIA2State() {
       // enable paste operations. Eventually this need should go away once IE11
       // support is no longer needed and Slides instead relies on paste events.
       if (!data.HasState(ax::mojom::State::kFocusable) ||
-          GetBoolAttribute(ax::mojom::BoolAttribute::kContentEditableRoot))
+          GetBoolAttribute(ax::mojom::BoolAttribute::kNonAtomicTextFieldRoot))
         break;  // Not used with activedescendant, so preserve editable state.
       FALLTHROUGH;  // Will clear editable state.
     case ax::mojom::Role::kMenuListPopup:
@@ -6097,9 +6094,6 @@ std::wstring AXPlatformNodeWin::UIAAriaRole() {
       // Windows screen readers are not compatible with
       // |ax::mojom::Role::kAlertDialog| yet.
       return L"alert";
-
-    case ax::mojom::Role::kAnchor:
-      return L"link";
 
     case ax::mojom::Role::kComment:
     case ax::mojom::Role::kSuggestion:
@@ -6768,9 +6762,6 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       // |ax::mojom::Role::kAlertDialog| yet.
       return UIA_TextControlTypeId;
 
-    case ax::mojom::Role::kAnchor:
-      return UIA_HyperlinkControlTypeId;
-
     case ax::mojom::Role::kComment:
     case ax::mojom::Role::kSuggestion:
       return UIA_GroupControlTypeId;
@@ -7415,7 +7406,7 @@ bool AXPlatformNodeWin::IsUIAControl() const {
     // Doing so helps Narrator find all the content of live regions.
     if (!data.GetBoolAttribute(ax::mojom::BoolAttribute::kHasAriaAttribute) &&
         !data.GetBoolAttribute(
-            ax::mojom::BoolAttribute::kContentEditableRoot) &&
+            ax::mojom::BoolAttribute::kNonAtomicTextFieldRoot) &&
         GetName().empty() &&
         data.GetStringAttribute(ax::mojom::StringAttribute::kDescription)
             .empty() &&

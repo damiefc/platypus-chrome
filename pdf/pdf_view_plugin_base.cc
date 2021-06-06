@@ -34,6 +34,7 @@
 #include "net/base/escape.h"
 #include "pdf/accessibility.h"
 #include "pdf/accessibility_structs.h"
+#include "pdf/buildflags.h"
 #include "pdf/content_restriction.h"
 #include "pdf/document_layout.h"
 #include "pdf/document_metadata.h"
@@ -90,12 +91,9 @@ base::Value PrepareReplyMessage(base::StringPiece reply_type,
                                 const base::Value& message) {
   DCHECK_EQ(reply_type, *message.FindStringKey("type") + "Reply");
 
-  const std::string* message_id = message.FindStringKey("messageId");
-  CHECK(message_id);
-
   base::Value reply(base::Value::Type::DICTIONARY);
   reply.SetStringKey("type", reply_type);
-  reply.SetStringKey("messageId", *message_id);
+  reply.SetStringKey("messageId", *message.FindStringKey("messageId"));
   return reply;
 }
 
@@ -422,6 +420,7 @@ void PdfViewPluginBase::HandleMessage(const base::Value& message) {
           {"rotateClockwise", &PdfViewPluginBase::HandleRotateClockwiseMessage},
           {"rotateCounterclockwise",
            &PdfViewPluginBase::HandleRotateCounterclockwiseMessage},
+          {"save", &PdfViewPluginBase::HandleSaveMessage},
           {"selectAll", &PdfViewPluginBase::HandleSelectAllMessage},
           {"setBackgroundColor",
            &PdfViewPluginBase::HandleSetBackgroundColorMessage},
@@ -432,12 +431,9 @@ void PdfViewPluginBase::HandleMessage(const base::Value& message) {
           {"viewport", &PdfViewPluginBase::HandleViewportMessage},
       });
 
-  const std::string* type = message.FindStringKey("type");
-  CHECK(type);
-
   // TODO(crbug.com/1109796): Use `fixed_flat_map<>::at()` when migration is
   // complete to CHECK out-of-bounds lookups.
-  const auto* it = kMessageHandlers.find(*type);
+  const auto* it = kMessageHandlers.find(*message.FindStringKey("type"));
   if (it == kMessageHandlers.end()) {
     NOTIMPLEMENTED() << message;
     return;
@@ -461,7 +457,7 @@ void PdfViewPluginBase::SaveToBuffer(const std::string& token) {
     if (IsSaveDataSizeValid(data.size()))
       data_to_save = base::Value(std::move(data));
   } else {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(ENABLE_INK)
     uint32_t length = engine()->GetLoadedByteSize();
     if (IsSaveDataSizeValid(length)) {
       base::Value::BlobStorage data(length);
@@ -470,7 +466,7 @@ void PdfViewPluginBase::SaveToBuffer(const std::string& token) {
     }
 #else
     NOTREACHED();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(ENABLE_INK)
   }
 
   message.SetKey("dataToSave", std::move(data_to_save));
@@ -747,12 +743,8 @@ void PdfViewPluginBase::HandleDisplayAnnotationsMessage(
 
 void PdfViewPluginBase::HandleGetNamedDestinationMessage(
     const base::Value& message) {
-  const std::string* destination_name =
-      message.FindStringKey("namedDestination");
-  CHECK(destination_name);
-
   absl::optional<PDFEngine::NamedDestination> named_destination =
-      engine()->GetNamedDestination(*destination_name);
+      engine()->GetNamedDestination(*message.FindStringKey("namedDestination"));
 
   const int page_number = named_destination.has_value()
                               ? base::checked_cast<int>(named_destination->page)
@@ -779,10 +771,8 @@ void PdfViewPluginBase::HandleGetNamedDestinationMessage(
 
 void PdfViewPluginBase::HandleGetPasswordCompleteMessage(
     const base::Value& message) {
-  const std::string* password = message.FindStringKey("password");
-  CHECK(password);
-  DCHECK(!password_callback_.is_null());
-  std::move(password_callback_).Run(*password);
+  DCHECK(password_callback_);
+  std::move(password_callback_).Run(*message.FindStringKey("password"));
 }
 
 void PdfViewPluginBase::HandleGetSelectedTextMessage(
@@ -815,6 +805,34 @@ void PdfViewPluginBase::HandleRotateCounterclockwiseMessage(
   engine()->RotateCounterclockwise();
 }
 
+void PdfViewPluginBase::HandleSaveMessage(const base::Value& message) {
+  const std::string& token = *message.FindStringKey("token");
+  int request_type = message.FindIntKey("saveRequestType").value();
+  DCHECK_GE(request_type, static_cast<int>(SaveRequestType::kAnnotation));
+  DCHECK_LE(request_type, static_cast<int>(SaveRequestType::kEdited));
+
+  switch (static_cast<SaveRequestType>(request_type)) {
+    case SaveRequestType::kAnnotation:
+#if BUILDFLAG(ENABLE_INK)
+      // In annotation mode, assume the user will make edits and prefer saving
+      // using the plugin data.
+      SetPluginCanSave(true);
+      SaveToBuffer(token);
+#else
+      NOTREACHED();
+#endif  // BUILDFLAG(ENABLE_INK)
+      break;
+    case SaveRequestType::kOriginal:
+      SetPluginCanSave(false);
+      SaveToFile(token);
+      SetPluginCanSave(edit_mode_);
+      break;
+    case SaveRequestType::kEdited:
+      SaveToBuffer(token);
+      break;
+  }
+}
+
 void PdfViewPluginBase::HandleSelectAllMessage(const base::Value& /*message*/) {
   engine()->SelectAll();
 }
@@ -827,7 +845,6 @@ void PdfViewPluginBase::HandleSetBackgroundColorMessage(
 }
 
 void PdfViewPluginBase::HandleSetReadOnlyMessage(const base::Value& message) {
-  DCHECK(base::FeatureList::IsEnabled(features::kPdfViewerPresentationMode));
   engine()->SetReadOnly(message.FindBoolKey("enableReadOnly").value());
 }
 
@@ -963,6 +980,12 @@ void PdfViewPluginBase::HandleViewportMessage(const base::Value& message) {
   scroll_position = BoundScrollPositionToDocument(scroll_position);
   engine()->ScrolledToXPosition(scroll_position.x() * device_scale_);
   engine()->ScrolledToYPosition(scroll_position.y() * device_scale_);
+}
+
+void PdfViewPluginBase::SaveToFile(const std::string& token) {
+  engine()->KillFormFocus();
+  ConsumeSaveToken(token);
+  SaveAs();
 }
 
 void PdfViewPluginBase::DoPaint(const std::vector<gfx::Rect>& paint_rects,

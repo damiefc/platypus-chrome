@@ -492,6 +492,7 @@ Handoff-ը պետք է միացված լինի նաև Կարգավորումնե
 <translation id="6059830886158432458">Կառավարեք ձեր պատմություններն ու գործողություններն այստեղ</translation>
 <translation id="6066301408025741299">Հպեք՝ չեղարկելու համար:</translation>
 <translation id="60829778314739003">Ընդունել և շարունակել</translation>
+<translation id="6084848228346514841">Ընտրեք ներդիրներ</translation>
 <translation id="6108923351542677676">Կարգավորումն ընթացքի մեջ է…</translation>
 <translation id="6119050551270742952">Ընթացիկ կայքէջը ինկոգնիտո ռեժիմում է բացված</translation>
 <translation id="6122191549521593678">Առցանց</translation>
@@ -749,7 +750,7 @@ Handoff-ը պետք է միացված լինի նաև Կարգավորումնե
 <translation id="8503813439785031346">Օգտանուն</translation>
 <translation id="850600235656508448">Բացել ինկոգնիտո ռեժիմում</translation>
 <translation id="8510057420705599706">Դուք դուրս կգրվեք հաշվից, և համաժամացումը կանջատվի, սակայն ձեր էջանիշները, պատմությունը, գաղտնաբառերը և Chrome-ի այլ տվյալներ կպահպանվեն այս սարքում։</translation>
-<translation id="8517375800490286174">Բաց կոդով հավելվածների արտոնագրեր</translation>
+<translation id="8517375800490286174">Բաց կոդով հավելվածների լիցենզիաներ</translation>
 <translation id="8524799873541103884"><ph name="INCOGNITO" /> Ներդիրներ <ph name="FIRST_VISIBLE_TAB" /> – <ph name="LAST_VISIBLE_TAB" />՝ <ph name="NUMBER_OF_OPEN_TABS" />-ից</translation>
 <translation id="8529767659511976195">Նոր</translation>
 <translation id="8532105204136943229">Ժամկետի սպառման տարեթիվը</translation>
@@ -782,6 +783,7 @@ Handoff-ը պետք է միացված լինի նաև Կարգավորումնե
 <ph name="BEGIN_LINK" />Իմանալ ավելին<ph name="END_LINK" /></translation>
 <translation id="8820817407110198400">Էջանիշներ</translation>
 <translation id="8840513115188359703">Դուք դուրս չեք գա ձեր Google հաշվից:</translation>
+<translation id="8868471676553493380">{count,plural, =1{{count} ներդիր}one{{count} ներդիր}other{{count} ներդիր}}</translation>
 <translation id="8870413625673593573">Վերջին փակվածները</translation>
 <translation id="8876882697946675716">Համաժամացրեք ձեր սարքերը</translation>
 <translation id="8881801611828450202">Որոնել այս պատկերը <ph name="SEARCH_ENGINE" />-ում</translation>

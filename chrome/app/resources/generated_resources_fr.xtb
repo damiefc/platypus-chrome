@@ -672,6 +672,7 @@
 <translation id="1706625117072057435">Niveaux de zoom</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID : <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Ce navigateur expérimental risque de perdre des données ou de compromettre votre sécurité ou la confidentialité de vos données. En cas de problème, veuillez sélectionner Aide &gt; Signaler un problème.</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (native)</translation>
 <translation id="1709217939274742847">Sélectionnez un ticket à utiliser pour l'authentification. <ph name="LINK_BEGIN" />En savoir plus<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Échec du partage</translation>
@@ -1089,6 +1090,7 @@ Vous pouvez gérer les paramètres de ce compte en installant l'application Fami
 <translation id="2144557304298909478">Développement d'applications Android sous Linux</translation>
 <translation id="2146263598007866206">Les sites peuvent télécharger automatiquement et en même temps les fichiers associés pour vous faire gagner du temps</translation>
 <translation id="2147151613919729065">Pour effacer l'historique du mode Invité, fermez toutes les fenêtres de ce mode.</translation>
+<translation id="2147218225094845757">Masquer le panneau latéral</translation>
 <translation id="2148219725039824548">Erreur lors de l'installation du partage. Le partage indiqué est introuvable sur le réseau.</translation>
 <translation id="2148756636027685713">Formatage terminé</translation>
 <translation id="2148892889047469596">Caster l'onglet</translation>
@@ -3165,6 +3167,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" /> ?</translation>
 <translation id="4410545552906060960">Utilisez un numéro (code) au lieu d'un mot de passe pour déverrouiller votre appareil. Pour définir votre code ultérieurement, accédez aux paramètres.</translation>
 <translation id="4411578466613447185">Signataire de code</translation>
 <translation id="4412698727486357573">Centre d'aide</translation>
+<translation id="4413088271097062326">Quelle appli voulez-vous utiliser ?</translation>
 <translation id="44141919652824029">Autoriser <ph name="APP_NAME" /> à obtenir la liste des appareils USB connectés ?</translation>
 <translation id="4414232939543644979">Nouvelle fenêtre de nav&amp;igation privée</translation>
 <translation id="4414515549596849729">cookies et infos liées aux sites</translation>
@@ -3937,6 +3940,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" /> ?</translation>
 <translation id="5269977353971873915">Échec de l'impression</translation>
 <translation id="5275352920323889391">Chien</translation>
 <translation id="527605982717517565">Toujours exécuter JavaScript sur <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Afficher le panneau latéral</translation>
 <translation id="5278823018825269962">ID d'état</translation>
 <translation id="5280064835262749532">Mettre à jour les identifiants pour <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Effacer les cookies et les données des sites à la fermeture du navigateur</translation>
@@ -6118,7 +6122,6 @@ Assurez-vous de ne pas dévoiler d'informations sensibles.</translation>
 <translation id="7685049629764448582">Mémoire JavaScript </translation>
 <translation id="7685087414635069102">Veuillez saisir un code</translation>
 <translation id="768549422429443215">Ajoutez des langues ou réorganisez la liste.</translation>
-<translation id="7686424868232681412">Lacros est un navigateur expérimental. Si vous relevez un problème, sélectionnez Aide &gt; Signaler un problème.</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Confirmer le nouveau mot de passe</translation>
 <translation id="7690378713476594306">Choisir dans la liste</translation>

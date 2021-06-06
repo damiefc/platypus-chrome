@@ -668,6 +668,7 @@
 <translation id="1706625117072057435">缩放级别</translation>
 <translation id="1708338024780164500">（无效）</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" />（ID：<ph name="ID_PH" />）</translation>
+<translation id="1708860176443612387">实验性浏览器！可能会丢失数据或有损私密性/安全性。若要报告问题，请使用“帮助”&gt;“报告问题…”。</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" />（原生）</translation>
 <translation id="1709217939274742847">选择用于进行身份验证的票据。<ph name="LINK_BEGIN" />了解详情<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">无法分享</translation>
@@ -1085,6 +1086,7 @@
 <translation id="2144557304298909478">Linux Android 应用开发</translation>
 <translation id="2146263598007866206">网站可能会自动将相关文件一起下载，从而为您节省时间</translation>
 <translation id="2147151613919729065">如需清除访客模式历史记录，请关闭所有访客窗口。</translation>
+<translation id="2147218225094845757">隐藏侧边栏</translation>
 <translation id="2148219725039824548">装载共享资源时出错。在网络上找不到所指定的共享资源。</translation>
 <translation id="2148756636027685713">格式化已完成</translation>
 <translation id="2148892889047469596">投射标签页</translation>
@@ -3159,6 +3161,7 @@
 <translation id="4410545552906060960">使用数字（PIN 码）代替密码来解锁设备。若想在晚些时候设置 PIN 码，请前往“设置”。</translation>
 <translation id="4411578466613447185">代码签名人</translation>
 <translation id="4412698727486357573">帮助中心</translation>
+<translation id="4413088271097062326">您要使用哪个应用？</translation>
 <translation id="44141919652824029">允许“<ph name="APP_NAME" />”获取您所连接的 USB 设备的列表？</translation>
 <translation id="4414232939543644979">打开新的无痕窗口(&amp;I)</translation>
 <translation id="4414515549596849729">Cookie 和网站数据</translation>
@@ -3261,7 +3264,7 @@
 <translation id="4519935350946509010">建立连接时出错。</translation>
 <translation id="4520385623207007473">正在使用的 Cookie</translation>
 <translation id="452039078290142656">来自<ph name="VENDOR_NAME" />的未知设备</translation>
-<translation id="4522570452068850558">详细信息</translation>
+<translation id="4522570452068850558">详情</translation>
 <translation id="4522600456902129422">继续允许此网站查看剪贴板</translation>
 <translation id="4522890784888918985">子帐号不受支持</translation>
 <translation id="4524832533047962394">此版本的操作系统不支持所提供的注册模式。请确保您运行的是最新版本。</translation>
@@ -3931,6 +3934,7 @@
 <translation id="5269977353971873915">打印失败</translation>
 <translation id="5275352920323889391">狗</translation>
 <translation id="527605982717517565">始终允许使用 <ph name="HOST" /> 上的 JavaScript</translation>
+<translation id="5277127016695466621">显示侧边栏</translation>
 <translation id="5278823018825269962">状态 ID</translation>
 <translation id="5280064835262749532">更新 <ph name="SHARE_PATH" /> 的访问凭据</translation>
 <translation id="5280243692621919988">关闭所有窗口时清除 Cookie 及网站数据</translation>
@@ -6111,7 +6115,6 @@
 <translation id="7685049629764448582">JavaScript 使用的内存</translation>
 <translation id="7685087414635069102">必须输入 PIN 码</translation>
 <translation id="768549422429443215">添加语言或将列表中的语言重新排列。</translation>
-<translation id="7686424868232681412">Lacros 是一款实验性浏览器。若要报告问题，请使用“帮助”&gt;“报告问题…”。</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">再次输入新密码</translation>
 <translation id="7690378713476594306">从列表中选择</translation>

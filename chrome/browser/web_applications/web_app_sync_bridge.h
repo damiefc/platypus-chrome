@@ -84,6 +84,8 @@ class WebAppSyncBridge : public AppRegistryController,
   void SetAppInstallTime(const AppId& app_id, const base::Time& time) override;
   void SetAppRunOnOsLoginMode(const AppId& app_id,
                               RunOnOsLoginMode mode) override;
+  void SetAppWindowControlsOverlayEnabled(const AppId& app_id,
+                                          bool enabled) override;
   WebAppSyncBridge* AsWebAppSyncBridge() override;
 
   // These methods are used by extensions::AppSorting, which manages the sorting
@@ -157,8 +159,6 @@ class WebAppSyncBridge : public AppRegistryController,
   base::WeakPtrFactory<WebAppSyncBridge> weak_ptr_factory_{this};
 
 };
-
-bool AreAppsLocallyInstalledByDefault();
 
 std::unique_ptr<syncer::EntityData> CreateSyncEntityData(const WebApp& app);
 

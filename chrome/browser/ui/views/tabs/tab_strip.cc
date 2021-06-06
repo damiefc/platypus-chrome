@@ -1114,9 +1114,11 @@ TabStrip::TabStrip(std::unique_ptr<TabStripController> controller)
           base::BindRepeating(&TabStrip::tabs_view_model,
                               base::Unretained(this)))),
       drag_context_(std::make_unique<TabDragContextImpl>(this)) {
-  views::FocusRing::SetColorContextForSubtree(
-      this, ThemeProperties::COLOR_TOOLBAR,
-      ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
+  // TODO(pbos): This is probably incorrect, the background of individual tabs
+  // depend on their selected state. This should probably be pushed down into
+  // tabs.
+  views::FocusRing::SetBackgroundColorIdForSubtree(
+      this, ThemeProperties::COLOR_TOOLBAR);
   Init();
   SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
 }
@@ -2357,9 +2359,6 @@ void TabStrip::Layout() {
 }
 
 void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
-  // This is used to log to UMA. NO EARLY RETURNS!
-  base::ElapsedTimer paint_timer;
-
   // The view order doesn't match the paint order (layout_helper_ contains the
   // view ordering).
   bool is_dragging = false;
@@ -2476,11 +2475,6 @@ void TabStrip::PaintChildren(const views::PaintInfo& paint_info) {
   // If the active tab is being dragged, it goes last.
   if (active_tab && is_dragging)
     active_tab->Paint(paint_info);
-
-  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-      "TabStrip.PaintChildrenDuration", paint_timer.Elapsed(),
-      base::TimeDelta::FromMicroseconds(1),
-      base::TimeDelta::FromMicroseconds(10000), 50);
 }
 
 gfx::Size TabStrip::GetMinimumSize() const {

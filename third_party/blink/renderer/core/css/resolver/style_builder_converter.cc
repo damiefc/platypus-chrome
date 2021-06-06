@@ -1590,8 +1590,11 @@ StyleAutoColor StyleBuilderConverter::ConvertStyleAutoColor(
       return StyleAutoColor::AutoColor();
     if (StyleColor::IsSystemColor(value_id)) {
       CountSystemColorComputeToSelfUsage(state);
-      if (RuntimeEnabledFeatures::CSSSystemColorComputeToSelfEnabled())
-        return StyleAutoColor(value_id);
+      return StyleAutoColor(
+          state.GetDocument().GetTextLinkColors().ColorFromCSSValue(
+              value, Color(), state.Style()->UsedColorScheme(),
+              for_visited_link),
+          value_id);
     }
   }
   return StyleAutoColor(
@@ -2156,6 +2159,15 @@ ScrollbarGutter StyleBuilderConverter::ConvertScrollbarGutter(
     process(value);
   }
   return flags;
+}
+
+AtomicString StyleBuilderConverter::ConvertContainerName(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  if (auto* custom_ident_value = DynamicTo<CSSCustomIdentValue>(value))
+    return AtomicString(custom_ident_value->Value());
+  DCHECK_EQ(To<CSSIdentifierValue>(value).GetValueID(), CSSValueID::kNone);
+  return AtomicString();
 }
 
 }  // namespace blink

@@ -187,15 +187,17 @@ AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
                                         ConsentLevel consent_level) {
   CoreAccountInfo account_info =
       SetPrimaryAccount(identity_manager, email, consent_level);
-  SetRefreshTokenForPrimaryAccount(identity_manager);
-  absl::optional<AccountInfo> primary_account_info =
-      identity_manager
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_info.account_id);
+  // TODO(https://crbug.com/1176695): Refactor
+  // SetRefreshTokenForPrimaryAccount() to set the refresh token for
+  // signin::kSignin and use it here.
+  SetRefreshTokenForAccount(identity_manager, account_info.account_id);
+  AccountInfo primary_account_info =
+      identity_manager->FindExtendedAccountInfoByAccountId(
+          account_info.account_id);
   // Ensure that extended information for the account is available after setting
   // the refresh token.
-  DCHECK(primary_account_info.has_value());
-  return primary_account_info.value();
+  DCHECK(!primary_account_info.IsEmpty());
+  return primary_account_info;
 }
 
 void RevokeSyncConsent(IdentityManager* identity_manager) {

@@ -111,7 +111,7 @@
 <translation id="181103072419391116">ਸਿਗਨਲ ਦੀ ਤੀਬਰਤਾ <ph name="SIGNAL_STRENGTH" />, ਤੁਹਾਡੇ ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਪ੍ਰਬੰਧਿਤ ਕੀਤਾ ਜਾਂਦਾ ਹੈ</translation>
 <translation id="1812997170047690955">ਮੇਰੀ ਸਕ੍ਰੀਨ 'ਤੇ ਕਿਹੜੀ ਸਮੱਗਰੀ ਮੌਜੂਦ ਹੈ?</translation>
 <translation id="1823873187264960516">ਈਥਰਨੈੱਟ: <ph name="ADDRESS" /></translation>
-<translation id="1836215606488044471">ਸਹਾਇਕ (ਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...)</translation>
+<translation id="1836215606488044471">Assistant ਨੂੰ (ਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...)</translation>
 <translation id="1838895407229022812">ਰਾਤ ਦੀ ਰੋਸ਼ਨੀ ਬੰਦ ਹੈ।</translation>
 <translation id="1864454756846565995">USB-C ਡੀਵਾਈਸ (ਪਿਛਲਾ ਪੋਰਟ)</translation>
 <translation id="1882814835921407042">ਕੋਈ ਮੋਬਾਈਲ ਨੈੱਟਵਰਕ ਨਹੀਂ ਹੈ</translation>
@@ -121,7 +121,7 @@
 <translation id="1919743966458266018">ਕਾਰਜ ਪ੍ਰਬੰਧਕ ਖੋਲ੍ਹਣ ਲਈ ਸ਼ਾਰਟਕੱਟ ਬਦਲ ਗਿਆ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ <ph name="OLD_SHORTCUT" /> ਦੀ ਥਾਂ <ph name="NEW_SHORTCUT" /> ਦੀ ਵਰਤੋਂ ਕਰੋ।</translation>
 <translation id="1923539912171292317">ਆਟੋਮੈਟਿਕ ਕਲਿਕ</translation>
 <translation id="1928739107511554905">ਅੱਪਡੇਟ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਅਟੈਚ ਕੀਤੇ ਕੀ-ਬੋਰਡ ਦੇ ਨਾਲ ਆਪਣੀ Chromebook ਨੂੰ ਮੁੜ-ਚਾਲੂ ਕਰਨ ਲਈ ਟੱਚਸਕ੍ਰੀਨ ਦੀ ਵਰਤੋਂ ਕਰੋ।</translation>
-<translation id="1951012854035635156">ਸਹਾਇਕ</translation>
+<translation id="1951012854035635156">Assistant</translation>
 <translation id="1954252331066828794">ਸਕ੍ਰੀਨ ਰਿਕਾਰਡਿੰਗ ਪੂਰੀ ਹੋਈ</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1957958912175573503">ਆਪਣੀ ਭਾਸ਼ਾ ਸੈੱਟ ਕਰੋ</translation>
@@ -422,7 +422,7 @@
 <translation id="4331809312908958774">Chrome OS</translation>
 <translation id="4333628967105022692">ਕਈ ਵਰਤੋਂਕਾਰਾਂ ਵੱਲੋਂ ਸਾਈਨ-ਇਨ ਕੀਤੇ ਹੋਣ ਦੌਰਾਨ Lacros ਸਮਰਥਿਤ ਨਹੀਂ ਹੁੰਦਾ ਹੈ।</translation>
 <translation id="4338109981321384717">ਸੂਖਮਦਰਸ਼ੀ ਕੱਚ</translation>
-<translation id="4351433414020964307">ਸਹਾਇਕ ਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...</translation>
+<translation id="4351433414020964307">Assistant ਨੂੰ ਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...</translation>
 <translation id="4356930093361201197">ਉੱਚ ਵਖਰੇਵਾਂ ਮੋਡ</translation>
 <translation id="4371348193907997655">ਕਾਸਟ ਸੈਟਿੰਗਾਂ</translation>
 <translation id="4378479437904450384"><ph name="WIRELESS_PROVIDER" />, ਸਿਗਨਲ ਦੀ ਤੀਬਰਤਾ <ph name="SIGNAL_STRENGTH" /> ਫ਼ੀਸਦ</translation>
@@ -526,7 +526,7 @@
 <translation id="5071064518267176975">ਇੱਕ ਐਪ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਦੀ ਵਰਤੋਂ ਕਰਨਾ ਚਾਹੁੰਦੀ ਹੈ</translation>
 <translation id="5075554201838155866">ਬੰਦ ਸੁਰਖੀਆਂ ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="5078796286268621944">ਗ਼ਲਤ PIN</translation>
-<translation id="5083553833479578423">'ਸਹਾਇਕ' ਦੀਆਂ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਬਾਰੇ ਜਾਣੋ।</translation>
+<translation id="5083553833479578423">'Assistant' ਦੀਆਂ ਹੋਰ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨੂੰ ਅਣਲਾਕ ਕਰੋ।</translation>
 <translation id="5136175204352732067">ਵੱਖਰਾ ਕੀ-ਬੋਰਡ ਕਨੈਕਟ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="5155897006997040331">ਪੜ੍ਹਨ ਸੰਬੰਧੀ ਗਤੀ</translation>
 <translation id="5168181903108465623">ਕਾਸਟ ਡਿਵਾਈਸਾਂ ਉਪਲਬਧ</translation>
@@ -1003,7 +1003,7 @@
 <translation id="9056839673611986238">ਡੀਵਾਈਸ ਨੂੰ ਪਿਛਲੇ ਵਰਜਨ 'ਤੇ ਵਾਪਸ ਲਿਆਇਆ ਜਾਵੇਗਾ</translation>
 <translation id="9063800855227801443">ਗੁਪਤ ਸਮੱਗਰੀ ਨੂੰ ਕੈਪਚਰ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ</translation>
 <translation id="9065203028668620118">ਸੰਪਾਦਿਤ ਕਰੋ</translation>
-<translation id="9070640332319875144">'ਅਸਿਸਟੈਂਟ' ਸੈਟਿੰਗਾਂ</translation>
+<translation id="9070640332319875144">'Assistant' ਸੈਟਿੰਗਾਂ</translation>
 <translation id="9072519059834302790">ਬੈਟਰੀ ਮੁੱਕਣ ਵਿੱਚ <ph name="TIME_LEFT" /> ਬਾਕੀ।</translation>
 <translation id="9074739597929991885">ਬਲੂਟੁੱਥ</translation>
 <translation id="9077515519330855811">ਮੀਡੀਆ ਕੰਟਰੋਲ, ਹੁਣ <ph name="MEDIA_TITLE" /> ਚੱਲ ਰਿਹਾ ਹੈ</translation>

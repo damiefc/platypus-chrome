@@ -50,7 +50,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
-#include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -162,6 +161,7 @@
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/idleness_detector.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
+#include "third_party/blink/renderer/core/loader/prerender_handle.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/mobile_metrics/mobile_friendliness_checker.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -764,6 +764,13 @@ bool LocalFrame::DetachImpl(FrameDetachType type) {
       GetDocument());
 
   loader_.DispatchUnloadEvent(nullptr, nullptr);
+  if (evict_cached_session_storage_on_freeze_or_unload_) {
+    // Evicts the cached data of Session Storage to avoid reusing old data in
+    // the cache after the session storage has been modified by another renderer
+    // process.
+    CoreInitializer::GetInstance().EvictSessionStorageCachedData(
+        GetDocument()->GetPage());
+  }
   if (!Client())
     return false;
 
@@ -823,9 +830,8 @@ bool LocalFrame::DetachImpl(FrameDetachType type) {
     content_capture_manager_ = nullptr;
   }
 
-  if (text_fragment_handler_) {
-    text_fragment_handler_->GetTextFragmentSelectorGenerator()->Detach();
-  }
+  if (text_fragment_handler_)
+    text_fragment_handler_->DidDetachDocumentOrFrame();
 
   GetBackForwardCacheBufferLimitTracker().DidRemoveFrameFromBackForwardCache(
       total_bytes_buffered_while_in_back_forward_cache_);
@@ -862,6 +868,10 @@ void LocalFrame::CheckCompleted() {
 
 BackgroundColorPaintImageGenerator*
 LocalFrame::GetBackgroundColorPaintImageGenerator() {
+  // There is no compositor thread in certain testing environment, and we should
+  // not composite background color animation in those cases.
+  if (!Thread::CompositorThread())
+    return nullptr;
   LocalFrame& local_root = LocalFrameRoot();
   // One background color paint worklet per root frame.
   if (!local_root.background_color_paint_image_generator_) {
@@ -2389,13 +2399,45 @@ bool LocalFrame::IsProvisional() const {
   return Owner()->ContentFrame() != this;
 }
 
-void LocalFrame::SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) {
-  DCHECK(!IsMainFrame());
+bool LocalFrame::IsAdSubframe() const {
+  return ad_evidence_ && ad_evidence_->IndicatesAdSubframe();
+}
 
-  if (ad_frame_type_ == ad_frame_type)
+bool LocalFrame::IsAdRoot() const {
+  return IsAdSubframe() && !ad_evidence_->parent_is_ad();
+}
+
+void LocalFrame::SetAdEvidence(const blink::FrameAdEvidence& ad_evidence) {
+  DCHECK(!IsMainFrame());
+  DCHECK(ad_evidence.is_complete());
+
+  // Once set, `is_subframe_created_by_ad_script_` should not be unset.
+  DCHECK(!is_subframe_created_by_ad_script_ ||
+         ad_evidence.created_by_ad_script() ==
+             blink::mojom::FrameCreationStackEvidence::kCreatedByAdScript);
+  is_subframe_created_by_ad_script_ =
+      ad_evidence.created_by_ad_script() ==
+      blink::mojom::FrameCreationStackEvidence::kCreatedByAdScript;
+
+  if (ad_evidence_.has_value()) {
+    // Check that replacing with the new ad evidence doesn't violate invariants.
+    // The parent frame's ad status should not change as it can only change due
+    // to a cross-document commit, which would remove this child frame.
+    DCHECK_EQ(ad_evidence_->parent_is_ad(), ad_evidence.parent_is_ad());
+
+    // The most restrictive filter list result cannot become less restrictive,
+    // by definition.
+    DCHECK_LE(ad_evidence_->most_restrictive_filter_list_result(),
+              ad_evidence.most_restrictive_filter_list_result());
+  }
+
+  bool was_ad_subframe = IsAdSubframe();
+  bool is_ad_subframe = ad_evidence.IndicatesAdSubframe();
+  ad_evidence_ = ad_evidence;
+
+  if (was_ad_subframe == is_ad_subframe)
     return;
 
-  bool is_ad_subframe = ad_frame_type != blink::mojom::AdFrameType::kNonAd;
   if (auto* document = GetDocument()) {
     // TODO(fdoray): It is possible for the document not to be installed when
     // this method is called. Consider inheriting frame bit in the graph instead
@@ -2405,7 +2447,6 @@ void LocalFrame::SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) {
       document_resource_coordinator->SetIsAdFrame(is_ad_subframe);
   }
 
-  ad_frame_type_ = ad_frame_type;
   UpdateAdHighlight();
   frame_scheduler_->SetIsAdFrame(is_ad_subframe);
 
@@ -2415,21 +2456,6 @@ void LocalFrame::SetIsAdSubframe(blink::mojom::AdFrameType ad_frame_type) {
   } else {
     InstanceCounters::DecrementCounter(InstanceCounters::kAdSubframeCounter);
   }
-}
-
-void LocalFrame::SetAdEvidence(const blink::FrameAdEvidence& ad_evidence) {
-  DCHECK(!IsMainFrame());
-
-  if (ad_evidence_.has_value()) {
-    // Check that replacing with the new ad evidence doesn't violate invariants.
-    DCHECK_EQ(ad_evidence_->parent_is_ad(), ad_evidence.parent_is_ad());
-    DCHECK_LE(ad_evidence_->is_complete(), ad_evidence.is_complete());
-    DCHECK_LE(ad_evidence_->created_by_ad_script(),
-              ad_evidence.created_by_ad_script());
-    DCHECK_LE(ad_evidence_->most_restrictive_filter_list_result(),
-              ad_evidence.most_restrictive_filter_list_result());
-  }
-  ad_evidence_ = ad_evidence;
 }
 
 void LocalFrame::UpdateAdHighlight() {
@@ -2690,6 +2716,11 @@ void LocalFrame::LoadJavaScriptURL(const KURL& url) {
       &DOMWrapperWorld::MainWorld());
 }
 
+void LocalFrame::SetEvictCachedSessionStorageOnFreezeOrUnload() {
+  DCHECK(RuntimeEnabledFeatures::Prerender2Enabled());
+  evict_cached_session_storage_on_freeze_or_unload_ = true;
+}
+
 LoaderFreezeMode LocalFrame::GetLoaderFreezeMode() {
   if (GetPage()->GetPageScheduler()->IsInBackForwardCache() &&
       IsInflightNetworkRequestBackForwardCacheSupportEnabled()) {
@@ -2704,6 +2735,13 @@ void LocalFrame::DidFreeze() {
   TRACE_EVENT0("blink", "LocalFrame::DidFreeze");
   DCHECK(IsAttached());
   GetDocument()->DispatchFreezeEvent();
+  if (evict_cached_session_storage_on_freeze_or_unload_) {
+    // Evicts the cached data of Session Storage to avoid reusing old data in
+    // the cache after the session storage has been modified by another renderer
+    // process.
+    CoreInitializer::GetInstance().EvictSessionStorageCachedData(
+        GetDocument()->GetPage());
+  }
   // DispatchFreezeEvent dispatches JS events, which may detach |this|.
   if (!IsAttached())
     return;
@@ -3855,7 +3893,7 @@ void LocalFrame::MixedContentFound(
       url_before_redirects, had_redirect, std::move(source));
 }
 
-void LocalFrame::ActivateForPrerendering() {
+void LocalFrame::ActivateForPrerendering(base::TimeTicks activation_start) {
   DCHECK(features::IsPrerender2Enabled());
 
   // https://jeremyroman.github.io/alternate-loading-modes/#prerendering-browsing-context-activate
@@ -3865,8 +3903,9 @@ void LocalFrame::ActivateForPrerendering() {
   // networking task source, given bc's active window, to perform the following
   // steps:"
   GetTaskRunner(TaskType::kNetworking)
-      ->PostTask(FROM_HERE, WTF::Bind(&Document::ActivateForPrerendering,
-                                      WrapPersistent(GetDocument())));
+      ->PostTask(FROM_HERE,
+                 WTF::Bind(&Document::ActivateForPrerendering,
+                           WrapPersistent(GetDocument()), activation_start));
 }
 
 void LocalFrame::BindDevToolsAgent(
@@ -4072,13 +4111,6 @@ InputMethodController& LocalFrame::GetInputMethodController() const {
 TextSuggestionController& LocalFrame::GetTextSuggestionController() const {
   DCHECK(DomWindow());
   return DomWindow()->GetTextSuggestionController();
-}
-
-TextFragmentSelectorGenerator* LocalFrame::GetTextFragmentSelectorGenerator()
-    const {
-  if (!text_fragment_handler_)
-    return nullptr;
-  return text_fragment_handler_->GetTextFragmentSelectorGenerator();
 }
 
 }  // namespace blink

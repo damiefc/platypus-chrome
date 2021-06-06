@@ -17,13 +17,13 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/cxx17_backports.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/address_family.h"
@@ -304,7 +304,8 @@ MockWriteResult StaticSocketDataProvider::OnWrite(const std::string& data) {
     return MockWriteResult(SYNCHRONOUS, data.length());
   }
   EXPECT_FALSE(helper_.AllWriteDataConsumed())
-      << "No more mock data to match write:\n"
+      << "No more mock data to match write:\nFormatted write data:\n"
+      << printer_->PrintWrite(data) << "Raw write data:\n"
       << HexDump(data);
   if (helper_.AllWriteDataConsumed()) {
     return MockWriteResult(SYNCHRONOUS, ERR_UNEXPECTED);
@@ -496,7 +497,8 @@ MockRead SequencedSocketData::OnRead() {
 MockWriteResult SequencedSocketData::OnWrite(const std::string& data) {
   CHECK_EQ(IDLE, write_state_);
   CHECK(!helper_.AllWriteDataConsumed())
-      << "\nNo more mock data to match write:\n"
+      << "\nNo more mock data to match write:\nFormatted write data:\n"
+      << printer_->PrintWrite(data) << "Raw write data:\n"
       << HexDump(data);
 
   NET_TRACE(1, " *** ") << "sequence_number: " << sequence_number_;

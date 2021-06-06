@@ -6,7 +6,8 @@
 
 #include <string>
 
-#include "ash/public/cpp/app_types.h"
+#include "ash/constants/app_types.h"
+#include "ash/public/cpp/app_types_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/pickle.h"
@@ -452,21 +453,16 @@ TEST_F(ChromeDataExchangeDelegateTest, ParseFileSystemSources) {
       guest_os::GuestOsSharePath::GetForProfile(profile());
   guest_os_share_path->RegisterSharedPath(crostini::kCrostiniDefaultVmName,
                                           shared_path);
-  base::Pickle pickle = data_exchange_delegate.CreateClipboardFilenamesPickle(
-      ui::EndpointType::kCrostini,
-      Data("file:///mnt/chromeos/MyFiles/shared/file1\n"
-           "file:///mnt/chromeos/MyFiles/shared/file2"));
-
-  std::unordered_map<std::u16string, std::u16string> m;
-  ui::ReadCustomDataIntoMap(pickle.data(), pickle.size(), &m);
-  EXPECT_EQ(2, m.size());
-  EXPECT_EQ("exo", base::UTF16ToUTF8(m[u"fs/tag"]));
-  EXPECT_EQ(
-      "filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/external/"
-      "Downloads-test%2540example.com-hash/shared/file1\n"
-      "filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/external/"
-      "Downloads-test%2540example.com-hash/shared/file2",
-      base::UTF16ToUTF8(m[u"fs/sources"]));
+  std::u16string urls =
+      u"filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/"
+      "external/Downloads-test%2540example.com-hash/shared/file1\n"
+      "filesystem:chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj/"
+      "external/Downloads-test%2540example.com-hash/shared/file2";
+  base::Pickle pickle;
+  ui::WriteCustomDataToPickle(
+      std::unordered_map<std::u16string, std::u16string>(
+          {{u"fs/tag", u"exo"}, {u"fs/sources", urls}}),
+      &pickle);
 
   ui::DataTransferEndpoint files_app(url::Origin::Create(
       GURL("chrome-extension://hhaomjibdihmijegdhdafkllkbggdgoj")));

@@ -142,6 +142,7 @@ message DeviceReportingProto {
   optional bool report_vpd_info = 24 [default = false];
   optional bool report_system_info = 25 [default = false];
   optional bool report_print_jobs = 26 [default = false];
+  optional bool report_login_logout = 27 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   // If changed, the default value has to be updated in
@@ -1778,6 +1779,15 @@ message DeviceDebugPacketCaptureAllowedProto {
   optional bool allowed = 1;
 }
 
+// Settings that control when a device will reboot. The reboots are
+// recurring. In order to disable scheduled reboots the policy must be
+// removed.
+message DeviceScheduledRebootProto {
+  // This is a JSON string, for details see "DeviceScheduledReboot" in
+  // policy_templates.json.
+  optional string device_scheduled_reboot_settings = 1;
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61, 90;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1935,4 +1945,5 @@ message ChromeDeviceSettingsProto {
       device_allowed_bluetooth_services = 120;
   optional DeviceDebugPacketCaptureAllowedProto
       device_debug_packet_capture_allowed = 121;
+  optional DeviceScheduledRebootProto device_scheduled_reboot = 122;
 }

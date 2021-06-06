@@ -432,7 +432,7 @@ class AppDataLoadWaiter : public KioskAppManagerObserver {
 // Replaces settings urls for KioskSettingsNavigationThrottle.
 class ScopedSettingsPages {
  public:
-  ScopedSettingsPages(
+  explicit ScopedSettingsPages(
       std::vector<KioskSettingsNavigationThrottle::SettingsPage>* pages) {
     KioskSettingsNavigationThrottle::SetSettingPagesForTesting(pages);
   }
@@ -654,8 +654,9 @@ class KioskTest : public OobeBaseTest {
 
     // Check that the app had been informed that it is running in a kiosk
     // session.
-    if (check_launch_data)
-      EXPECT_TRUE(launch_data_check_listener.was_satisfied());
+    if (check_launch_data) {
+      EXPECT_TRUE(launch_data_check_listener.WaitUntilSatisfied());
+    }
   }
 
   void WaitForAppLaunchSuccess() {
@@ -1114,9 +1115,8 @@ IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, DISABLED_LaunchAppUserCancel) {
 IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningCancel) {
   EnableConsumerKioskMode();
 
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Start login screen after configuring auto launch app since the warning
@@ -1137,13 +1137,11 @@ IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningCancel) {
   EXPECT_FALSE(KioskAppManager::Get()->IsAutoLaunchEnabled());
 }
 
-// TODO(crbug.com/1201207): Fix flakiness.
-IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_AutolaunchWarningConfirm) {
+IN_PROC_BROWSER_TEST_F(KioskTest, AutolaunchWarningConfirm) {
   EnableConsumerKioskMode();
 
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Start login screen after configuring auto launch app since the warning
@@ -1174,9 +1172,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_AutolaunchWarningConfirm) {
 }
 
 IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableCancel) {
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Check Kiosk mode status.
@@ -1203,9 +1200,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableCancel) {
 
 IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableConfirmed) {
   // Start UI, find menu entry for this app and launch it.
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Check Kiosk mode status.
@@ -1233,9 +1229,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableConfirmed) {
 }
 
 IN_PROC_BROWSER_TEST_F(KioskTest, KioskEnableAfter2ndSigninScreen) {
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Check Kiosk mode status.
@@ -1303,9 +1298,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, NoConsumerAutoLaunchWhenUntrusted) {
   EnableConsumerKioskMode();
 
   // Wait for and confirm the auto-launch warning.
-  chromeos::WizardController::SkipPostLoginScreensForTesting();
-  chromeos::WizardController* wizard_controller =
-      chromeos::WizardController::default_controller();
+  WizardController::SkipPostLoginScreensForTesting();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
   wizard_controller->AdvanceToScreen(WelcomeView::kScreenId);
   ReloadAutolaunchKioskApps();
@@ -2779,7 +2773,7 @@ IN_PROC_BROWSER_TEST_F(KioskHiddenWebUITest, AutolaunchWarning) {
   // Set kiosk app to autolaunch.
   EnableConsumerKioskMode();
   WizardController::SkipPostLoginScreensForTesting();
-  WizardController* wizard_controller = WizardController::default_controller();
+  auto* wizard_controller = WizardController::default_controller();
   ASSERT_TRUE(wizard_controller);
 
   // Start login screen after configuring auto launch app since the warning

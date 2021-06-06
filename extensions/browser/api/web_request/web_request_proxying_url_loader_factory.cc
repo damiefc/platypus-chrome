@@ -203,7 +203,15 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
       factory_->IsForServiceWorkerScript(), factory_->navigation_id_,
       ukm_source_id_));
 
+  // The value of `has_any_extra_headers_listeners_` is constant for the
+  // lifetime of InProgressRequest and determines whether the request is made
+  // with the network::mojom::kURLLoadOptionUseHeaderClient option. To prevent
+  // the redirected request from getting into a state where
+  // `current_request_uses_header_client_` is true but the request is not made
+  // with the kURLLoadOptionUseHeaderClient option, also check
+  // `has_any_extra_headers_listeners_` here. See http://crbug.com/1074282.
   current_request_uses_header_client_ =
+      has_any_extra_headers_listeners_ &&
       factory_->url_loader_header_client_receiver_.is_bound() &&
       (request_.url.SchemeIsHTTPOrHTTPS() ||
        request_.url.SchemeIs(url::kUrnScheme)) &&
@@ -526,7 +534,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
   header_client_receiver_.reset();
   target_loader_.reset();
 
-  constexpr int kInternalRedirectStatusCode = 307;
+  constexpr int kInternalRedirectStatusCode = net::HTTP_TEMPORARY_REDIRECT;
 
   net::RedirectInfo redirect_info =
       CreateRedirectInfo(request_, redirect_url_, kInternalRedirectStatusCode,
@@ -667,7 +675,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
   }
 
   // From here the lifecycle of this request is driven by subsequent events on
-  // either |proxy_loader_binding_|, |proxy_client_binding_|, or
+  // either |proxied_loader_receiver_|, |proxied_client_receiver_|, or
   // |header_client_receiver_|.
 }
 
@@ -963,16 +971,15 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
   override_headers_ = nullptr;
   redirect_url_ = GURL();
 
-  net::CompletionRepeatingCallback copyable_callback =
-      base::AdaptCallbackForRepeating(std::move(continuation));
+  auto callback_pair = base::SplitOnceCallback(std::move(continuation));
   if (request_.url.SchemeIsHTTPOrHTTPS() ||
       request_.url.SchemeIs(url::kUrnScheme)) {
     DCHECK(info_.has_value());
     int result =
         ExtensionWebRequestEventRouter::GetInstance()->OnHeadersReceived(
-            factory_->browser_context_, &info_.value(), copyable_callback,
-            current_response_->headers.get(), &override_headers_,
-            &redirect_url_);
+            factory_->browser_context_, &info_.value(),
+            std::move(callback_pair.first), current_response_->headers.get(),
+            &override_headers_, &redirect_url_);
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       const int status_code = current_response_->headers
                                   ? current_response_->headers->response_code()
@@ -1006,7 +1013,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
     DCHECK_EQ(net::OK, result);
   }
 
-  copyable_callback.Run(net::OK);
+  std::move(callback_pair.second).Run(net::OK);
 }
 void WebRequestProxyingURLLoaderFactory::InProgressRequest::OnRequestError(
     const network::URLLoaderCompletionStatus& status,

@@ -53,6 +53,8 @@
 #include "chrome/browser/ui/startup/startup_tab_provider.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -106,12 +108,10 @@ namespace {
 bool ShouldRestoreApps(bool is_post_restart) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
-#elif defined(OS_MAC) || defined(OS_LINUX) || defined(OS_WIN)
+#elif defined(OS_MAC)
   // TODO(stahon@microsoft.com)
   // Even when app restores are enabled on mac, don't actually restore apps
   // because they do not restore correctly. http://crbug.com/1194201
-  // On windows and linux, apps can be restored without the proper app frame,
-  // disabling restorations for now. http://crbug.com/1199109
   return false;
 #else
   return is_post_restart;
@@ -637,13 +637,21 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     PrefService* local_state = g_browser_process->local_state();
-    if (local_state &&
-        !local_state->GetBoolean(lacros_prefs::kShowedExperimentalBannerPref)) {
-      LacrosStartupInfoBarDelegate::Create(infobar_manager);
+    if (local_state) {
+      // We show the banner if it's never shown before.
+      bool should_show_banner =
+          !local_state->GetBoolean(lacros_prefs::kShowedExperimentalBannerPref);
+      // If Lacros is not the primary browser, we always show the banner.
+      should_show_banner |= !chromeos::LacrosService::Get()
+                                 ->init_params()
+                                 ->standalone_browser_is_primary;
 
-      // Mark the pref as shown, so that we don't show the banner again.
-      local_state->SetBoolean(lacros_prefs::kShowedExperimentalBannerPref,
-                              true);
+      if (should_show_banner) {
+        LacrosStartupInfoBarDelegate::Create(infobar_manager);
+
+        local_state->SetBoolean(lacros_prefs::kShowedExperimentalBannerPref,
+                                true);
+      }
     }
 #endif
 

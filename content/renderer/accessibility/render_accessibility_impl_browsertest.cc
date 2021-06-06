@@ -311,7 +311,7 @@ class RenderAccessibilityImplTest : public RenderViewTest {
   }
 
   RenderFrameImpl* frame() {
-    return static_cast<RenderFrameImpl*>(view()->GetMainRenderFrame());
+    return static_cast<RenderFrameImpl*>(RenderViewTest::GetMainRenderFrame());
   }
 
   IPC::TestSink* sink() { return sink_; }
@@ -432,7 +432,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kChildrenChanged));
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
   {

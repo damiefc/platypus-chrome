@@ -681,6 +681,7 @@
 <translation id="1706625117072057435">झूम स्तर</translation>
 <translation id="1708338024780164500">(निष्क्रिय)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (आयडी: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">प्रायोगिक ब्राउझर! डेटा गमावला जाऊ शकतो किंवा गोपनीयता अथवा सुरक्षा धोक्यात येऊ शकते. कृपया अशा प्रकारे समस्यांची तक्रार करा: मदत &gt; "समस्येची तक्रार करा...".</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (मूळ)</translation>
 <translation id="1709217939274742847">ऑथेंटिकेशनसाठी वापरण्याकरिता तिकीट निवडा <ph name="LINK_BEGIN" />अधिक जाणून घ्या<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">शेअर करू शकत नाही</translation>
@@ -698,7 +699,7 @@
 <translation id="1725562816265788801">टॅब स्क्रोल करणे</translation>
 <translation id="1726100011689679555">नाव सर्व्हर</translation>
 <translation id="1727662110063605623">Parallels Desktop किंवा Linux शी <ph name="USB_DEVICE_NAME" /> कनेक्ट करण्यासाठी सेटिंग्ज उघडा</translation>
-<translation id="1729533290416704613">तुम्ही ओम्निबॉक्समधून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
+<translation id="1729533290416704613">तुम्ही ओम्निबॉक्समधून शोध घेता तेव्हा कोणते पृष्ठ दर्शविले जाते हेदेखील हे नियंत्रित करते.</translation>
 <translation id="1730917990259790240"><ph name="BEGIN_PARAGRAPH1" />ॲप्स काढून टाकण्यासाठी, सेटिंग्ज &gt; Google Play स्टोअर &gt; Androआयडी प्राधान्ये व्यवस्थापित करा &gt; ॲप्स किंवा अ‍ॅप्लिकेशन व्यवस्थापक यावर जा. नंतर तुम्हाला जे ॲप अनइंस्टॉल करायचे आहे त्यावर टॅप करा (ॲप शोधण्‍यासाठी तुम्हाला कदाचित उजवीकडे किंवा डावीकडे स्वाइप करावे लागेल). यानंतर अनइंस्टॉल करा किंवा बंद करा यावर टॅप करा.<ph name="END_PARAGRAPH1" /></translation>
 <translation id="1731911755844941020">विनंती पाठवत आहे...</translation>
 <translation id="1733064249834771892">फॉंट</translation>
@@ -1099,6 +1100,7 @@
 <translation id="2144557304298909478">Linux Android अ‍ॅप डेव्हलपमेंट</translation>
 <translation id="2146263598007866206">तुमचा वेळ वाचवण्यासाठी साइट संबंधित फाइल आपोआप एकत्रितपणे डाउनलोड करू शकतात</translation>
 <translation id="2147151613919729065">अतिथी मोड इतिहास साफ करण्यासाठी, सर्व अतिथी विंडो बंद करा.</translation>
+<translation id="2147218225094845757">साइड पॅनल लपवा</translation>
 <translation id="2148219725039824548">शेअर माउंट करताना एरर आली. नेटवर्कमध्ये नमूद केलेला शेअर आढळला नाही.</translation>
 <translation id="2148756636027685713">स्वरुपण समाप्त</translation>
 <translation id="2148892889047469596">टॅब कास्ट करा</translation>
@@ -2541,7 +2543,7 @@
 <translation id="370415077757856453">JavaScript ब्लॉक केले</translation>
 <translation id="3704331259350077894">ऑपरेशनची समाप्ती</translation>
 <translation id="3705722231355495246">-</translation>
-<translation id="3706463572498736864">प्रति पत्रक पेज</translation>
+<translation id="3706463572498736864">प्रति शीट पेज</translation>
 <translation id="370649949373421643">Wi-fi सक्षम करा</translation>
 <translation id="370665806235115550">लोड करीत आहे...</translation>
 <translation id="3707163604290651814">सध्या <ph name="NAME" /> म्हणून साइन इन केले</translation>
@@ -2581,6 +2583,7 @@
 <translation id="3742666961763734085">त्या नावाचे संस्थात्मक एकक शोधू शकत नाही. कृपया पुन्हा प्रयत्न करा.</translation>
 <translation id="3744111561329211289">पार्श्वभूमी सिंक</translation>
 <translation id="3747077776423672805">ॲप्स काढून टाकण्यासाठी, सेटिंग्ज &gt; Google Play स्टोअर &gt; Android प्राधान्ये व्यवस्थापित करा &gt; ॲप्स किंवा अ‍ॅप्लिकेशन व्यवस्थापक वर जा. नंतर तुम्हाला अनइंस्टॉल करायच्या असलेल्या ॲपवर टॅप करा (ॲप शोधण्‍यासाठी तुम्हाला कदाचित उजवीकडे किंवा डावीकडे स्वाइप करावे लागेल). यानंतर अनइंस्टॉल करा किंंवा बंद करा वर टॅप करा.</translation>
+<translation id="3747220812138541072">तुम्ही टाइप करत असताना दिसणाऱ्या लिखाणाच्या इनलाइन सूचना दाखवा</translation>
 <translation id="3748706263662799310">एक दोष नोंदवा</translation>
 <translation id="3752582316358263300">ठीक आहे...</translation>
 <translation id="3753033997400164841">एकदा स्टोअर करा. कुठेही वापरा</translation>
@@ -3175,6 +3178,7 @@
 <translation id="4410545552906060960">तुमचे डिव्हाइस अनलॉक करण्यासाठी पासवर्डऐवजी नंबर (पिन) वापरा. तुमचा पिन नंतर सेट करण्यासाठी, सेटिंग्जवर जा.</translation>
 <translation id="4411578466613447185">कोड साइनर</translation>
 <translation id="4412698727486357573">मदत केंद्र</translation>
+<translation id="4413088271097062326">तुम्हाला कोणते अ‍ॅप्लिकेशन वापरायचे आहे?</translation>
 <translation id="44141919652824029">"<ph name="APP_NAME" />" ला संलग्न केलेल्या USB डिव्हाइसची सूची मिळवण्याची अनुमती द्यायची?</translation>
 <translation id="4414232939543644979">नवीन &amp;गुप्त विंडो</translation>
 <translation id="4414515549596849729">कुकी आणि साइट डेटा</translation>
@@ -3268,6 +3272,7 @@
 <translation id="4510614391273086606">Linux फाइल आणि ॲप्स या गोष्टी बॅकअप घेतला होता त्या स्थितीमध्ये रीस्टोअर केल्या जात आहेत.</translation>
 <translation id="451102079304155829">कार्ट</translation>
 <translation id="4513275008300099962">विंडो नियंत्रणे ओव्हरले बंद करा</translation>
+<translation id="4513872120116766993">अंदाजानुसार लिखाण</translation>
 <translation id="4513946894732546136">Feedback</translation>
 <translation id="451407183922382411"><ph name="COMPANY_NAME" />ने समर्थित करा</translation>
 <translation id="4514610446763173167">प्ले करण्यासाठी किंवा थांबवण्यासाठी व्हिडिओ टॉगल करा</translation>
@@ -3947,6 +3952,7 @@
 <translation id="5269977353971873915">प्रिंट अयशस्वी</translation>
 <translation id="5275352920323889391">कुत्रा</translation>
 <translation id="527605982717517565"><ph name="HOST" /> वर JavaScript ला नेहमी परवानगी द्या</translation>
+<translation id="5277127016695466621">साइड पॅनल दाखवा</translation>
 <translation id="5278823018825269962">स्थिती आयडी</translation>
 <translation id="5280064835262749532"><ph name="SHARE_PATH" /> ची क्रेडेंशिअल अपडेट करा.</translation>
 <translation id="5280243692621919988">तुम्ही सर्व विंडो बंद करता तेव्हा कुकी आणि साइट डेटा साफ करा</translation>
@@ -4266,7 +4272,7 @@
 <translation id="5623842676595125836">लॉग</translation>
 <translation id="5624120631404540903">पासवर्ड व्यवस्थापित करा</translation>
 <translation id="5626134646977739690">नाव:</translation>
-<translation id="5627086634964711283">तुम्ही होम बटण क्लिक करता तेव्हा कोणते पेज दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
+<translation id="5627086634964711283">तुम्ही होम बटण क्लिक करता तेव्हा कोणते पेज दर्शविले जाते हेदेखील हे नियंत्रित करते.</translation>
 <translation id="5627676517703583263">Chromeसह स्मार्ट ब्राउझ करा</translation>
 <translation id="5627832140542566187">डिस्प्ले ओरिएंटेशन</translation>
 <translation id="562935524653278697">तुमच्या ॲडमिनिस्ट्रेटरने तुमचे बुकमार्क, इतिहास, संंकेतशब्द आणि अन्य सेटिंग्ज सिंक करणे अक्षम केले आहे.</translation>
@@ -4431,6 +4437,7 @@
 <translation id="5826395379250998812">तुमचे <ph name="DEVICE_TYPE" /> तुमच्या फोनसह कनेक्ट करा. <ph name="LINK_BEGIN" />अधिक जाणून घ्या<ph name="LINK_END" /></translation>
 <translation id="5826993284769733527">अर्धपारदर्शक</translation>
 <translation id="5827266244928330802">Safari</translation>
+<translation id="5827733057563115968">पुढील शब्दांचा अंदाज</translation>
 <translation id="5828545842856466741">प्रोफाइल जोडा…</translation>
 <translation id="5828633471261496623">प्रिंट करत आहे...</translation>
 <translation id="5830720307094128296">पेज या फॉरमॅटमध्ये सेव्ह करा...</translation>
@@ -4562,7 +4569,7 @@
 <translation id="5963117322306686970">टॅबचा एकत्र गट करण्यासाठी, टॅबवर राइट क्लिक करा</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> सर्वोच्च)</translation>
 <translation id="5964113968897211042">{COUNT,plural, =0{Open all in new window}=1{नवीन विंडोमध्ये उघडा}other{सर्व ({COUNT}) नवीन विंडोमध्ये उघडा}}</translation>
-<translation id="5965661248935608907">तुम्ही होम बटण क्लिक करता किंवा ओम्निबॉक्समधून शोध घेता तेव्हा कोणते पेज दर्शविले जाते हे देखील हे नियंत्रित करते.</translation>
+<translation id="5965661248935608907">तुम्ही होम बटण क्लिक करता किंवा ओम्निबॉक्समधून शोध घेता तेव्हा कोणते पेज दर्शविले जाते हेदेखील हे नियंत्रित करते.</translation>
 <translation id="5969419185858894314"><ph name="ORIGIN" /> <ph name="FOLDERNAME" /> मधील फाइल पाहू शकते</translation>
 <translation id="5971037678316050792">ब्लूटूथ अडाप्टर स्थिती आणि पेअरिंग नियंत्रित करा</translation>
 <translation id="597235323114979258">आणखी गंतव्यस्थाने पहा</translation>
@@ -6127,7 +6134,6 @@
 <translation id="7685049629764448582">JavaScript मेमरी</translation>
 <translation id="7685087414635069102">पिन आवश्यक</translation>
 <translation id="768549422429443215">भाषा जोडा किंवा सूचीचा क्रम पुन्हा लावा.</translation>
-<translation id="7686424868232681412">Lacros हा प्रायोगिक ब्राउझर आहे. कृपया पुढील मार्ग वापरून समस्येची तक्रार करा: मदत &gt; "समस्येची तक्रार करा...".</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">नवीन पासवर्ड कन्फर्म करा</translation>
 <translation id="7690378713476594306">सूचीतून निवडा</translation>
@@ -6300,6 +6306,7 @@ https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-featu
 <translation id="78526636422538552">आणखी Google खाती जोडणे बंद केले आहे</translation>
 <translation id="7853747251428735">अधिक साध&amp;ने</translation>
 <translation id="7855678561139483478">टॅब नवीन विंडोवर हलवा</translation>
+<translation id="7857093393627376423">मजकुराबाबत सूचना</translation>
 <translation id="7857117644404132472">एक्सेप्शन जोडा</translation>
 <translation id="7857949311770343000">तुम्ही अपेक्षा करत होता ते हे नवीन पृष्ठ आहे?</translation>
 <translation id="7858328180167661092"><ph name="APP_NAME" /> (Windows)</translation>

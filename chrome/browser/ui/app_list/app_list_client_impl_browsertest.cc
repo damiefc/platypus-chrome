@@ -240,6 +240,48 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ActivateSelfDestroyApp) {
   client->ActivateItem(/*profile_id=*/0, item->id(), /*event_flags=*/0);
 }
 
+// Verifies that the first app activation by a new user is recorded.
+IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest,
+                       AppActivationShouldBeRecorded) {
+  AppListClientImpl* client = AppListClientImpl::GetInstance();
+  client->UpdateProfile();
+
+  // Emulate that the current user is new.
+  client->InitializeAsIfNewUserLoginForTest();
+
+  AppListModelUpdater* model_updater = test::GetModelUpdater(client);
+
+  // Add an app item.
+  const std::string app_id("fake_id");
+  model_updater->AddItem(std::make_unique<ChromeAppListItem>(
+      browser()->profile(), app_id, model_updater));
+  ChromeAppListItem* item = model_updater->FindItem(app_id);
+  ASSERT_TRUE(item);
+
+  base::HistogramTester histogram_tester;
+
+  // Verify that app activation is recorded.
+  client->ShowAppList();
+  client->ActivateItem(/*profile_id=*/0, item->id(), /*event_flags=*/0);
+  histogram_tester.ExpectBucketCount(
+      "Apps.FirstLauncherActionByNewUsers",
+      static_cast<int>(ash::AppListLaunchedFrom::kLaunchedFromGrid),
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectTotalCount(
+      "Apps.TimeBetweenNewUserSessionActivationAndFirstLauncherAction",
+      /*expected_bucket_count=*/1);
+
+  // Verify that only the first app activation is recorded.
+  client->ActivateItem(/*profile_id=*/0, item->id(), /*event_flags=*/0);
+  histogram_tester.ExpectBucketCount(
+      "Apps.FirstLauncherActionByNewUsers",
+      static_cast<int>(ash::AppListLaunchedFrom::kLaunchedFromGrid),
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectTotalCount(
+      "Apps.TimeBetweenNewUserSessionActivationAndFirstLauncherAction",
+      /*expected_bucket_count=*/1);
+}
+
 // Test that all the items in the context menu for a hosted app have valid
 // labels.
 IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowContextMenu) {
@@ -282,6 +324,9 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, ShowContextMenu) {
 IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, OpenSearchResult) {
   AppListClientImpl* client = AppListClientImpl::GetInstance();
   ASSERT_TRUE(client);
+
+  // Emulate that the current user is new.
+  client->InitializeAsIfNewUserLoginForTest();
 
   // Associate |client| with the current profile.
   client->UpdateProfile();
@@ -327,6 +372,15 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplBrowserTest, OpenSearchResult) {
       "Apps.OpenedAppListSearchResultFromSearchBox."
       "ExistNonAppBrowserWindowOpenAndNotMinimized",
       static_cast<int>(ash::AppListSearchResultType::kInstalledApp),
+      /*expected_bucket_count=*/1);
+
+  // Verify that opening the app result is recorded.
+  histogram_tester.ExpectBucketCount(
+      "Apps.FirstLauncherActionByNewUsers",
+      static_cast<int>(ash::AppListLaunchedFrom::kLaunchedFromSearchBox),
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectTotalCount(
+      "Apps.TimeBetweenNewUserSessionActivationAndFirstLauncherAction",
       /*expected_bucket_count=*/1);
 
   // App list should be dismissed.
@@ -613,10 +667,17 @@ IN_PROC_BROWSER_TEST_F(
     DurationBetweenSeesionActivationAndFirstLauncherShowingBrowserTest,
     MetricNotRecordedOnRegisteredAccount) {
   chromeos::UserAddingScreen::Get()->Start();
+
+  // Verify that the launcher usage state is recorded when switching accounts.
+  base::HistogramTester tester;
   AddUser(registered_user_id_);
+  tester.ExpectBucketCount(
+      "Apps.AppListUsageByNewUsers",
+      static_cast<int>(AppListClientImpl::AppListUsageStateByNewUsers::
+                           kNotUsedBeforeSwitchingAccounts),
+      1);
 
   // Verify that the metric is not recorded.
-  base::HistogramTester tester;
   ShowAppListAndVerify();
   tester.ExpectTotalCount(
       "Apps.TimeDurationBetweenNewUserSessionActivationAndFirstLauncherOpening",
@@ -640,4 +701,40 @@ IN_PROC_BROWSER_TEST_F(
   tester.ExpectTotalCount(
       "Apps.TimeDurationBetweenNewUserSessionActivationAndFirstLauncherOpening",
       0);
+}
+
+class DurationBetweenSeesionActivationAndFirstLauncherShowingShutdownTest
+    : public DurationBetweenSeesionActivationAndFirstLauncherShowingBrowserTest {
+ public:
+  DurationBetweenSeesionActivationAndFirstLauncherShowingShutdownTest() =
+      default;
+  ~DurationBetweenSeesionActivationAndFirstLauncherShowingShutdownTest()
+      override = default;
+
+ protected:
+  // DurationBetweenSeesionActivationAndFirstLauncherShowingBrowserTest:
+  void SetUpOnMainThread() override {
+    DurationBetweenSeesionActivationAndFirstLauncherShowingBrowserTest::
+        SetUpOnMainThread();
+    histogram_tester_ = std::make_unique<base::HistogramTester>();
+  }
+
+  void TearDown() override {
+    histogram_tester_->ExpectBucketCount(
+        "Apps.AppListUsageByNewUsers",
+        static_cast<int>(AppListClientImpl::AppListUsageStateByNewUsers::
+                             kNotUsedBeforeDestruction),
+        1);
+    DurationBetweenSeesionActivationAndFirstLauncherShowingBrowserTest::
+        TearDown();
+  }
+
+  std::unique_ptr<base::HistogramTester> histogram_tester_;
+};
+
+// Verify that the launcher usage state is recorded when shutting down.
+IN_PROC_BROWSER_TEST_F(
+    DurationBetweenSeesionActivationAndFirstLauncherShowingShutdownTest,
+    NotUseLauncherBeforeShuttingDown) {
+  // Do nothing. Verify the histogram after the browser process is terminated.
 }

@@ -20,7 +20,6 @@
 #include "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_identity_service_observer_bridge.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
@@ -446,12 +445,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
                       "-stopBrowserStateServiceObservers";
 
   [self reloadData];
-  [self popViewIfSignedOut];
   if (![self authService] -> IsAuthenticated() &&
                                  _dimissAccountDetailsViewControllerBlock) {
     _dimissAccountDetailsViewControllerBlock(/*animated=*/YES);
     _dimissAccountDetailsViewControllerBlock = nil;
   }
+  // Only attempt to pop the top-most view controller once the account list
+  // has been dismissed.
+  [self popViewIfSignedOut];
 }
 
 #pragma mark - Authentication operations

@@ -117,19 +117,11 @@ cr.define('settings', function() {
             r.OS_PEOPLE, mojom.MANAGE_OTHER_PEOPLE_SUBPAGE_PATH,
             Subpage.kManageOtherPeople);
       }
-      r.KERBEROS_ACCOUNTS = createSubpage(
-          r.OS_PEOPLE, mojom.KERBEROS_ACCOUNTS_SUBPAGE_PATH,
-          Subpage.kKerberosAccounts);
     }
 
-    const isKerberosEnabled = loadTimeData.valueExists('isKerberosEnabled') &&
-        loadTimeData.getBoolean('isKerberosEnabled');
-    const isKerberosSettingsSectionEnabled =
-        loadTimeData.valueExists('isKerberosSettingsSectionEnabled') &&
-        loadTimeData.getBoolean('isKerberosSettingsSectionEnabled');
-
     // Kerberos section.
-    if (isKerberosEnabled && isKerberosSettingsSectionEnabled) {
+    if (loadTimeData.valueExists('isKerberosEnabled') &&
+        loadTimeData.getBoolean('isKerberosEnabled')) {
       r.KERBEROS = createSection(
           r.BASIC, mojom.KERBEROS_SECTION_PATH, Section.kKerberos);
       r.KERBEROS_ACCOUNTS_V2 = createSubpage(

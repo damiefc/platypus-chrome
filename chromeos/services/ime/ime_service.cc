@@ -54,12 +54,6 @@ std::string ResolveDownloadPath(const base::FilePath& file) {
 ImeService::ImeService(mojo::PendingReceiver<mojom::ImeService> receiver)
     : receiver_(this, std::move(receiver)),
       main_task_runner_(base::SequencedTaskRunnerHandle::Get()) {
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kSystemLatinPhysicalTyping)) {
-    input_engine_ = std::make_unique<SystemEngine>(this);
-  } else {
-    input_engine_ = std::make_unique<DecoderEngine>(this);
-  }
 }
 
 ImeService::~ImeService() = default;
@@ -80,10 +74,28 @@ void ImeService::ConnectToImeEngine(
     mojo::PendingRemote<mojom::InputChannel> from_engine,
     const std::vector<uint8_t>& extra,
     ConnectToImeEngineCallback callback) {
-  DCHECK(input_engine_);
-  bool bound = input_engine_->BindRequest(
-      ime_spec, std::move(to_engine_request), std::move(from_engine), extra);
-  std::move(callback).Run(bound);
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kSystemLatinPhysicalTyping)) {
+    auto system_engine = std::make_unique<SystemEngine>(this);
+    bool bound = system_engine->BindRequest(
+        ime_spec, std::move(to_engine_request), std::move(from_engine), extra);
+    input_engine_ = std::move(system_engine);
+    std::move(callback).Run(bound);
+  } else {
+    auto decoder_engine = std::make_unique<DecoderEngine>(this);
+    bool bound = decoder_engine->BindRequest(
+        ime_spec, std::move(to_engine_request), std::move(from_engine), extra);
+    input_engine_ = std::move(decoder_engine);
+    std::move(callback).Run(bound);
+  }
+}
+
+void ImeService::ConnectToInputMethod(
+    const std::string& ime_spec,
+    mojo::PendingReceiver<mojom::InputChannel> to_engine,
+    ConnectToInputMethodCallback callback) {
+  input_engine_ = InputEngine::Create(ime_spec, std::move(to_engine));
+  std::move(callback).Run(/*bound=*/input_engine_ != nullptr);
 }
 
 const char* ImeService::GetImeBundleDir() {

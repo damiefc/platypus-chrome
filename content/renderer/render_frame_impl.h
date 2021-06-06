@@ -27,6 +27,7 @@
 #include "base/observer_list.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
+#include "base/timer/timer.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
@@ -322,8 +323,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-  void ScriptedPrint(bool user_initiated);
-
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
 
@@ -548,6 +547,8 @@ class CONTENT_EXPORT RenderFrameImpl
                                        bool is_synchronously_committed,
                                        bool is_history_api_navigation,
                                        bool is_client_redirect) override;
+  void WillFreezePage() override;
+  void DidOpenDocumentInputStream(const blink::WebURL& url) override;
   void DidSetPageLifecycleState() override;
   void DidUpdateCurrentHistoryItem() override;
   base::UnguessableToken GetDevToolsFrameToken() override;
@@ -634,6 +635,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void SetUpSharedMemoryForSmoothness(
       base::ReadOnlySharedMemoryRegion shared_memory) override;
   blink::WebURL LastCommittedUrlForUKM() override;
+  void ScriptedPrint() override;
 
   // Binds to the MHTML file generation service in the browser.
   void BindMhtmlFileWriter(
@@ -717,6 +719,10 @@ class CONTENT_EXPORT RenderFrameImpl
 
   url::Origin GetSecurityOriginOfTopFrame();
 
+  void set_send_content_state_immediately(bool value) {
+    send_content_state_immediately_ = value;
+  }
+
  protected:
   explicit RenderFrameImpl(CreateParams params);
 
@@ -736,6 +742,7 @@ class CONTENT_EXPORT RenderFrameImpl
                            TestOverlayRoutingTokenSendsLater);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameImplTest,
                            TestOverlayRoutingTokenSendsNow);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameImplTest, SendUpdateCancelsPending);
 
   // Similar to base::AutoReset, but skips restoration of the original value if
   // |this| is already destroyed.
@@ -1015,7 +1022,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // implemented later.
   // TODO(crbug.com/1110744): Support unload-in-commit.
   void SetOldPageLifecycleStateFromNewPageCommitIfNeeded(
-      const mojom::OldPageInfo* old_page_info);
+      const mojom::OldPageInfo* old_page_info,
+      const GURL& new_page_url);
 
   // Updates the state when asked to commit a history navigation.  Sets
   // |item_for_history_navigation| and |load_type| to the appropriate values for
@@ -1051,6 +1059,10 @@ class CONTENT_EXPORT RenderFrameImpl
   void AddMessageToConsoleImpl(blink::mojom::ConsoleMessageLevel level,
                                const std::string& message,
                                bool discard_duplicates);
+
+  // Start a delayed timer to update the frame sync state to the browser.
+  // Debounces many updates in quick succession.
+  void StartDelayedSyncTimer();
 
   // Stores the WebLocalFrame we are associated with.  This is null from the
   // constructor until BindToFrame() is called, and it is null after
@@ -1396,6 +1408,14 @@ class CONTENT_EXPORT RenderFrameImpl
 
   NavigationCommitState navigation_commit_state_ =
       NavigationCommitState::kInitialEmptyDocument;
+
+  // Timer used to delay the updating of frame state.
+  base::OneShotTimer delayed_state_sync_timer_;
+
+  // Whether content state (such as form state, scroll position and page
+  // contents) should be sent to the browser immediately. This is normally
+  // false, but set to true by some tests.
+  bool send_content_state_immediately_ = false;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_{this};
 

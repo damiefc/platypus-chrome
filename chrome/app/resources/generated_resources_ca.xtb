@@ -671,6 +671,7 @@
 <translation id="1706625117072057435">Nivells de zoom</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (identificador: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Aquest és un navegador experimental. És possible que es perdin dades o que es posin en perill la privadesa i seguretat. Informa de qualsevol problema des d'Ajuda &gt; Informa d'un problema...</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (nativa)</translation>
 <translation id="1709217939274742847">Tria un tiquet per autenticar-te. <ph name="LINK_BEGIN" />Més informació<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">No es pot compartir</translation>
@@ -1088,6 +1089,7 @@ Pots gestionar la configuració d'aquest compte instal·lant l'aplicació Family
 <translation id="2144557304298909478">Desenvolupament d'aplicacions d'Android a Linux</translation>
 <translation id="2146263598007866206">És possible que els llocs web baixin automàticament fitxers relacionats en grup per estalviar-te temps</translation>
 <translation id="2147151613919729065">Per esborrar l'historial del mode de convidat, tanca totes les finestres de convidat.</translation>
+<translation id="2147218225094845757">Amaga el tauler lateral</translation>
 <translation id="2148219725039824548">S'ha produït un error en activar l'ús compartit especificat perquè no s'ha trobat a la xarxa.</translation>
 <translation id="2148756636027685713">Format finalitzat</translation>
 <translation id="2148892889047469596">Emet la pestanya</translation>
@@ -1838,7 +1840,7 @@ i Ctrl+Alt+disminueix la brillantor per reduir.</translation>
 <translation id="2942279350258725020">Missatges Android</translation>
 <translation id="2942560570858569904">S'està esperant...</translation>
 <translation id="2942581856830209953">Personalitza aquesta pàgina</translation>
-<translation id="2944060181911631861">Envia dades d'ús i de diagnòstic. Ajuda a millorar la teva experiència a Android enviant automàticament a Google dades de diagnòstic, del dispositiu i d''ús d'aplicacions. Aquestes dades ajudaran a millorar l'estabilitat del sistema i de les aplicacions, entre altres característiques. Una part de les dades agregades també serà útil per a les aplicacions i per als partners de Google, com ara els desenvolupadors d'Android. Si tens activada l'opció Activitat al web i en aplicacions addicional, és possible que aquestes dades es desin al teu Compte de Google. <ph name="BEGIN_LINK1" />Més informació<ph name="END_LINK1" /></translation>
+<translation id="2944060181911631861">Envia dades d'ús i de diagnòstic. Ajuda a millorar la teva experiència a Android enviant automàticament a Google dades de diagnòstic, del dispositiu i d'ús d'aplicacions. Aquestes dades ajudaran a millorar l'estabilitat del sistema i de les aplicacions, entre altres característiques. Una part de les dades agregades també serà útil per a les aplicacions i per als partners de Google, com ara els desenvolupadors d'Android. Si tens activada l'opció Activitat al web i en aplicacions addicional, és possible que aquestes dades es desin al teu Compte de Google. <ph name="BEGIN_LINK1" />Més informació<ph name="END_LINK1" /></translation>
 <translation id="2946119680249604491">Afegeix una connexió</translation>
 <translation id="2946640296642327832">Activa Bluetooth</translation>
 <translation id="2947605845283690091">La navegació web hauria de ser ràpida. Dedica ara un moment a <ph name="BEGIN_LINK" />consultar les extensions<ph name="END_LINK" />.</translation>
@@ -2997,7 +2999,7 @@ i Ctrl+Alt+disminueix la brillantor per reduir.</translation>
 <translation id="4209464433672152343">Els documents <ph name="BEGIN_LINK_HELP" />s'envien a Google<ph name="END_LINK_HELP" />, que els prepara per imprimir-los. Consulta, edita i gestiona les teves impressores i l'historial d'impressió al <ph name="BEGIN_LINK_DASHBOARD" />tauler de Google Cloud Print<ph name="END_LINK_DASHBOARD" />.</translation>
 <translation id="4210048056321123003">S'està baixant la màquina virtual</translation>
 <translation id="421182450098841253">&amp;Mostra la Barra d'adreces d'interès</translation>
-<translation id="4211851069413100178">Envia dades d'ús i de diagnòstic. Ajuda a millorar la teva experiència a Android enviant automàticament a Google dades de diagnòstic, del dispositiu i d''ús d'aplicacions. Aquestes dades ajudaran a millorar l'estabilitat del sistema i de les aplicacions, entre altres característiques. Una part de les dades agregades també serà útil per a les aplicacions i per als partners de Google, com ara els desenvolupadors d'Android. El propietari ha aplicat aquesta <ph name="BEGIN_LINK1" />opció de configuració<ph name="END_LINK1" />. És possible que el propietari decideixi enviar a Google dades de diagnòstic i d'ús sobre aquest dispositiu. Si tens activada l'opció Activitat al web i en aplicacions addicional, és possible que aquestes dades es desin al teu Compte de Google. <ph name="BEGIN_LINK2" />Més informació<ph name="END_LINK2" /></translation>
+<translation id="4211851069413100178">Envia dades d'ús i de diagnòstic. Ajuda a millorar la teva experiència a Android enviant automàticament a Google dades de diagnòstic, del dispositiu i d'ús d'aplicacions. Aquestes dades ajudaran a millorar l'estabilitat del sistema i de les aplicacions, entre altres característiques. Una part de les dades agregades també serà útil per a les aplicacions i per als partners de Google, com ara els desenvolupadors d'Android. El propietari ha aplicat aquesta <ph name="BEGIN_LINK1" />opció de configuració<ph name="END_LINK1" />. És possible que el propietari decideixi enviar a Google dades de diagnòstic i d'ús sobre aquest dispositiu. Si tens activada l'opció Activitat al web i en aplicacions addicional, és possible que aquestes dades es desin al teu Compte de Google. <ph name="BEGIN_LINK2" />Més informació<ph name="END_LINK2" /></translation>
 <translation id="42126664696688958">Exporta</translation>
 <translation id="42137655013211669">El servidor ha prohibit l'accés a aquest recurs.</translation>
 <translation id="4217571870635786043">Dictat</translation>
@@ -3163,6 +3165,7 @@ i Ctrl+Alt+disminueix la brillantor per reduir.</translation>
 <translation id="4410545552906060960">Per desbloquejar el dispositiu, utilitza un número (PIN) en lloc d'una contrasenya. Per definir el PIN més endavant, ves a Configuració.</translation>
 <translation id="4411578466613447185">Signant del codi</translation>
 <translation id="4412698727486357573">Centre d'ajuda</translation>
+<translation id="4413088271097062326">Quina aplicació vols utilitzar?</translation>
 <translation id="44141919652824029">Vols permetre que <ph name="APP_NAME" /> obtingui la llista de dispositius USB vinculats?</translation>
 <translation id="4414232939543644979">F&amp;inestra d'incògnit nova</translation>
 <translation id="4414515549596849729">dades de llocs web i galetes</translation>
@@ -3936,6 +3939,7 @@ i Ctrl+Alt+disminueix la brillantor per reduir.</translation>
 <translation id="5269977353971873915">Error d'impressió</translation>
 <translation id="5275352920323889391">Gos</translation>
 <translation id="527605982717517565">Permet sempre JavaScript a <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Mostra el tauler lateral</translation>
 <translation id="5278823018825269962">Identificador d'estat</translation>
 <translation id="5280064835262749532">Actualitza les credencials per a <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Esborra les galetes i les dades dels llocs web en tancar totes les finestres</translation>
@@ -6117,7 +6121,6 @@ Assegureu-vos que no es pugui accedir a informació sensible.</translation>
 <translation id="7685049629764448582">Memòria de JavaScript </translation>
 <translation id="7685087414635069102">PIN obligatori</translation>
 <translation id="768549422429443215">Afegeix idiomes o torna a ordenar la llista.</translation>
-<translation id="7686424868232681412">Lacros és un navegador experimental. Informa de qualsevol problema des d'Ajuda &gt; Informa d'un problema...</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Confirma la contrasenya nova</translation>
 <translation id="7690378713476594306">Tria de la llista</translation>

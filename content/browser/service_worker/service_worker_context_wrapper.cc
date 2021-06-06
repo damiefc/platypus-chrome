@@ -40,6 +40,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context_observer.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/content_client.h"
@@ -487,7 +488,8 @@ void ServiceWorkerContextWrapper::RegisterServiceWorker(
       base::BindOnce(
           [](StatusCodeCallback callback, blink::ServiceWorkerStatusCode status,
              const std::string&, int64_t) { std::move(callback).Run(status); },
-          std::move(callback)));
+          std::move(callback)),
+      /*requesting_frame_id=*/GlobalFrameRoutingId());
 }
 
 void ServiceWorkerContextWrapper::UnregisterServiceWorker(
@@ -544,7 +546,7 @@ size_t ServiceWorkerContextWrapper::CountExternalRequestsForTest(
       GetAllLiveVersionInfo();
   for (const ServiceWorkerVersionInfo& info : live_version_info) {
     ServiceWorkerVersion* version = GetLiveVersion(info.version_id);
-    if (version && version->origin() == origin) {
+    if (version && version->key().origin() == origin) {
       return version->GetExternalRequestCountForTest();  // IN-TEST
     }
   }
@@ -808,7 +810,7 @@ void ServiceWorkerContextWrapper::StopAllServiceWorkersForOrigin(
   std::vector<ServiceWorkerVersionInfo> live_versions = GetAllLiveVersionInfo();
   for (const ServiceWorkerVersionInfo& info : live_versions) {
     ServiceWorkerVersion* version = GetLiveVersion(info.version_id);
-    if (version && version->origin() == origin)
+    if (version && version->key().origin() == origin)
       version->StopWorker(base::DoNothing());
   }
 }

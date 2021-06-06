@@ -1041,9 +1041,10 @@ TEST_F(CartServiceFakeDataTest, TestFakeData) {
 
 // Tests expired entries are deleted when data is loaded.
 TEST_F(CartServiceTest, TestExpiredDataDeleted) {
-  base::RunLoop run_loop[3];
+  base::RunLoop run_loop[6];
   cart_db::ChromeCartContentProto merchant_proto =
       BuildProto(kMockMerchantA, kMockMerchantURLA);
+  const ShoppingCarts result = {{kMockMerchantA, merchant_proto}};
 
   merchant_proto.set_timestamp(
       (base::Time::Now() - base::TimeDelta::FromDays(16)).ToDoubleT());
@@ -1063,16 +1064,37 @@ TEST_F(CartServiceTest, TestExpiredDataDeleted) {
                      run_loop[1].QuitClosure(), kEmptyExpected));
   run_loop[1].Run();
 
-  merchant_proto.set_timestamp(
-      (base::Time::Now() - base::TimeDelta::FromDays(13)).ToDoubleT());
+  // If the cart is removed, the expired entry is deleted in load results but is
+  // kept in database.
+  merchant_proto.set_is_removed(true);
   service_->AddCart(kMockMerchantA, absl::nullopt, merchant_proto);
   task_environment_.RunUntilIdle();
 
-  const ShoppingCarts result = {{kMockMerchantA, merchant_proto}};
   service_->LoadAllActiveCarts(
       base::BindOnce(&CartServiceTest::GetEvaluationURL, base::Unretained(this),
-                     run_loop[2].QuitClosure(), result));
+                     run_loop[2].QuitClosure(), kEmptyExpected));
   run_loop[2].Run();
+
+  service_->LoadCart(
+      kMockMerchantA,
+      base::BindOnce(&CartServiceTest::GetEvaluationURL, base::Unretained(this),
+                     run_loop[3].QuitClosure(), result));
+  run_loop[3].Run();
+
+  merchant_proto.set_timestamp(
+      (base::Time::Now() - base::TimeDelta::FromDays(13)).ToDoubleT());
+  merchant_proto.set_is_removed(false);
+  service_->GetDB()->AddCart(
+      kMockMerchantA, merchant_proto,
+      base::BindOnce(&CartServiceTest::OperationEvaluation,
+                     base::Unretained(this), run_loop[4].QuitClosure(), true));
+  run_loop[4].Run();
+
+  service_->LoadCart(
+      kMockMerchantA,
+      base::BindOnce(&CartServiceTest::GetEvaluationCartRemovedStatus,
+                     base::Unretained(this), run_loop[5].QuitClosure(), false));
+  run_loop[5].Run();
 }
 
 // Tests cart-related actions would reshow hidden module.
@@ -1341,26 +1363,41 @@ TEST_F(CartServiceDiscountTest, TestNoFetchWhenFeatureDisabled) {
 
 // Tests CartService returning fetched discount URL.
 TEST_F(CartServiceDiscountTest, TestReturnDiscountURL) {
-  base::RunLoop run_loop[2];
+  base::RunLoop run_loop[4];
   const double timestamp = 1;
   GURL discount_url("https://www.discount.com");
   SetCartDiscountURLForTesting(discount_url, true);
+  EXPECT_FALSE(service_->IsDiscountUsed(kMockMerchantADiscountRuleId));
   cart_db::ChromeCartContentProto cart_proto = AddDiscountToProto(
       BuildProto(kMockMerchantA, kMockMerchantURLA), timestamp,
       kMockMerchantADiscountRuleId, kMockMerchantADiscountsPercentOff,
       kMockMerchantADiscountsRawMerchantOfferId);
+  const ShoppingCarts has_discount_cart = {{kMockMerchantA, cart_proto}};
   service_->GetDB()->AddCart(
       kMockMerchantA, cart_proto,
       base::BindOnce(&CartServiceTest::OperationEvaluation,
                      base::Unretained(this), run_loop[0].QuitClosure(), true));
   run_loop[0].Run();
+  service_->LoadCart(
+      kMockMerchantA,
+      base::BindOnce(&CartServiceTest::GetEvaluationDiscount,
+                     base::Unretained(this), run_loop[1].QuitClosure(),
+                     has_discount_cart));
+  run_loop[1].Run();
 
   service_->GetDiscountURL(
       GURL(kMockMerchantURLA),
       base::BindOnce(&CartServiceTest::GetEvaluationDiscountURL,
-                     base::Unretained(this), run_loop[1].QuitClosure(),
+                     base::Unretained(this), run_loop[2].QuitClosure(),
                      discount_url));
-  run_loop[1].Run();
+  run_loop[2].Run();
+
+  EXPECT_TRUE(service_->IsDiscountUsed(kMockMerchantADiscountRuleId));
+  service_->LoadCart(
+      kMockMerchantA,
+      base::BindOnce(&CartServiceTest::GetEvaluationEmptyDiscount,
+                     base::Unretained(this), run_loop[3].QuitClosure()));
+  run_loop[3].Run();
 }
 
 // Tests CartService returning original cart URL as a fallback if the fetch

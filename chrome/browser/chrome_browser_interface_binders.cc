@@ -142,6 +142,7 @@
 #include "media/base/media_switches.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "ui/webui/resources/cr_components/most_visited/most_visited.mojom.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
@@ -174,6 +175,8 @@
 #include "chrome/browser/ui/webui/chromeos/in_session_password_change/lock_screen_network_ui.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
+#include "chrome/browser/ui/webui/chromeos/launcher_internals/launcher_internals.mojom.h"
+#include "chrome/browser/ui/webui/chromeos/launcher_internals/launcher_internals_ui.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/network_ui.h"
@@ -191,6 +194,7 @@
 #include "chromeos/components/connectivity_diagnostics/connectivity_diagnostics_ui.h"
 #include "chromeos/components/diagnostics_ui/diagnostics_ui.h"
 #include "chromeos/components/diagnostics_ui/mojom/input_data_provider.mojom.h"
+#include "chromeos/components/diagnostics_ui/mojom/network_health_provider.mojom.h"
 #include "chromeos/components/diagnostics_ui/mojom/system_data_provider.mojom.h"
 #include "chromeos/components/diagnostics_ui/mojom/system_routine_controller.mojom.h"
 #include "chromeos/components/eche_app_ui/eche_app_ui.h"
@@ -654,6 +658,10 @@ void PopulateChromeWebUIFrameBinders(
   RegisterWebUIControllerInterfaceBinder<
       new_tab_page::mojom::PageHandlerFactory, NewTabPageUI>(map);
 
+  RegisterWebUIControllerInterfaceBinder<
+      most_visited::mojom::MostVisitedPageHandlerFactory, NewTabPageUI,
+      NewTabPageThirdPartyUI>(map);
+
   RegisterWebUIControllerInterfaceBinder<history_clusters::mojom::PageHandler,
                                          MemoriesUI>(map);
 
@@ -806,6 +814,12 @@ void PopulateChromeWebUIFrameBinders(
       chromeos::diagnostics::mojom::InputDataProvider,
       chromeos::DiagnosticsDialogUI>(map);
 
+  if (chromeos::features::IsNetworkingInDiagnosticsAppEnabled()) {
+    RegisterWebUIControllerInterfaceBinder<
+        chromeos::diagnostics::mojom::NetworkHealthProvider,
+        chromeos::DiagnosticsDialogUI>(map);
+  }
+
   RegisterWebUIControllerInterfaceBinder<
       chromeos::diagnostics::mojom::SystemDataProvider,
       chromeos::DiagnosticsDialogUI>(map);
@@ -830,6 +844,10 @@ void PopulateChromeWebUIFrameBinders(
         chromeos::personalization_app::mojom::WallpaperProvider,
         chromeos::PersonalizationAppUI>(map);
   }
+
+  RegisterWebUIControllerInterfaceBinder<
+      launcher_internals::mojom::PageHandlerFactory,
+      chromeos::LauncherInternalsUI>(map);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OFFICIAL_BUILD)

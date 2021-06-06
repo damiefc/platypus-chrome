@@ -315,6 +315,10 @@ const base::Feature kCdmProcessSiteIsolation{"CdmProcessSiteIsolation",
 const base::Feature kMemoryPressureBasedSourceBufferGC{
     "MemoryPressureBasedSourceBufferGC", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enable binding multiple shared images to a single GpuMemoryBuffer.
+const base::Feature kMultiPlaneSharedImageVideo{
+    "MultiPlaneVideoSharedImages", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Approach original pre-REC MSE object URL autorevoking behavior, though await
 // actual attempt to use the object URL for attachment to perform revocation.
 // This will hopefully reduce runtime memory bloat for pages that do not
@@ -806,7 +810,7 @@ const base::Feature kMediaPowerExperiment{"MediaPowerExperiment",
 
 // Enable WebRTC actions for the Media Session API.
 const base::Feature kMediaSessionWebRTC{"MediaSessionWebRTC",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables flash to be ducked by audio focus. This is enabled on Chrome OS which
 // has audio focus enabled.

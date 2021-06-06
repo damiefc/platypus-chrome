@@ -1086,6 +1086,11 @@ std::unique_ptr<TtsEnvironmentAndroid>
 ContentBrowserClient::CreateTtsEnvironmentAndroid() {
   return nullptr;
 }
+
+bool ContentBrowserClient::
+    ShouldObserveContainerViewLocationForDialogOverlays() {
+  return false;
+}
 #endif
 
 base::flat_set<std::string>
@@ -1234,6 +1239,14 @@ std::unique_ptr<SpeculationHostDelegate>
 ContentBrowserClient::CreateSpeculationHostDelegate(
     RenderFrameHost& render_frame_host) {
   return nullptr;
+}
+
+void ContentBrowserClient::ShowDirectSocketsConnectionDialog(
+    content::RenderFrameHost* owner,
+    const std::string& address,
+    base::OnceCallback<void(bool, const std::string&, const std::string&)>
+        callback) {
+  std::move(callback).Run(false, std::string(), std::string());
 }
 
 }  // namespace content

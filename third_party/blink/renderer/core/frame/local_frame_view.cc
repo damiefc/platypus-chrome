@@ -100,6 +100,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/style_retain_scope.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/layout/text_autosizer.h"
@@ -786,8 +787,15 @@ void LocalFrameView::PerformLayout() {
       }
       HashSet<LayoutBlock*> fragment_tree_spines;
       for (auto& root : layout_subtree_root_list_.Ordered()) {
-        if (!LayoutFromRootObject(*root))
-          continue;
+        {
+#if DCHECK_IS_ON()
+          // TODO(crbug.com/1214198): This should not be needed, but DCHECK
+          // hits.
+          NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
+#endif
+          if (!LayoutFromRootObject(*root))
+            continue;
+        }
 
         // TODO(jfernandez): Perhaps we should store the whole spine instead of
         // the immediate ancestor, so that we could avoid rebuilding the common
@@ -809,6 +817,14 @@ void LocalFrameView::PerformLayout() {
       // Ensure fragment-tree consistency after a subtree layout.
       for (auto* cb : fragment_tree_spines)
         cb->RebuildFragmentTreeSpine();
+#if DCHECK_IS_ON()
+      for (auto* cb : fragment_tree_spines) {
+        // |LayoutNGMixin::UpdateInFlowBlockLayout| may |SetNeedsLayout| to its
+        // containing block. Don't check if it will be re-laid out.
+        if (!cb->NeedsLayout())
+          cb->AssertFragmentTree();
+      }
+#endif
       fragment_tree_spines.clear();
     } else {
       if (HasOrthogonalWritingModeRoots())
@@ -2332,7 +2348,7 @@ bool LocalFrameView::UpdateLifecyclePhases(
   // in preparation for a hit test.
   if (reason == DocumentUpdateReason::kHitTest) {
     LocalFrameUkmAggregator& aggregator = EnsureUkmAggregator();
-    aggregator.RecordSample(
+    aggregator.RecordTimerSample(
         static_cast<size_t>(LocalFrameUkmAggregator::kHitTestDocumentUpdate),
         lifecycle_data_.start_time, base::TimeTicks::Now());
   }
@@ -2841,6 +2857,10 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
 
   auto* layout_view = GetLayoutView();
   DCHECK(layout_view);
+
+  if (RuntimeEnabledFeatures::CullRectUpdateEnabled())
+    CullRectUpdater(*layout_view->Layer()).Update();
+
   paint_frame_count_++;
   ForAllNonThrottledLocalFrameViews(
       [](LocalFrameView& frame_view) {
@@ -2890,6 +2910,10 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
         !visual_viewport_or_overlay_needs_repaint_) {
       paint_controller_->UpdateUMACountsOnFullyCached();
     } else {
+      // This makes paint metrics in nested document lifecycle updates (e.g. for
+      // SVG images) accumulated in the top-level document lifecycle update.
+      PaintController::DisableUMAReportScope disable_uma_report;
+
       GraphicsContext graphics_context(*paint_controller_);
       if (Settings* settings = frame_->GetSettings()) {
         graphics_context.SetDarkModeEnabled(
@@ -2956,6 +2980,10 @@ bool LocalFrameView::PaintTree(PaintBenchmarkMode benchmark_mode) {
 
     if (GraphicsLayer* root =
             layout_view->Compositor()->PaintRootGraphicsLayer()) {
+      // See the CompositeAfterPaint branch. Not sure if this is needed in
+      // pre-CAP, but we'd better keep consistency for safety.
+      PaintController::DisableUMAReportScope disable_uma_report;
+
       repainted = root->PaintRecursively(
           graphics_context, pre_composited_layers_, benchmark_mode);
       if (visual_viewport_or_overlay_needs_repaint_ &&
@@ -3161,6 +3189,7 @@ void LocalFrameView::UpdateStyleAndLayoutIfNeededRecursive() {
   CheckDoesNotNeedLayout();
 #if DCHECK_IS_ON()
   frame_->GetDocument()->GetLayoutView()->AssertLaidOut();
+  frame_->GetDocument()->GetLayoutView()->AssertFragmentTree();
 #endif
 
   if (Lifecycle().GetState() < DocumentLifecycle::kLayoutClean)
@@ -4020,7 +4049,8 @@ void LocalFrameView::PaintOutsideOfLifecycle(
   });
 
   {
-    OverriddenCullRectScope force_cull_rect(*this, cull_rect);
+    OverriddenCullRectScope force_cull_rect(*GetLayoutView()->Layer(),
+                                            cull_rect);
     PaintInternal(context, global_paint_flags, cull_rect);
   }
 
@@ -4043,7 +4073,8 @@ void LocalFrameView::PaintContentsOutsideOfLifecycle(
   });
 
   {
-    OverriddenCullRectScope force_cull_rect(*this, cull_rect);
+    OverriddenCullRectScope force_cull_rect(*GetLayoutView()->Layer(),
+                                            cull_rect);
     FramePainter(*this).PaintContents(context, global_paint_flags, cull_rect);
   }
 
@@ -4055,7 +4086,7 @@ void LocalFrameView::PaintContentsOutsideOfLifecycle(
 void LocalFrameView::PaintContentsForTest(const CullRect& cull_rect) {
   AllowThrottlingScope allow_throttling(*this);
   Lifecycle().AdvanceTo(DocumentLifecycle::kInPaint);
-  OverriddenCullRectScope force_cull_rect(*this, cull_rect);
+  OverriddenCullRectScope force_cull_rect(*GetLayoutView()->Layer(), cull_rect);
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
     PaintController& paint_controller = EnsurePaintController();
     if (GetLayoutView()->Layer()->SelfOrDescendantNeedsRepaint()) {

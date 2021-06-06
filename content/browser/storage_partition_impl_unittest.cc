@@ -313,7 +313,7 @@ class RemoveLocalStorageTester {
                                const url::Origin& origin1,
                                const url::Origin& origin2,
                                const url::Origin& origin3) {
-    storage::LocalStorageOriginMetaData data;
+    storage::LocalStorageStorageKeyMetaData data;
     std::map<std::vector<uint8_t>, std::vector<uint8_t>> entries;
 
     base::Time now = base::Time::Now();
@@ -1892,7 +1892,8 @@ TEST_F(StoragePartitionImplTest, ConversionsClearDataForFilter) {
             .SetExpiry(base::TimeDelta::FromDays(2))
             .Build());
     conversion_manager->HandleConversion(
-        StorableConversion(123, net::SchemefulSite(conv), reporter));
+        StorableConversion(123, net::SchemefulSite(conv), reporter,
+                           /*event_source_trigger_data=*/0));
   }
 
   EXPECT_EQ(5u, GetConversionsToReportForTesting(conversion_manager,

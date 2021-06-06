@@ -494,6 +494,24 @@ base::flat_set<WebContentsImpl*>* FullscreenContentsSet(
 bool IsWindowPlacementGranted(RenderFrameHost* host) {
   auto* controller =
       PermissionControllerImpl::FromBrowserContext(host->GetBrowserContext());
+
+  // If the frame's URL is about:blank, its origin may have been inherited.
+  // Unfortunately, many PermissionControllerDelegate implementations of
+  // `GetPermissionStatusForFrame()` use `GetLastCommittedURL()` which does not
+  // consider origin inheritance. In case the URL is about:blank, manually check
+  // the permission status ourselves by deriving a GURL from the Origin.
+  // TODO(crbug.com/698985): Resolve GetLastCommitted[URL|Origin]() usage and
+  // remove this workaround without regressing crbug.com/1210669.
+  if (host->GetLastCommittedURL().IsAboutBlank()) {
+    return controller &&
+           controller->GetPermissionStatus(
+               PermissionType::WINDOW_PLACEMENT,
+               host->GetLastCommittedOrigin().GetURL(),
+               host->GetMainFrame()->GetLastCommittedOrigin().GetURL()) ==
+               blink::mojom::PermissionStatus::GRANTED;
+  }
+
+  // TODO(crbug.com/698985): Resolve GetLastCommitted[URL|Origin]() usage.
   return controller && controller->GetPermissionStatusForFrame(
                            PermissionType::WINDOW_PLACEMENT, host,
                            host->GetLastCommittedURL()) ==
@@ -607,8 +625,8 @@ WebContents* WebContents::FromRenderFrameHost(RenderFrameHost* rfh) {
                         rfh);
   if (!rfh)
     return nullptr;
-  if (!rfh->IsCurrent() && base::FeatureList::IsEnabled(
-                               kCheckWebContentsAccessFromNonCurrentFrame)) {
+  if (!rfh->IsActive() && base::FeatureList::IsEnabled(
+                              kCheckWebContentsAccessFromNonCurrentFrame)) {
     // TODO(crbug.com/1059903): return nullptr here eventually.
     base::debug::DumpWithoutCrashing();
   }
@@ -679,16 +697,17 @@ class WebContentsImpl::WebContentsDestructionObserver
   DISALLOW_COPY_AND_ASSIGN(WebContentsDestructionObserver);
 };
 
-// TODO(sreejakshetty): Make |WebContentsImpl::ColorChooser| per-frame instead
-// of WebContents-owned.
-// WebContentsImpl::ColorChooser ----------------------------------------------
-class WebContentsImpl::ColorChooser : public blink::mojom::ColorChooser {
+// TODO(sreejakshetty): Make |WebContentsImpl::ColorChooserHolder| per-frame
+// instead of WebContents-owned.
+// WebContentsImpl::ColorChooserHolder -----------------------------------------
+class WebContentsImpl::ColorChooserHolder : public blink::mojom::ColorChooser {
  public:
-  ColorChooser(mojo::PendingReceiver<blink::mojom::ColorChooser> receiver,
-               mojo::PendingRemote<blink::mojom::ColorChooserClient> client)
+  ColorChooserHolder(
+      mojo::PendingReceiver<blink::mojom::ColorChooser> receiver,
+      mojo::PendingRemote<blink::mojom::ColorChooserClient> client)
       : receiver_(this, std::move(receiver)), client_(std::move(client)) {}
 
-  ~ColorChooser() override {
+  ~ColorChooserHolder() override {
     if (chooser_)
       chooser_->End();
   }
@@ -703,8 +722,8 @@ class WebContentsImpl::ColorChooser : public blink::mojom::ColorChooser {
   }
 
   void SetSelectedColor(SkColor color) override {
-    OPTIONAL_TRACE_EVENT0("content",
-                          "WebContentsImpl::ColorChooser::SetSelectedColor");
+    OPTIONAL_TRACE_EVENT0(
+        "content", "WebContentsImpl::ColorChooserHolder::SetSelectedColor");
     if (chooser_)
       chooser_->SetSelectedColor(color);
   }
@@ -712,7 +731,7 @@ class WebContentsImpl::ColorChooser : public blink::mojom::ColorChooser {
   void DidChooseColorInColorChooser(SkColor color) {
     OPTIONAL_TRACE_EVENT0(
         "content",
-        "WebContentsImpl::ColorChooser::DidChooseColorInColorChooser");
+        "WebContentsImpl::ColorChooserHolder::DidChooseColorInColorChooser");
     client_->DidChooseColor(color);
   }
 
@@ -982,7 +1001,7 @@ WebContentsImpl::~WebContentsImpl() {
     dialog_manager_->CancelDialogs(this, /*reset_state=*/true);
   }
 
-  color_chooser_.reset();
+  color_chooser_holder_.reset();
   find_request_manager_.reset();
 
   // Shutdown the primary FrameTree.
@@ -1159,21 +1178,6 @@ WebContentsImpl* WebContentsImpl::FromOuterFrameTreeNode(
 
 RenderFrameHostManager* WebContentsImpl::GetRenderManagerForTesting() {
   return GetRenderManager();
-}
-
-bool WebContentsImpl::OnMessageReceived(RenderViewHostImpl* render_view_host,
-                                        const IPC::Message& message) {
-  OPTIONAL_TRACE_EVENT1("content", "WebContentsImpl::OnMessageReceived",
-                        "render_view_host", render_view_host);
-  for (auto& observer : observers_.observer_list()) {
-    // TODO(nick, creis): https://crbug.com/758026: Replace all uses of this
-    // variant of OnMessageReceived with the version that takes a
-    // RenderFrameHost, and then delete it.
-    if (observer.OnMessageReceived(message))
-      return true;
-  }
-
-  return false;
 }
 
 bool WebContentsImpl::OnMessageReceived(RenderFrameHostImpl* render_frame_host,
@@ -2308,6 +2312,7 @@ void WebContentsImpl::AttachInnerWebContents(
   auto* render_frame_host_impl =
       static_cast<RenderFrameHostImpl*>(render_frame_host);
   DCHECK_EQ(this, render_frame_host_impl->delegate()->GetAsWebContents());
+  DCHECK(render_frame_host_impl->GetParent());
 
   // Mark |render_frame_host_impl| as outer delegate frame.
   render_frame_host_impl->SetIsOuterDelegateFrame(true);
@@ -2328,6 +2333,16 @@ void WebContentsImpl::AttachInnerWebContents(
       GetContentClient()->browser()->GetWebContentsViewDelegate(
           inner_web_contents_impl),
       &inner_web_contents_impl->render_view_host_delegate_view_);
+  // On platforms where destroying the WebContents' view does not also destroy
+  // the platform RenderWidgetHostView, we need to destroy it if it exists.
+  // TODO(mcnee): Should all platforms' WebContentsView destroy the platform
+  // RWHV?
+  if (RenderWidgetHostViewBase* prev_rwhv =
+          inner_render_manager->GetRenderWidgetHostView()) {
+    if (!prev_rwhv->IsRenderWidgetHostViewChildFrame()) {
+      prev_rwhv->Destroy();
+    }
+  }
 
   // When the WebContents being initialized has an opener, the  browser side
   // Render{View,Frame}Host must be initialized and the RenderWidgetHostView
@@ -2474,8 +2489,11 @@ void WebContentsImpl::ReattachToOuterWebContentsFrame() {
   auto* render_manager = GetRenderManager();
   auto* parent_frame =
       node_.OuterContentsFrameTreeNode()->current_frame_host()->GetParent();
+  auto* child_rwhv = render_manager->GetRenderWidgetHostView();
+  DCHECK(child_rwhv);
+  DCHECK(child_rwhv->IsRenderWidgetHostViewChildFrame());
   render_manager->SetRWHViewForInnerContents(
-      render_manager->GetRenderWidgetHostView());
+      static_cast<RenderWidgetHostViewChildFrame*>(child_rwhv));
 
   RecursivelyRegisterFrameSinkIds();
 
@@ -2598,8 +2616,7 @@ const blink::web_pref::WebPreferences WebContentsImpl::ComputeWebPreferences() {
 // TODO(dtapuska): Enable barrel button selection drag support on Android.
 // crbug.com/758042
 #if defined(OS_WIN)
-  prefs.barrel_button_for_drag_enabled =
-      base::FeatureList::IsEnabled(features::kDirectManipulationStylus);
+  prefs.barrel_button_for_drag_enabled = true;
 #endif  // defined(OS_WIN)
 
   prefs.enable_scroll_animator =
@@ -4241,7 +4258,7 @@ void WebContentsImpl::RecordAccessibilityEvents(
     event_recorder_->ListenToEvents(*callback);
   } else {
     if (event_recorder_) {
-      event_recorder_->FlushAsyncEvents();
+      event_recorder_->WaitForDoneRecording();
       event_recorder_.reset(nullptr);
     }
   }
@@ -4434,7 +4451,7 @@ WebContents* WebContentsImpl::OpenURL(const OpenURLParams& params) {
   // Prevent frames that are not active (e.g. a prerendering page) from opening
   // new windows, tabs, popups, etc.
   if (params.disposition != WindowOpenDisposition::CURRENT_TAB &&
-      source_render_frame_host && !source_render_frame_host->IsCurrent()) {
+      source_render_frame_host && !source_render_frame_host->IsActive()) {
     return nullptr;
   }
 
@@ -5099,13 +5116,13 @@ void WebContentsImpl::DidChooseColorInColorChooser(SkColor color) {
   OPTIONAL_TRACE_EVENT1("content",
                         "WebContentsImpl::DidChooseColorInColorChooser",
                         "color", color);
-  if (color_chooser_)
-    color_chooser_->DidChooseColorInColorChooser(color);
+  if (color_chooser_holder_)
+    color_chooser_holder_->DidChooseColorInColorChooser(color);
 }
 
 void WebContentsImpl::DidEndColorChooser() {
   OPTIONAL_TRACE_EVENT0("content", "WebContentsImpl::DidEndColorChooser");
-  color_chooser_.reset();
+  color_chooser_holder_.reset();
 }
 
 int WebContentsImpl::DownloadImage(
@@ -6129,19 +6146,25 @@ void WebContentsImpl::OpenColorChooser(
     SkColor color,
     std::vector<blink::mojom::ColorSuggestionPtr> suggestions) {
   OPTIONAL_TRACE_EVENT0("content", "WebContentsImpl::OpenColorChooser");
-  // Create `color_chooser_` before calling OpenColorChooser since
+  // Create `color_chooser_holder_` before calling OpenColorChooser since
   // OpenColorChooser may callback with results.
-  color_chooser_.reset();
-  color_chooser_ = std::make_unique<ColorChooser>(std::move(chooser_receiver),
-                                                  std::move(client));
+  color_chooser_holder_.reset();
+  color_chooser_holder_ = std::make_unique<ColorChooserHolder>(
+      std::move(chooser_receiver), std::move(client));
 
-  content::ColorChooser* new_color_chooser =
+  auto new_color_chooser =
       delegate_ ? delegate_->OpenColorChooser(this, color, suggestions)
                 : nullptr;
-  color_chooser_->SetChooser(base::WrapUnique(new_color_chooser));
-
-  if (!new_color_chooser)
-    color_chooser_.reset();
+  if (color_chooser_holder_ && new_color_chooser) {
+    color_chooser_holder_->SetChooser(std::move(new_color_chooser));
+  } else if (new_color_chooser) {
+    // OpenColorChooser synchronously called back to DidEndColorChooser.
+    DCHECK(!color_chooser_holder_);
+    new_color_chooser->End();
+  } else if (color_chooser_holder_) {
+    DCHECK(!new_color_chooser);
+    color_chooser_holder_.reset();
+  }
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -6215,7 +6238,7 @@ void WebContentsImpl::UpdateFaviconURL(
   // navigation occurs while a page is still loading, the initial page
   // may stop loading and send us updated favicon URLs after the navigation
   // for the new page has committed.
-  if (!source->IsCurrent())
+  if (!source->IsActive())
     return;
 
   observers_.NotifyObservers(&WebContentsObserver::DidUpdateFaviconURL, source,
@@ -6762,7 +6785,7 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
   javascript_dialog_dismiss_notifier_ =
       std::make_unique<JavaScriptDialogDismissNotifier>();
 
-  bool should_suppress = !render_frame_host->IsCurrent() ||
+  bool should_suppress = !render_frame_host->IsActive() ||
                          (delegate_ && delegate_->ShouldSuppressDialogs(this));
   bool has_non_devtools_handlers = delegate_ && dialog_manager_;
   bool has_handlers = page_handlers.size() || has_non_devtools_handlers;
@@ -8890,11 +8913,11 @@ void WebContentsImpl::RenderFrameHostStateChanged(
                         });
 
   if (old_state == LifecycleState::kActive && !render_frame_host->GetParent()) {
-    // TODO(sreejakshetty): Remove this reset when ColorChooser becomes
+    // TODO(sreejakshetty): Remove this reset when ColorChooserHolder becomes
     // per-frame.
     // Close the color chooser popup when RenderFrameHost changes state from
     // kActive.
-    color_chooser_.reset();
+    color_chooser_holder_.reset();
   }
 
   observers_.NotifyObservers(&WebContentsObserver::RenderFrameHostStateChanged,

@@ -96,6 +96,15 @@ const char kAutoOpenDevToolsForTabs[]       = "auto-open-devtools-for-tabs";
 const char kAutoSelectDesktopCaptureSource[] =
     "auto-select-desktop-capture-source";
 
+// This flag makes Chrome auto-select a tab with the provided title when
+// the media-picker should otherwise be displayed to the user. This switch
+// is very similar to kAutoSelectDesktopCaptureSource, but limits selection
+// to tabs. This solves the issue of kAutoSelectDesktopCaptureSource being
+// liable to accidentally capturing the Chromium window instead of the tab,
+// as both have the same title if the tab is focused.
+const char kAutoSelectTabCaptureSourceByTitle[] =
+    "auto-select-tab-capture-source-by-title";
+
 // How often (in seconds) to check for updates. Should only be used for testing
 // purposes.
 const char kCheckForUpdateIntervalSec[]     = "check-for-update-interval";
@@ -433,16 +442,6 @@ const char kPackExtension[]                 = "pack-extension";
 
 // Optional PEM private key to use in signing packaged .crx.
 const char kPackExtensionKey[]              = "pack-extension-key";
-
-// Development flag for permission request API. This flag is needed until
-// the API is finalized.
-// TODO(bauerb): Remove when this flag is not needed anymore.
-const char kPermissionRequestApiScope[]     = "permission-request-api-scope";
-
-// Development flag for permission request API. This flag is needed until
-// the API is finalized.
-// TODO(bauerb): Remove when this flag is not needed anymore.
-const char kPermissionRequestApiUrl[]       = "permission-request-api-url";
 
 // Used to mock the response received from the Web Permission Prediction
 // Service. Used for testing.

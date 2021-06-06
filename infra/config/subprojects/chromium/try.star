@@ -679,26 +679,6 @@ try_.chromium_angle_builder(
 )
 
 try_.chromium_angle_builder(
-    name = "android_angle_vk32_deqp_rel_ng",
-    os = os.LINUX_BIONIC_REMOVE,
-)
-
-try_.chromium_angle_builder(
-    name = "android_angle_vk32_rel_ng",
-    os = os.LINUX_BIONIC_REMOVE,
-)
-
-try_.chromium_angle_builder(
-    name = "android_angle_vk64_deqp_rel_ng",
-    os = os.LINUX_BIONIC_REMOVE,
-)
-
-try_.chromium_angle_builder(
-    name = "android_angle_vk64_rel_ng",
-    os = os.LINUX_BIONIC_REMOVE,
-)
-
-try_.chromium_angle_builder(
     name = "fuchsia-angle-rel",
     os = os.LINUX_BIONIC_REMOVE,
 )
@@ -1148,6 +1128,11 @@ try_.chromium_linux_builder(
 
 try_.chromium_linux_builder(
     name = "linux-1mbu-compile-fyi-rel",
+    builderless = False,
+    goma_jobs = goma.jobs.J150,
+    tryjob = try_.job(
+        experiment_percentage = 10,
+    ),
     properties = {
         "bot_update_experiments": [
             "no_sync",
@@ -1917,6 +1902,7 @@ try_.cipd_3pp_builder(
 try_.gpu_chromium_android_builder(
     name = "android_optional_gpu_tests_rel",
     branch_selector = branches.STANDARD_MILESTONE,
+    goma_jobs = goma.jobs.J150,
     main_list_view = "try",
     tryjob = try_.job(
         location_regexp = [

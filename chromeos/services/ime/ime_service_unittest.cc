@@ -39,11 +39,6 @@ void TestProcessKeypressForRulebasedCallback(
     res_out->operations.push_back(std::move(response->operations[i]));
   }
 }
-void TestGetRulebasedKeypressCountForTestingCallback(int32_t* res_out,
-                                                     int32_t response) {
-  *res_out = response;
-}
-
 class ImeServiceTest : public testing::Test {
  public:
   ImeServiceTest() : service_(remote_service_.BindNewPipeAndPassReceiver()) {}
@@ -85,58 +80,12 @@ TEST_F(ImeServiceTest, ConnectInvalidImeEngine) {
   EXPECT_FALSE(success);
 }
 
-TEST_F(ImeServiceTest, MultipleClientsRulebased) {
-  bool success = false;
-  MockInputChannel test_channel_1;
-  MockInputChannel test_channel_2;
-  mojo::Remote<mojom::InputChannel> remote_engine_1;
-  mojo::Remote<mojom::InputChannel> remote_engine_2;
-
-  remote_manager_->ConnectToImeEngine(
-      "m17n:ar", remote_engine_1.BindNewPipeAndPassReceiver(),
-      test_channel_1.CreatePendingRemote(), extra,
-      base::BindOnce(&ConnectCallback, &success));
-  remote_manager_.FlushForTesting();
-
-  remote_manager_->ConnectToImeEngine(
-      "m17n:ar", remote_engine_2.BindNewPipeAndPassReceiver(),
-      test_channel_2.CreatePendingRemote(), extra,
-      base::BindOnce(&ConnectCallback, &success));
-  remote_manager_.FlushForTesting();
-
-  mojom::KeypressResponseForRulebased response;
-  remote_engine_1->ProcessKeypressForRulebased(
-      mojom::PhysicalKeyEvent::New(mojom::KeyEventType::kKeyDown, "KeyA", "a",
-                                   mojom::ModifierState::New()),
-      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
-  remote_engine_1.FlushForTesting();
-
-  remote_engine_2->ProcessKeypressForRulebased(
-      mojom::PhysicalKeyEvent::New(mojom::KeyEventType::kKeyDown, "KeyA", "a",
-                                   mojom::ModifierState::New()),
-      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
-  remote_engine_2.FlushForTesting();
-
-  int32_t count;
-  remote_engine_1->GetRulebasedKeypressCountForTesting(
-      base::BindOnce(&TestGetRulebasedKeypressCountForTestingCallback, &count));
-  remote_engine_1.FlushForTesting();
-  EXPECT_EQ(1, count);
-
-  remote_engine_2->GetRulebasedKeypressCountForTesting(
-      base::BindOnce(&TestGetRulebasedKeypressCountForTestingCallback, &count));
-  remote_engine_2.FlushForTesting();
-  EXPECT_EQ(1, count);
-}
-
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleModifierKeys) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -161,12 +110,10 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleModifierKeys) {
 
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleCtrlShortCut) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -191,12 +138,10 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleCtrlShortCut) {
 
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleAltShortCut) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -221,12 +166,10 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleAltShortCut) {
 
 TEST_F(ImeServiceTest, RuleBasedHandlesAltRight) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -252,12 +195,10 @@ TEST_F(ImeServiceTest, RuleBasedHandlesAltRight) {
 // Tests that the rule-based Arabic keyboard can work correctly.
 TEST_F(ImeServiceTest, RuleBasedArabic) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -323,12 +264,10 @@ TEST_F(ImeServiceTest, RuleBasedArabic) {
 // Tests that the rule-based DevaPhone keyboard can work correctly.
 TEST_F(ImeServiceTest, RuleBasedDevaPhone) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:deva_phone", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -401,12 +340,10 @@ TEST_F(ImeServiceTest, RuleBasedDevaPhone) {
 // Tests escapable characters. See https://crbug.com/1014384.
 TEST_F(ImeServiceTest, RuleBasedDoesNotEscapeCharacters) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:deva_phone", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);
@@ -459,12 +396,10 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotEscapeCharacters) {
 // Tests that AltGr works with rule-based. See crbug.com/1035145.
 TEST_F(ImeServiceTest, KhmerKeyboardAltGr) {
   bool success = false;
-  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
-  remote_manager_->ConnectToImeEngine(
+  remote_manager_->ConnectToInputMethod(
       "m17n:km", to_engine_remote.BindNewPipeAndPassReceiver(),
-      test_channel.CreatePendingRemote(), extra,
       base::BindOnce(&ConnectCallback, &success));
   remote_manager_.FlushForTesting();
   EXPECT_TRUE(success);

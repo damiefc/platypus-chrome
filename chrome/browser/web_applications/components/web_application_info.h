@@ -29,6 +29,11 @@ using SquareSizePx = int;
 // Iterates in ascending order (checked in SortedSizesPxIsAscending test).
 using SortedSizesPx = base::flat_set<SquareSizePx, std::less<>>;
 using IconPurpose = blink::mojom::ManifestImageResource_Purpose;
+constexpr std::array<IconPurpose,
+                     static_cast<int>(IconPurpose::kMaxValue) -
+                         static_cast<int>(IconPurpose::kMinValue) + 1>
+    kIconPurposes{IconPurpose::ANY, IconPurpose::MONOCHROME,
+                  IconPurpose::MASKABLE};
 
 // Icon bitmaps for each IconPurpose.
 struct IconBitmaps {
@@ -261,14 +266,13 @@ struct WebApplicationInfo {
   // The URL protocols/schemes that the app can handle.
   std::vector<blink::Manifest::ProtocolHandler> protocol_handlers;
 
-  // URL within scope to launch for a "new note" action. Valid iff this is
-  // considered a note-taking app.
-  // TODO(crbug.com/1185678): Parse this from the manifest.
-  GURL note_taking_new_note_url;
-
   // The app intends to act as a URL handler for URLs described by this
   // information.
   apps::UrlHandlers url_handlers;
+
+  // URL within scope to launch for a "new note" action. Valid iff this is
+  // considered a note-taking app.
+  GURL note_taking_new_note_url;
 
   // User preference as to whether to auto run the app on OS login.
   // Currently only supported in Windows platform.
@@ -278,6 +282,9 @@ struct WebApplicationInfo {
   // scope.
   blink::mojom::CaptureLinks capture_links =
       blink::mojom::CaptureLinks::kUndefined;
+
+  // Whether the app should be loaded in a dedicated storage partition.
+  bool is_storage_isolated = false;
 };
 
 std::ostream& operator<<(std::ostream& out,

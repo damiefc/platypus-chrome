@@ -78,6 +78,10 @@ class GPU_EXPORT GpuChannelHost
 
   int channel_id() const { return channel_id_; }
 
+  const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner() {
+    return io_thread_;
+  }
+
   // Virtual for testing.
   virtual mojom::GpuChannel& GetGpuChannel();
 
@@ -166,7 +170,7 @@ class GPU_EXPORT GpuChannelHost
     Listener();
     ~Listener() override;
 
-    // Called on the IO thread.
+    // Called on the GpuChannelHost's thread.
     void Initialize(mojo::ScopedMessagePipeHandle handle,
                     mojo::PendingAssociatedReceiver<mojom::GpuChannel> receiver,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);

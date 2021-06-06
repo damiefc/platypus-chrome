@@ -58,6 +58,7 @@
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> och <ph name="NUM_MORE" /> till tillåts}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> och <ph name="NUM_MORE" /> till tillåts}}</translation>
 <translation id="2434158240863470628">Nedladdningen är klar<ph name="SEPARATOR" /><ph name="BYTES_DOWNLOADED" /></translation>
 <translation id="2482878487686419369">Aviseringar</translation>
+<translation id="2485422356828889247">Avinstallera</translation>
 <translation id="2490684707762498678">Hanteras av <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Hjälp och feedback</translation>
 <translation id="2501278716633472235">Föregående</translation>
@@ -77,6 +78,7 @@
 <translation id="2903493209154104877">Adresser</translation>
 <translation id="2910701580606108292">Fråga innan webbplatser tillåts att spela upp skyddat innehåll</translation>
 <translation id="2913331724188855103">Tillåt att webbplatser sparar och läser cookiedata (rekommenderas)</translation>
+<translation id="2932883381142163287">Anmäl otillåten användning</translation>
 <translation id="2968755619301702150">Certifikatvisare</translation>
 <translation id="300526633675317032">Det här alternativet tar bort alla <ph name="SIZE_IN_KB" /> webbplatslagring.</translation>
 <translation id="3008272652534848354">Återställ behörigheter</translation>
@@ -199,6 +201,7 @@
 <translation id="6196640612572343990">Blockera cookies från tredje part</translation>
 <translation id="6206551242102657620">Anslutningen är säker. Webbplatsinformation</translation>
 <translation id="6216432067784365534">Alternativ för <ph name="NAME_OF_LIST_ITEM" /></translation>
+<translation id="6231752747840485235">Vill du avinstallera <ph name="APP_NAME" />?</translation>
 <translation id="6260852843601447737">Stäng och anmäl otillåten användning</translation>
 <translation id="6262279340360821358"><ph name="PERMISSION_1" /> och <ph name="PERMISSION_2" /> blockeras</translation>
 <translation id="6270391203985052864">Webbplatser får be om tillåtelse att skicka aviseringar</translation>

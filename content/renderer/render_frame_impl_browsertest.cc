@@ -140,7 +140,7 @@ class RenderFrameImplTest : public RenderViewTest {
     remote_main_frame_interfaces->main_frame_host = main_frame_host.Unbind();
 
     RenderFrameImpl::FromWebFrame(
-        view_->GetMainRenderFrame()->GetWebFrame()->FirstChild())
+        GetMainRenderFrame()->GetWebFrame()->FirstChild())
         ->Unload(kFrameProxyRouteId, false, frame_replication_state->Clone(),
                  blink::RemoteFrameToken(),
                  std::move(remote_main_frame_interfaces));
@@ -175,7 +175,7 @@ class RenderFrameImplTest : public RenderViewTest {
   }
 
   TestRenderFrame* GetMainRenderFrame() {
-    return static_cast<TestRenderFrame*>(view_->GetMainRenderFrame());
+    return static_cast<TestRenderFrame*>(RenderViewTest::GetMainRenderFrame());
   }
 
   TestRenderFrame* frame() { return frame_; }
@@ -193,7 +193,7 @@ class RenderFrameImplTest : public RenderViewTest {
   }
 
   static int32_t AutoplayFlagsForFrame(TestRenderFrame* frame) {
-    return frame->render_view()->GetWebView()->AutoplayFlagsForTest();
+    return frame->GetWebView()->AutoplayFlagsForTest();
   }
 
  private:
@@ -232,8 +232,7 @@ class RenderFrameTestObserver : public RenderFrameObserver {
 TEST_F(RenderFrameImplTest, SubframeWidget) {
   EXPECT_TRUE(frame_widget());
 
-  RenderFrameImpl* main_frame =
-      static_cast<RenderViewImpl*>(view_)->GetMainRenderFrame();
+  RenderFrameImpl* main_frame = GetMainRenderFrame();
   blink::WebFrameWidget* main_frame_widget =
       main_frame->GetLocalRootWebFrameWidget();
   EXPECT_NE(frame_widget(), main_frame_widget);
@@ -260,9 +259,8 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   main_frame_widget->ApplyVisualProperties(visual_properties);
   // The main frame widget's size is the "widget size", not the visible viewport
   // size, which is given to blink separately.
-  EXPECT_EQ(gfx::Size(view_->GetWebView()->MainFrameWidget()->Size()),
-            widget_size);
-  EXPECT_EQ(gfx::SizeF(view_->GetWebView()->VisualViewportSize()),
+  EXPECT_EQ(gfx::Size(web_view_->MainFrameWidget()->Size()), widget_size);
+  EXPECT_EQ(gfx::SizeF(web_view_->VisualViewportSize()),
             gfx::SizeF(visible_size));
   // The main frame doesn't change other local roots directly.
   EXPECT_NE(gfx::Size(frame_widget()->Size()), visible_size);
@@ -817,7 +815,7 @@ class RenderFrameRemoteInterfacesTest : public RenderViewTest {
   }
 
   TestRenderFrame* GetMainRenderFrame() {
-    return static_cast<TestRenderFrame*>(view_->GetMainRenderFrame());
+    return static_cast<TestRenderFrame*>(RenderViewTest::GetMainRenderFrame());
   }
 
   ContentRendererClient* CreateContentRendererClient() override {
@@ -1053,6 +1051,16 @@ TEST_F(RenderFrameImplTest, LastCommittedUrlForUKM) {
   LoadHTMLWithUrlOverride("Test", "http://example.com");
   waiter->Wait();
   EXPECT_EQ(GURL(GetMainRenderFrame()->LastCommittedUrlForUKM()), override_url);
+}
+
+// Verify that a frame with a pending update is cancelled when a forced update
+// is sent.
+TEST_F(RenderFrameImplTest, SendUpdateCancelsPending) {
+  RenderFrameImpl* main_frame = GetMainRenderFrame();
+  main_frame->StartDelayedSyncTimer();
+  EXPECT_TRUE(main_frame->delayed_state_sync_timer_.IsRunning());
+  main_frame->SendUpdateState();
+  EXPECT_FALSE(main_frame->delayed_state_sync_timer_.IsRunning());
 }
 
 }  // namespace content

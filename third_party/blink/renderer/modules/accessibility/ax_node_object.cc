@@ -105,6 +105,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_title_element.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_image_map_link.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_inline_text_box.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_layout_object.h"
@@ -128,26 +129,40 @@ namespace {
 
 // It is not easily possible to find out if an element is the target of an
 // in-page link.
-// As a workaround, we consider the following to be in-page link targets:
+// As a workaround, we consider the following to be potential targets:
 // - <a name>
-// - An element with an id that is not SVG, a <label> or <optgroup>.
-//   <label> does not make much sense as an in-page link target.
-//   Exposing <optgroup> is redundant, as thr group is already exposed via a
-//   child in its shadow DOM, which contains the accessible name.
+// - <foo id> -- an element with an id that is not SVG, a <label> or <optgroup>.
+//     <label> does not make much sense as an in-page link target.
+//     Exposing <optgroup> is redundant, as the group is already exposed via a
+//     child in its shadow DOM, which contains the accessible name.
+//   #document -- this is always a potential link target via <a name="#">.
 //   This is a compromise that does not include too many elements, and
 //   has minimal impact on tests.
-bool IsInPageLinkTarget(blink::Element& element) {
-  // We exclude elements that are in the shadow DOM.
-  if (element.ContainingShadowRoot() || element.IsSVGElement())
+bool IsPotentialInPageLinkTarget(blink::Node& node) {
+  auto* element = blink::DynamicTo<blink::Element>(&node);
+  if (!element) {
+    // The document itself is a potential link target, e.g. via <a name="#">.
+    return blink::IsA<blink::Document>(node);
+  }
+
+  // We exclude elements that are in the shadow DOM. They cannot be linked by a
+  // document fragment from the main page:as they have their own id namespace.
+  if (element->ContainingShadowRoot())
     return false;
 
-  if (auto* anchor = blink::DynamicTo<blink::HTMLAnchorElement>(&element)) {
+  // SVG elements are unlikely link targets, and we want to avoid creating
+  // a lot of noise in the AX tree or breaking tests unnecessarily.
+  if (element->IsSVGElement())
+    return false;
+
+  // <a name>
+  if (auto* anchor = blink::DynamicTo<blink::HTMLAnchorElement>(element)) {
     if (anchor->HasName())
       return true;
   }
 
-  if (element.HasID() && !element.ContainingShadowRoot() &&
-      !blink::IsA<blink::HTMLLabelElement>(element) &&
+  // <foo id> not in an <optgroup> or <label>.
+  if (element->HasID() && !blink::IsA<blink::HTMLLabelElement>(element) &&
       !blink::IsA<blink::HTMLOptGroupElement>(element)) {
     return true;
   }
@@ -251,6 +266,32 @@ TextDecorationStyleToAXTextDecorationStyle(
 
   NOTREACHED();
   return ax::mojom::blink::TextDecorationStyle::kNone;
+}
+
+String GetTitle(blink::Element* element) {
+  if (!element)
+    return String();
+
+  if (blink::SVGElement* svg_element =
+          blink::DynamicTo<blink::SVGElement>(element)) {
+    // Don't use title() in SVG, as it calls innerText() which updates layout.
+    // Unfortunately, this must duplicate some logic from SVGElement::title().
+    if (svg_element->InUseShadowTree()) {
+      String title = GetTitle(svg_element->OwnerShadowHost());
+      if (!title.IsEmpty())
+        return title;
+    }
+    // If we aren't an instance in a <use> or the <use> title was not found,
+    // then find the first <title> child of this element. If a title child was
+    // found, return the text contents.
+    if (auto* title_element =
+            blink::Traversal<blink::SVGTitleElement>::FirstChild(*element)) {
+      return title_element->GetInnerTextWithoutUpdate();
+    }
+    return String();
+  }
+
+  return element->title();
 }
 
 }  // namespace
@@ -522,7 +563,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
   }
 
   // Process potential in-page link targets
-  if (IsInPageLinkTarget(*element))
+  if (IsPotentialInPageLinkTarget(*element))
     return kIncludeObject;
 
   // <span> tags are inline tags and not meant to convey information if they
@@ -610,7 +651,8 @@ bool AXNodeObject::ComputeAccessibilityIsIgnored(
   DCHECK(!GetLayoutObject());
 
   if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*GetNode())) {
-    if (DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
+    if (IsAriaHidden() ||
+        DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
             *GetNode(), DisplayLockActivationReason::kAccessibility)) {
       if (ignored_reasons)
         ignored_reasons->push_back(IgnoredReason(kAXNotRendered));
@@ -816,23 +858,17 @@ ax::mojom::blink::Role AXNodeObject::NativeRoleIgnoringAria() const {
   if (IsA<HTMLImageElement>(GetNode()))
     return ax::mojom::blink::Role::kImage;
 
-  // <a href> or <svg:a xlink:href>
-  if (GetNode()->IsLink()) {
-    // |HTMLAnchorElement| sets isLink only when it has kHrefAttr.
-    return ax::mojom::blink::Role::kLink;
-  }
-
-  if (IsA<HTMLPortalElement>(*GetNode())) {
-    return ax::mojom::blink::Role::kPortal;
-  }
-
-  if (IsA<HTMLAnchorElement>(*GetNode())) {
-    // We assume that an anchor element is LinkRole if it has event listeners
-    // even though it doesn't have kHrefAttr.
-    if (IsClickable())
+  // <a> or <svg:a>.
+  if (IsA<HTMLAnchorElement>(GetNode()) || IsA<SVGAElement>(GetNode())) {
+    // Assume that an anchor element is a Role::kLink if it has an href or a
+    // click event listener.
+    if (GetNode()->IsLink() || IsClickable())
       return ax::mojom::blink::Role::kLink;
-    return ax::mojom::blink::Role::kAnchor;
+    return ax::mojom::blink::Role::kGenericContainer;
   }
+
+  if (IsA<HTMLPortalElement>(*GetNode()))
+    return ax::mojom::blink::Role::kPortal;
 
   if (IsA<HTMLButtonElement>(*GetNode()))
     return ButtonRoleType();
@@ -1792,16 +1828,21 @@ AXObject* AXNodeObject::InPageLinkTarget() const {
   String fragment = link_url.FragmentIdentifier();
   TreeScope& tree_scope = anchor->GetTreeScope();
   Node* target = tree_scope.FindAnchor(fragment);
-  if (!target)
+  AXObject* ax_target = AXObjectCache().GetOrCreate(target);
+  if (!ax_target || !IsPotentialInPageLinkTarget(*ax_target->GetNode()))
     return AXObject::InPageLinkTarget();
-  // If the target is not in the accessibility tree, get the first unignored
-  // sibling.
-  // TODO(accessibility) Ensure all in-page targets are unignored so that
-  // this extra logic becomes unnecessary. We should be able to simply call
-  // GetOrCreate(target) and DCHECK() that it's unignored.
-  // See IsInPageLinkTarget(), which includes almost all elements with an id,
-  // except for a few which affected tests.
-  return AXObjectCache().FirstAccessibleObjectFromNode(target);
+
+#if DCHECK_IS_ON()
+  // Link targets always have an element, unless it is the document itself,
+  // e.g. via <a href="#">.
+  DCHECK(ax_target->IsWebArea() || ax_target->GetElement())
+      << "The link target is expected to be a document or an element: "
+      << ax_target->ToString(true, true) << "\n* URL fragment = " << fragment;
+  DCHECK(!ax_target->AccessibilityIsIgnored())
+      << "The link target cannot be ignored: "
+      << ax_target->ToString(true, true) << "\n* URL fragment = " << fragment;
+#endif
+  return ax_target;
 }
 
 AccessibilityOrientation AXNodeObject::Orientation() const {
@@ -2527,7 +2568,7 @@ String AXNodeObject::GetValueForControl() const {
     // We don't retrieve the element's value attribute on purpose. The value
     // attribute might be sanitized and might be different from what is actually
     // displayed inside the <select> element on screen.
-    return select_element->InnerElement().innerText();
+    return select_element->InnerElement().GetInnerTextWithoutUpdate();
   }
 
   if (IsAtomicTextField()) {
@@ -2849,12 +2890,13 @@ String AXNodeObject::GetName(ax::mojom::blink::NameFrom& name_from,
   return name;
 }
 
-String AXNodeObject::TextAlternative(bool recursive,
-                                     bool in_aria_labelled_by_traversal,
-                                     AXObjectSet& visited,
-                                     ax::mojom::blink::NameFrom& name_from,
-                                     AXRelatedObjectVector* related_objects,
-                                     NameSources* name_sources) const {
+String AXNodeObject::TextAlternative(
+    bool recursive,
+    const AXObject* aria_label_or_description_root,
+    AXObjectSet& visited,
+    ax::mojom::blink::NameFrom& name_from,
+    AXRelatedObjectVector* related_objects,
+    NameSources* name_sources) const {
   // If nameSources is non-null, relatedObjects is used in filling it in, so it
   // must be non-null as well.
   if (name_sources)
@@ -2895,7 +2937,7 @@ String AXNodeObject::TextAlternative(bool recursive,
 
   // Step 2C from: http://www.w3.org/TR/accname-aam-1.1 -- aria-label.
   String text_alternative = AriaTextAlternative(
-      recursive, in_aria_labelled_by_traversal, visited, name_from,
+      recursive, aria_label_or_description_root, visited, name_from,
       related_objects, name_sources, &found_text_alternative);
   if (found_text_alternative && !name_sources)
     return text_alternative;
@@ -2911,7 +2953,7 @@ String AXNodeObject::TextAlternative(bool recursive,
     return text_alternative;
 
   // Step 2F / 2G from: http://www.w3.org/TR/accname-aam-1.1 -- from content.
-  if (in_aria_labelled_by_traversal || SupportsNameFromContents(recursive)) {
+  if (aria_label_or_description_root || SupportsNameFromContents(recursive)) {
     Node* node = GetNode();
     if (!IsA<HTMLSelectElement>(node)) {  // Avoid option descendant text
       name_from = ax::mojom::blink::NameFrom::kContents;
@@ -2938,7 +2980,7 @@ String AXNodeObject::TextAlternative(bool recursive,
     }
   }
 
-  // Step 2H from: http://www.w3.org/TR/accname-aam-1.1
+  // Step 2I from: http://www.w3.org/TR/accname-aam-1.1
   name_from = ax::mojom::blink::NameFrom::kTitle;
   if (name_sources) {
     name_sources->push_back(NameSource(found_text_alternative, kTitleAttr));
@@ -3028,7 +3070,7 @@ static bool ShouldInsertSpaceBetweenObjectsIfNeeded(
 String AXNodeObject::TextFromDescendants(AXObjectSet& visited,
                                          bool recursive) const {
   if (!CanHaveChildren())
-    return recursive ? String() : GetElement()->innerText();
+    return recursive ? String() : GetElement()->GetInnerTextWithoutUpdate();
 
   StringBuilder accumulated_text;
   AXObject* previous = nullptr;
@@ -3078,7 +3120,7 @@ String AXNodeObject::TextFromDescendants(AXObjectSet& visited,
       result = child->TextFromDescendants(visited, true);
     } else {
       result =
-          RecursiveTextAlternative(*child, false, visited, child_name_from);
+          RecursiveTextAlternative(*child, nullptr, visited, child_name_from);
     }
 
     if (!result.IsEmpty() && previous && accumulated_text.length() &&
@@ -4704,7 +4746,7 @@ String AXNodeObject::NativeTextAlternative(
       AXObject* figcaption_ax_object = AXObjectCache().GetOrCreate(figcaption);
       if (figcaption_ax_object) {
         text_alternative =
-            RecursiveTextAlternative(*figcaption_ax_object, false, visited);
+            RecursiveTextAlternative(*figcaption_ax_object, nullptr, visited);
 
         if (related_objects) {
           local_related_objects.push_back(
@@ -4767,7 +4809,7 @@ String AXNodeObject::NativeTextAlternative(
       AXObject* caption_ax_object = AXObjectCache().GetOrCreate(caption);
       if (caption_ax_object) {
         text_alternative =
-            RecursiveTextAlternative(*caption_ax_object, false, visited);
+            RecursiveTextAlternative(*caption_ax_object, nullptr, visited);
         if (related_objects) {
           local_related_objects.push_back(
               MakeGarbageCollected<NameSourceRelatedObject>(caption_ax_object,
@@ -4826,7 +4868,7 @@ String AXNodeObject::NativeTextAlternative(
       AXObject* title_ax_object = AXObjectCache().GetOrCreate(title);
       if (title_ax_object && !visited.Contains(title_ax_object)) {
         text_alternative =
-            RecursiveTextAlternative(*title_ax_object, false, visited);
+            RecursiveTextAlternative(*title_ax_object, nullptr, visited);
         if (related_objects) {
           local_related_objects.push_back(
               MakeGarbageCollected<NameSourceRelatedObject>(title_ax_object,
@@ -4861,7 +4903,7 @@ String AXNodeObject::NativeTextAlternative(
       // Avoid an infinite loop
       if (legend_ax_object && !visited.Contains(legend_ax_object)) {
         text_alternative =
-            RecursiveTextAlternative(*legend_ax_object, false, visited);
+            RecursiveTextAlternative(*legend_ax_object, nullptr, visited);
 
         if (related_objects) {
           local_related_objects.push_back(
@@ -5106,7 +5148,7 @@ String AXNodeObject::Description(
     if (ruby_annotation_ax_object) {
       AXObjectSet visited;
       description =
-          RecursiveTextAlternative(*ruby_annotation_ax_object, true, visited);
+          RecursiveTextAlternative(*ruby_annotation_ax_object, this, visited);
       if (related_objects) {
         related_objects->push_back(
             MakeGarbageCollected<NameSourceRelatedObject>(
@@ -5139,7 +5181,7 @@ String AXNodeObject::Description(
       if (caption_ax_object) {
         AXObjectSet visited;
         description =
-            RecursiveTextAlternative(*caption_ax_object, false, visited);
+            RecursiveTextAlternative(*caption_ax_object, nullptr, visited);
         if (related_objects) {
           related_objects->push_back(
               MakeGarbageCollected<NameSourceRelatedObject>(caption_ax_object,
@@ -5243,15 +5285,9 @@ String AXNodeObject::Placeholder(ax::mojom::blink::NameFrom name_from) const {
 
 String AXNodeObject::Title(ax::mojom::blink::NameFrom name_from) const {
   if (name_from == ax::mojom::blink::NameFrom::kTitle)
-    return String();
+    return String();  // Already exposed the title in the name field.
 
-  if (const auto* element = GetElement()) {
-    String title = element->title();
-    if (!title.IsEmpty())
-      return title;
-  }
-
-  return String();
+  return GetTitle(GetElement());
 }
 
 String AXNodeObject::PlaceholderFromNativeAttribute() const {

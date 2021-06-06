@@ -668,6 +668,7 @@
 <translation id="1706625117072057435">ઝૂમના સ્તર</translation>
 <translation id="1708338024780164500">(નિષ્ક્રિય)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">પ્રયોગાત્મક બ્રાઉઝર! ડેટા ગુમાવી શકાય છે અથવા પ્રાઇવસી કે સુરક્ષા સાથે ચેડાં થઈ શકે છે. આ સંબંધિત સમસ્યાની જાણ કરવા માટે, કૃપા કરીને અહીં જાઓ: સહાય &gt; "સમસ્યાની જાણ કરો…".</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (મૂળ)</translation>
 <translation id="1709217939274742847">પ્રમાણીકરણના ઉપયોગ માટે કોઈ ટિકિટ પસંદ કરો. <ph name="LINK_BEGIN" />વધુ જાણો<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">શેર કરી શકતા નથી</translation>
@@ -1085,6 +1086,7 @@
 <translation id="2144557304298909478">Linux Android ઍપ વિકસાવવાના સેટિંગ</translation>
 <translation id="2146263598007866206">તમારો સમય બચાવવા માટે, સાઇટ ઑટોમૅટિક રીતે સંબંધિત ફાઇલો કદાચ ડાઉનલોડ કરે</translation>
 <translation id="2147151613919729065">અતિથિ મોડનો ઇતિહાસ સાફ કરવા માટે, તમામ અતિથિ વિન્ડો બંધ કરો.</translation>
+<translation id="2147218225094845757">બાજુની પૅનલ છુપાવો</translation>
 <translation id="2148219725039824548">શેર માઉન્ટ કરવામાં ભૂલ આવી. નેટવર્ક પર ઉલ્લેખિત શેર મળ્યું નથી.</translation>
 <translation id="2148756636027685713">ફોર્મેટ કરવું સમાપ્ત</translation>
 <translation id="2148892889047469596">ટેબ કાસ્ટ કરો</translation>
@@ -2565,6 +2567,7 @@
 <translation id="3742666961763734085">તે નામવાળો કોઈ સંસ્થાકીય એકમ શોધી શકાયો નથી. કૃપા કરીને ફરી પ્રયત્ન કરો.</translation>
 <translation id="3744111561329211289">પૃષ્ઠભૂમિ સમન્વયન</translation>
 <translation id="3747077776423672805">ઍપને કાઢી નાખવા માટે, સેટિંગ &gt; Google Play સ્ટોર &gt; Android પસંદગીઓ મેનેજ કરો &gt; ઍપ અથવા ઍપ્લિકેશન મેનેજર પર જાઓ. પછી તમે અનઇન્સ્ટૉલ કરવા માગો છો તે ઍપ પર ટૅપ કરો (ઍપ શોધવા માટે તમારે જમણે અથવા ડાબે સ્વાઇપ કરવું જરૂરી હોય શકે છે). પછી અનઇન્સ્ટૉલ કરો અથવા બંધ કરો પર ટૅપ કરો.</translation>
+<translation id="3747220812138541072">તમે ટાઇપ કરી રહ્યાં હો ત્યારે દેખાતા ઇનલાઇન લખવાના સૂચનો બતાવો</translation>
 <translation id="3748706263662799310">બગની જાણ કરો</translation>
 <translation id="3752582316358263300">બરાબર, સમજાઇ ગયું...</translation>
 <translation id="3753033997400164841">એકવાર સ્ટોર કરો. ગમે ત્યાં ઉપયોગ કરો</translation>
@@ -3161,6 +3164,7 @@
 <translation id="4410545552906060960">તમારા ઉપકરણને અનલૉક કરવા માટે પાસવર્ડને બદલે કોઈ સંખ્યા (પિન)નો ઉપયોગ કરો. પછીથી તમારો પિન સેટ કરવા માટે, સેટિંગ પર જાઓ.</translation>
 <translation id="4411578466613447185">કોડ સાઇનર</translation>
 <translation id="4412698727486357573">સહાયતા કેન્દ્ર</translation>
+<translation id="4413088271097062326">તમે કઈ ઍપ્લિકેશનનો ઉપયોગ કરવા માગો છો?</translation>
 <translation id="44141919652824029">"<ph name="APP_NAME" />"ને તમારા જોડાણ કરેલા USB ઉપકરણોની સૂચિ મેળવવાની મંજૂરી આપીએ?</translation>
 <translation id="4414232939543644979">નવી &amp;છુપી વિંડો</translation>
 <translation id="4414515549596849729">કુકી અને સાઇટ ડેટા</translation>
@@ -3253,6 +3257,7 @@
 <translation id="4510614391273086606">Linux ફાઇલો અને ઍપને તેની બૅકઅપ લીધેલી સ્થિતિમાં રિસ્ટોર કરવામાં આવી રહ્યાં છે.</translation>
 <translation id="451102079304155829">કાર્ટ</translation>
 <translation id="4513275008300099962">વિન્ડો નિયંત્રણોનું ઓવરલે બંધ કરો</translation>
+<translation id="4513872120116766993">પૂર્વાનુમાનિત લેખન</translation>
 <translation id="4513946894732546136">Feedback</translation>
 <translation id="451407183922382411"><ph name="COMPANY_NAME" /> દ્વારા સંચાલિત</translation>
 <translation id="4514610446763173167">વીડિઓ ચલાવવા અથવા થોભાવવા માટે તેને ટૉગલ કરો</translation>
@@ -3932,6 +3937,7 @@
 <translation id="5269977353971873915">પ્રિન્ટ કાઢવામાં નિષ્ફળ</translation>
 <translation id="5275352920323889391">કૂતરું</translation>
 <translation id="527605982717517565"><ph name="HOST" /> પર JavaScript ને હંમેશા મંજૂરી આપો </translation>
+<translation id="5277127016695466621">બાજુની પૅનલ બતાવો</translation>
 <translation id="5278823018825269962">સ્ટેટસ ID</translation>
 <translation id="5280064835262749532"><ph name="SHARE_PATH" /> માટેની લૉગ ઇન વિગતો અપડેટ કરો</translation>
 <translation id="5280243692621919988">જ્યારે તમે બધી વિંડો બંધ કરો, ત્યારે કુકી અને સાઇટનો ડેટા સાફ કરો</translation>
@@ -4417,6 +4423,7 @@
 <translation id="5826395379250998812">તમારા <ph name="DEVICE_TYPE" />ને તમારા ફોન સાથે કનેક્ટ કરો. <ph name="LINK_BEGIN" />વધુ જાણો<ph name="LINK_END" /></translation>
 <translation id="5826993284769733527">અર્ધ-પારદર્શક</translation>
 <translation id="5827266244928330802">Safari</translation>
+<translation id="5827733057563115968">આગલા શબ્દનું પૂર્વાનુમાન</translation>
 <translation id="5828545842856466741">પ્રોફાઇલ ઉમેરો...</translation>
 <translation id="5828633471261496623">છાપકામ...</translation>
 <translation id="5830720307094128296">પેજ આ &amp;રીતે સાચવો...</translation>
@@ -6113,7 +6120,6 @@ USB ડિવાઇસ</translation>
 <translation id="7685049629764448582">JavaScript મેમરી</translation>
 <translation id="7685087414635069102">પિન જરૂરી છે</translation>
 <translation id="768549422429443215">ભાષાઓ ઉમેરો અથવા સૂચિને પુનઃક્રમાંકિત કરો.</translation>
-<translation id="7686424868232681412">Lacros, એક પ્રયોગાત્મક બ્રાઉઝર છે. આ સંબંધિત સમસ્યાની જાણ કરવા માટે, કૃપા કરીને અહીં જાઓ: સહાય &gt; "સમસ્યાની જાણ કરો…".</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">નવા પાસવર્ડની પુષ્ટિ કરો</translation>
 <translation id="7690378713476594306">સૂચિમાંથી પસંદ કરો</translation>
@@ -6287,6 +6293,7 @@ USB ડિવાઇસ</translation>
 <translation id="78526636422538552">Googleના વધુ એકાઉન્ટ ઉમેરી શકાશે નહીં</translation>
 <translation id="7853747251428735">વધુ સા&amp;ધનો</translation>
 <translation id="7855678561139483478">ટૅબને નવી વિંડોમાં ખસેડો</translation>
+<translation id="7857093393627376423">ટેક્સ્ટ સૂચનો</translation>
 <translation id="7857117644404132472">અપવાદ ઉમેરો</translation>
 <translation id="7857949311770343000">શું આ તમારી અપેક્ષા મુજબનું નવું ટેબ પૃષ્ઠ છે?</translation>
 <translation id="7858328180167661092"><ph name="APP_NAME" /> (Windows)</translation>

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.signin.ui;
 
+import android.accounts.Account;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.view.View;
@@ -14,6 +15,8 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
+import com.google.common.base.Optional;
+
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -22,11 +25,18 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.ui.SyncConsentActivityLauncher.AccessPoint;
 import org.chromium.components.browser_ui.widget.impression.ImpressionTracker;
 import org.chromium.components.browser_ui.widget.impression.OneShotImpressionListener;
+import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+
+import java.util.List;
 
 /**
  * A controller for configuring the sign in promo. It sets up the sign in promo depending on the
@@ -50,8 +60,6 @@ public class SigninPromoController {
 
     private @Nullable DisplayableProfileData mProfileData;
     private @Nullable ImpressionTracker mImpressionTracker;
-    private final OneShotImpressionListener mImpressionFilter =
-            new OneShotImpressionListener(this::recordSigninPromoImpression);
     private final @AccessPoint int mAccessPoint;
     private final @Nullable String mImpressionCountName;
     private final String mImpressionUserActionName;
@@ -101,7 +109,7 @@ public class SigninPromoController {
     /**
      * Creates a new SigninPromoController.
      * @param accessPoint Specifies the AccessPoint from which the promo is to be shown.
-     * @param syncConsentActivityLauncher Launcher of {@link SigninActivity}.
+     * @param syncConsentActivityLauncher Launcher of {@link SyncConsentActivity}.
      */
     public SigninPromoController(
             @AccessPoint int accessPoint, SyncConsentActivityLauncher syncConsentActivityLauncher) {
@@ -203,9 +211,44 @@ public class SigninPromoController {
         }
     }
 
-    @AccessPoint
-    int getAccessPoint() {
-        return mAccessPoint;
+    /**
+     * Sets up the sync promo view if it is allowed.
+     *
+     * @param profileDataCache The {@link ProfileDataCache} that stores profile data.
+     * @param view The {@link PersonalizedSigninPromoView} that should be set up.
+     * @param listener The {@link SigninPromoController.OnDismissListener} to be set to the view.
+     */
+    public void setUpSyncPromoViewIfAllowed(ProfileDataCache profileDataCache,
+            PersonalizedSigninPromoView view, SigninPromoController.OnDismissListener listener) {
+        final IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
+                Profile.getLastUsedRegularProfile());
+        assert identityManager.getPrimaryAccountInfo(ConsentLevel.SYNC)
+                == null : "Sync is already enabled!";
+
+        // Find the visible account on promo
+        @Nullable
+        Account visibleAccount = CoreAccountInfo.getAndroidAccountFrom(
+                identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN));
+        final AccountManagerFacade accountManagerFacade =
+                AccountManagerFacadeProvider.getInstance();
+        final Optional<List<Account>> accounts = accountManagerFacade.getGoogleAccounts();
+        if (visibleAccount == null && accounts.isPresent() && !accounts.get().isEmpty()) {
+            visibleAccount = accounts.get().get(0);
+        }
+
+        // Set up the sync promo
+        if (visibleAccount == null) {
+            setupPromoView(view, /* profileData= */ null, listener);
+            return;
+        }
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MINOR_MODE_SUPPORT)
+                && accountManagerFacade.canOfferExtendedSyncPromos(visibleAccount).or(false)
+                && mAccessPoint == SigninAccessPoint.NTP_CONTENT_SUGGESTIONS) {
+            // No promo will be visible since setupPromoView() is not invoked.
+            return;
+        }
+        setupPromoView(
+                view, profileDataCache.getProfileDataOrDefault(visibleAccount.name), listener);
     }
 
     /**
@@ -230,23 +273,23 @@ public class SigninPromoController {
      *         onDismissListener marks that the promo is not dismissible and as a result the close
      *         button is hidden.
      */
-    void setupPromoView(PersonalizedSigninPromoView view,
+    private void setupPromoView(PersonalizedSigninPromoView view,
             final @Nullable DisplayableProfileData profileData,
             final @Nullable OnDismissListener onDismissListener) {
-        detach();
+        if (mImpressionTracker != null) {
+            mImpressionTracker.setListener(null);
+            mImpressionTracker = null;
+        }
+        mImpressionTracker = new ImpressionTracker(view);
+        mImpressionTracker.setListener(
+                new OneShotImpressionListener(this::recordSigninPromoImpression));
+
         mProfileData = profileData;
         mWasDisplayed = true;
-
-        assert mImpressionTracker
-                == null : "detach() should be called before setting up a new view";
-        mImpressionTracker = new ImpressionTracker(view);
-        mImpressionTracker.setListener(mImpressionFilter);
-
-        final Context context = view.getContext();
         if (mProfileData == null) {
-            setupColdState(context, view);
+            setupColdState(view);
         } else {
-            setupHotState(context, view);
+            setupHotState(view);
         }
 
         if (onDismissListener != null) {
@@ -273,12 +316,8 @@ public class SigninPromoController {
         }
     }
 
-    /** @return the resource used for the text displayed as promo description. */
-    public @StringRes int getDescriptionStringId() {
-        return mProfileData == null ? mDescriptionStringIdNoAccount : mDescriptionStringId;
-    }
-
-    private void setupColdState(final Context context, PersonalizedSigninPromoView view) {
+    private void setupColdState(PersonalizedSigninPromoView view) {
+        final Context context = view.getContext();
         view.getImage().setImageResource(R.drawable.chrome_sync_logo);
         setImageSize(context, view, R.dimen.signin_promo_cold_state_image_size);
 
@@ -290,7 +329,8 @@ public class SigninPromoController {
         view.getSecondaryButton().setVisibility(View.GONE);
     }
 
-    private void setupHotState(final Context context, PersonalizedSigninPromoView view) {
+    private void setupHotState(PersonalizedSigninPromoView view) {
+        final Context context = view.getContext();
         Drawable accountImage = mProfileData.getImage();
         view.getImage().setImageDrawable(accountImage);
         setImageSize(context, view, R.dimen.signin_promo_account_image_size);

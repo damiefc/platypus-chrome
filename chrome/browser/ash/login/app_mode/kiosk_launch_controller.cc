@@ -27,6 +27,7 @@
 #include "chrome/browser/extensions/policy_handlers.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
+#include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/encryption_migration_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "components/policy/core/browser/policy_error_map.h"
@@ -34,9 +35,9 @@
 #include "components/policy/policy_constants.h"
 #include "content/public/browser/network_service_instance.h"
 
-namespace chromeos {
-
+namespace ash {
 namespace {
+
 // Web Kiosk splash screen minimum show time.
 constexpr base::TimeDelta kKioskSplashScreenMinTime =
     base::TimeDelta::FromSeconds(10);
@@ -259,6 +260,9 @@ void KioskLaunchController::OnConfigureNetwork() {
 }
 
 void KioskLaunchController::OnCancelAppLaunch() {
+  if (cleaned_up_)
+    return;
+
   if (KioskAppManager::Get()->GetDisableBailoutShortcut())
     return;
 
@@ -306,6 +310,9 @@ bool KioskLaunchController::IsNetworkRequired() {
 }
 
 void KioskLaunchController::CleanUp() {
+  DCHECK(!cleaned_up_);
+  cleaned_up_ = true;
+
   extension_wait_timer_.Stop();
   network_wait_timer_.Stop();
   splash_wait_timer_.Stop();
@@ -330,6 +337,8 @@ void KioskLaunchController::OnTimerFire() {
 }
 
 void KioskLaunchController::CloseSplashScreen() {
+  if (cleaned_up_)
+    return;
   CleanUp();
 }
 
@@ -439,6 +448,9 @@ bool KioskLaunchController::ShouldSkipAppInstallation() const {
 }
 
 void KioskLaunchController::OnLaunchFailed(KioskAppLaunchError::Error error) {
+  if (cleaned_up_)
+    return;
+
   DCHECK_NE(KioskAppLaunchError::Error::kNone, error);
   SYSLOG(ERROR) << "Kiosk launch failed, error=" << static_cast<int>(error);
 
@@ -739,4 +751,4 @@ std::unique_ptr<KioskLaunchController> KioskLaunchController::CreateForTesting(
   return controller;
 }
 
-}  // namespace chromeos
+}  // namespace ash

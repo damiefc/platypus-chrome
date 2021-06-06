@@ -139,16 +139,15 @@ TEST_F(AccountsMutatorTest, UpdateAccountInfo) {
       run_loop.QuitClosure());
 
   CoreAccountId account_id =
-      identity_test_env()->MakePrimaryAccountAvailable(kTestEmail).account_id;
+      identity_test_env()
+          ->MakePrimaryAccountAvailable(kTestEmail, signin::ConsentLevel::kSync)
+          .account_id;
   run_loop.Run();
 
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
 
   AccountInfo original_account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
   EXPECT_EQ(original_account_info.account_id, account_id);
   EXPECT_EQ(original_account_info.email, kTestEmail);
   EXPECT_FALSE(original_account_info.is_child_account);
@@ -159,10 +158,7 @@ TEST_F(AccountsMutatorTest, UpdateAccountInfo) {
       /*is_child_account=*/true,
       /*is_under_advanced_protection=*/absl::nullopt);
   AccountInfo updated_account_info_1 =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
 
   // Only |is_child_account| changed so far, everything else remains the same.
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
@@ -178,10 +174,7 @@ TEST_F(AccountsMutatorTest, UpdateAccountInfo) {
                                         /*is_child_account=*/absl::nullopt,
                                         /*is_under_advanced_protection=*/true);
   AccountInfo updated_account_info_2 =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
 
   // |is_under_advanced_protection| has changed now, but |is_child_account|
   // remains the same since we previously set it to |true| in the previous step.
@@ -199,10 +192,7 @@ TEST_F(AccountsMutatorTest, UpdateAccountInfo) {
                                         /*is_child_account=*/false,
                                         /*is_under_advanced_protection=*/false);
   AccountInfo reset_account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
 
   // Everything is back to its original state now.
   EXPECT_EQ(reset_account_info.is_child_account,
@@ -238,10 +228,7 @@ TEST_F(AccountsMutatorTest, AddOrUpdateAccount_AddNewAccount) {
           account_id));
 
   AccountInfo account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
   EXPECT_EQ(account_info.account_id, account_id);
   EXPECT_EQ(account_info.email, kTestEmail);
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
@@ -271,10 +258,7 @@ TEST_F(AccountsMutatorTest, AddOrUpdateAccount_UpdateExistingAccount) {
       identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
           account_id));
   AccountInfo account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
   EXPECT_EQ(account_info.account_id, account_id);
   EXPECT_EQ(account_info.email, kTestEmail);
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
@@ -311,10 +295,7 @@ TEST_F(AccountsMutatorTest, AddOrUpdateAccount_UpdateExistingAccount) {
   // No new accounts should be created, just the information should be updated.
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 1U);
   AccountInfo updated_account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
   EXPECT_EQ(account_info.account_id, updated_account_info.account_id);
   EXPECT_EQ(account_info.gaia, updated_account_info.gaia);
   EXPECT_EQ(updated_account_info.email, maybe_updated_email);
@@ -387,10 +368,7 @@ TEST_F(
   run_loop.Run();
 
   AccountInfo secondary_account_info =
-      identity_manager()
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
-              account_id)
-          .value();
+      identity_manager()->FindExtendedAccountInfoByAccountId(account_id);
   EXPECT_EQ(identity_manager()->GetAccountsWithRefreshTokens().size(), 2U);
 
   // Now try invalidating the primary account, and check that it gets updated.

@@ -26,49 +26,13 @@ group("closure_compile") {
   testonly = true
   deps = [
     ":closure_compile_jsmodules",
-    ":closure_compile_module",
     ":js_test_gen_html_modules_type_check_auto",
     ":test_support_modules_type_check",
-    ":test_support_type_check",
   ]
 }
 
 # Default to private.
 visibility = [ ":*" ]
-
-js_type_check("closure_compile_module") {
-  uses_legacy_modules = true
-  deps = [
-    ":app_window_wrapper",
-    ":app_windows",
-    ":background",
-    ":background_base",
-    ":closure_compile_externs",
-    ":crostini",
-    ":device_handler",
-    ":drive_sync_handler",
-    ":duplicate_finder",
-    ":entry_location_impl",
-    ":file_operation_handler",
-    ":file_operation_manager",
-    ":file_operation_util",
-    ":import_history",
-    ":launcher",
-    ":media_import_handler",
-    ":media_scanner",
-    ":metadata_proxy",
-    ":mount_metrics",
-    ":progress_center",
-    ":runtime_loaded_test_util",
-    ":task_queue",
-    ":test_util_base",
-    ":volume_info_impl",
-    ":volume_info_list_impl",
-    ":volume_manager_factory",
-    ":volume_manager_impl",
-    ":volume_manager_util",
-  ]
-}
 
 js_type_check("closure_compile_jsmodules") {
   deps = [
@@ -118,7 +82,10 @@ js_type_check("test_support_modules_type_check") {
   testonly = true
   deps = [
     ":mock_crostini.m",
+    ":mock_drive_sync_handler.m",
+    ":mock_file_operation_manager.m",
     ":mock_media_scanner.m",
+    ":mock_progress_center.m",
     ":mock_volume_manager.m",
     ":test_import_history.m",
   ]
@@ -129,43 +96,6 @@ js_type_check("test_support_modules_type_check") {
         "browser_resolver_prefix_replacements=\"chrome://test/=./\"",
         "hide_warnings_for=third_party/",
       ]
-}
-
-js_type_check("test_support_type_check") {
-  uses_legacy_modules = true
-  testonly = true
-  deps = [
-    ":mock_crostini",
-    ":mock_drive_sync_handler",
-    ":mock_file_operation_manager",
-    ":mock_media_scanner",
-    ":mock_progress_center",
-    ":mock_volume_manager",
-    ":test_import_history",
-  ]
-}
-
-js_library("closure_compile_externs") {
-  sources = []
-  externs_list = [
-    "$externs_path/metrics_private.js",
-    "//ui/file_manager/file_manager/externs/background/crostini.js",
-    "//ui/file_manager/file_manager/externs/background/drive_sync_handler.js",
-    "//ui/file_manager/file_manager/externs/background/background_base.js",
-    "//ui/file_manager/file_manager/externs/background/file_browser_background_full.js",
-    "//ui/file_manager/file_manager/externs/background/file_operation_manager.js",
-    "//ui/file_manager/file_manager/externs/background/import_history.js",
-    "//ui/file_manager/file_manager/externs/background/media_import_handler.js",
-    "//ui/file_manager/file_manager/externs/background/media_scanner.js",
-    "//ui/file_manager/file_manager/externs/background/progress_center.js",
-    "//ui/file_manager/file_manager/externs/background_window.js",
-    "//ui/file_manager/file_manager/externs/css_rule.js",
-    "//ui/file_manager/file_manager/externs/drive_dialog_controller.js",
-    "//ui/file_manager/file_manager/externs/platform.js",
-    "//ui/file_manager/file_manager/externs/progress_center_panel.js",
-    "//ui/file_manager/file_manager/externs/background/task_queue.js",
-    "//ui/file_manager/file_manager/externs/background/duplicate_finder.js",
-  ]
 }
 
 js_library("app_window_wrapper") {

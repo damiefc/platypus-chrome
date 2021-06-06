@@ -1491,9 +1491,6 @@
       # TODO(https://crbug.com/850107): Remove the Android FYI Release (Pixel 2)
       # exception once there is enough capacity to run these tests.
       'Android FYI Release (Pixel 2)',
-      # TODO(https://crbug.com/1203234): Remove exception once the 1% flake-
-      # rate regression is addressed.
-      'Fuchsia x64' # https://crbug.com/1203236
     ],
   },
   'disk_usage_tast_test': {
@@ -1726,9 +1723,6 @@
       'Linux V8 FYI Release - pointer compression (NVIDIA)',
       'Mac V8 FYI Release (Intel)',
       'Win V8 FYI Release (NVIDIA)',
-      # TODO(https://crbug.com/1203234): Remove exception once the 1% flake-
-      # rate regression is addressed.
-      'Fuchsia x64' # https://crbug.com/1203236
     ],
     'modifications': {
       'ChromeOS FYI Release (amd64-generic)': {
@@ -1901,6 +1895,24 @@
     },
   },
   'maps_pixel_passthrough_test': {
+    'modifications': {
+      'Android FYI Release (Pixel 4)': {
+        'args': [
+          # Pixel 4s are weird in that they can output in different color spaces
+          # simultaneously. The readback code for capturing a screenshot assumes
+          # only one color space, so disable wide color gamut for the test to
+          # work around the issue. See https://crbug.com/1166379 for more
+          # information.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+      'Optional Android Release (Pixel 4)': {
+        'args': [
+          # See above.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+    },
     'replacements': {
       # The V8 builders pass the V8 revision for ${got_revision}, so instead
       # use ${got_cr_revision}, which is only set on the V8 bots.
@@ -2401,6 +2413,24 @@
     },
   },
   'pixel_skia_gold_passthrough_test': {
+    'modifications': {
+      'Android FYI Release (Pixel 4)': {
+        'args': [
+          # Pixel 4s are weird in that they can output in different color spaces
+          # simultaneously. The readback code for capturing a screenshot assumes
+          # only one color space, so disable wide color gamut for the test to
+          # work around the issue. See https://crbug.com/1166379 for more
+          # information.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+      'Optional Android Release (Pixel 4)': {
+        'args': [
+          # See above.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+    },
     'replacements': {
       # The V8 builders pass the V8 revision for ${got_revision}, so instead
       # use ${got_cr_revision}, which is only set on the V8 bots.
@@ -2535,10 +2565,25 @@
       'android-asan',  # https://crbug.com/962650
     ],
   },
-  'screenshot_sync_tests': {
-    'remove_from': [
-      'Fuchsia x64' # https://crbug.com/1203236
-    ],
+  'screenshot_sync_passthrough_tests': {
+    'modifications': {
+      'Android FYI Release (Pixel 4)': {
+        'args': [
+          # Pixel 4s are weird in that they can output in different color spaces
+          # simultaneously. The readback code for capturing a screenshot assumes
+          # only one color space, so disable wide color gamut for the test to
+          # work around the issue. See https://crbug.com/1166379 for more
+          # information.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+      'Optional Android Release (Pixel 4)': {
+        'args': [
+          # See above.
+          '--extra-browser-args=--disable-wcg-for-test',
+        ],
+      },
+    },
   },
   'screenshot_sync_validating_tests': {
     'modifications': {
@@ -3086,6 +3131,15 @@
       },
     },
   },
+  'web_engine_integration_tests': {
+    'modifications': {
+      'fuchsia-code-coverage': {
+        'swarming': {
+          'shards': 6,
+        },
+      },
+    },
+  },
   'webdriver_tests_suite': {
     'remove_from': [
       'Linux Tests',  # https://crbug.com/929689, https://crbug.com/936557
@@ -3097,13 +3151,6 @@
       # Not enough capacity. https://crbug.com/982294
       'Mac Pro FYI Release (AMD)',
       'Mac FYI Retina Release (NVIDIA)',
-    ],
-  },
-  'webgl2_conformance_gles_passthrough_tests': {
-    'remove_from': [
-      # Currently only enough Pixel 4 capacity to run either validating or
-      # passthrough on the trybot, not both.
-      'Optional Android Release (Pixel 4)',
     ],
   },
   'webgl2_conformance_validating_tests': {

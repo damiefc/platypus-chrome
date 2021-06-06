@@ -236,20 +236,26 @@ static_assert(
     "critical level not align");
 
 void* CreateHistogram(const char* name, int min, int max, size_t buckets) {
-  if (min <= 0)
-    min = 1;
-  std::string histogram_name;
-  RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
-  if (render_thread_impl) {  // Can be null in tests.
-    histogram_name = render_thread_impl->histogram_customizer()
-                         ->ConvertToCustomHistogramName(name);
-  } else {
-    histogram_name = std::string(name);
+  // Each histogram has an implicit '0' bucket (for underflow), so we can always
+  // bump the minimum to 1.
+  DCHECK_LE(0, min);
+  min = std::max(1, min);
+
+  // For boolean histograms, always include an overflow bucket [2, infinity).
+  if (max == 1 && buckets == 2) {
+    max = 2;
+    buckets = 3;
   }
-  base::HistogramBase* histogram =
-      base::Histogram::FactoryGet(histogram_name, min, max, buckets,
-                                  base::Histogram::kUmaTargetedHistogramFlag);
-  return histogram;
+
+  RenderThreadImpl* render_thread_impl = RenderThreadImpl::current();
+  // render_thread_impl can be null in tests.
+  std::string histogram_name = render_thread_impl
+                                   ? render_thread_impl->histogram_customizer()
+                                         ->ConvertToCustomHistogramName(name)
+                                   : std::string{name};
+  return base::Histogram::FactoryGet(
+      histogram_name, min, max, buckets,
+      base::Histogram::kUmaTargetedHistogramFlag);
 }
 
 void AddHistogramSample(void* hist, int sample) {
@@ -625,9 +631,9 @@ void RenderThreadImpl::Init() {
 // but the system default is true.
 #if defined(OS_MAC)
   is_elastic_overscroll_enabled_ = true;
-#elif defined(OS_WIN)
+#elif defined(OS_WIN) || defined(OS_ANDROID)
   is_elastic_overscroll_enabled_ =
-      base::FeatureList::IsEnabled(features::kElasticOverscrollWin);
+      base::FeatureList::IsEnabled(features::kElasticOverscroll);
 #else
   is_elastic_overscroll_enabled_ = false;
 #endif
@@ -948,6 +954,7 @@ void RenderThreadImpl::RegisterSchemes() {
   WebSecurityPolicy::RegisterURLSchemeAsDisplayIsolated(chrome_scheme);
   WebSecurityPolicy::RegisterURLSchemeAsNotAllowingJavascriptURLs(
       chrome_scheme);
+  WebSecurityPolicy::RegisterURLSchemeAsWebUI(chrome_scheme);
 
   // chrome-untrusted:
   WebString chrome_untrusted_scheme(

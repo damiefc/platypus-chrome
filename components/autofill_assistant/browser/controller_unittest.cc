@@ -15,7 +15,10 @@
 #include "base/test/gtest_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/field_types.h"
+#include "components/autofill_assistant/browser/cud_condition.pb.h"
 #include "components/autofill_assistant/browser/device_context.h"
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/mock_client.h"
@@ -86,16 +89,13 @@ struct MockCollectUserDataOptions : public CollectUserDataOptions {
 
 }  // namespace
 
-class ControllerTest : public content::RenderViewHostTestHarness {
+class ControllerTest : public testing::Test {
  public:
-  ControllerTest()
-      : RenderViewHostTestHarness(
-            base::test::TaskEnvironment::MainThreadType::UI,
-            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
-  ~ControllerTest() override {}
+  ControllerTest() = default;
 
   void SetUp() override {
-    RenderViewHostTestHarness::SetUp();
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        &browser_context_, nullptr);
 
     scoped_feature_list_.InitAndEnableFeature(
         features::kAutofillAssistantChromeEntry);
@@ -145,7 +145,12 @@ class ControllerTest : public content::RenderViewHostTestHarness {
   void TearDown() override {
     controller_->RemoveObserver(&mock_observer_);
     controller_.reset();
-    RenderViewHostTestHarness::TearDown();
+  }
+
+  content::WebContents* web_contents() { return web_contents_.get(); }
+
+  content::BrowserTaskEnvironment* task_environment() {
+    return &task_environment_;
   }
 
  protected:
@@ -236,8 +241,18 @@ class ControllerTest : public content::RenderViewHostTestHarness {
     controller_->navigating_to_new_document_ = value;
   }
 
-  // |task_environment_| must be the first field, to make sure that everything
-  // runs in the same task environment.
+  RequiredDataPiece MakeRequiredDataPiece(autofill::ServerFieldType field) {
+    RequiredDataPiece required_data_piece;
+    required_data_piece.mutable_condition()->set_key(static_cast<int>(field));
+    required_data_piece.mutable_condition()->mutable_not_empty();
+    return required_data_piece;
+  }
+
+  content::BrowserTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
+  content::TestBrowserContext browser_context_;
+  std::unique_ptr<content::WebContents> web_contents_;
   base::test::ScopedFeatureList scoped_feature_list_;
   base::TimeTicks now_;
   std::vector<AutofillAssistantState> states_;
@@ -2002,9 +2017,12 @@ TEST_F(ControllerTest, UserDataFormContactInfo) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
   auto user_data = std::make_unique<UserData>();
 
-  options->request_payer_name = true;
-  options->request_payer_email = true;
-  options->request_payer_phone = true;
+  options->required_contact_data_pieces.push_back(
+      MakeRequiredDataPiece(autofill::ServerFieldType::NAME_FULL));
+  options->required_contact_data_pieces.push_back(
+      MakeRequiredDataPiece(autofill::ServerFieldType::EMAIL_ADDRESS));
+  options->required_contact_data_pieces.push_back(MakeRequiredDataPiece(
+      autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER));
   options->contact_details_name = "selected_profile";
 
   testing::InSequence seq;
@@ -2099,9 +2117,12 @@ TEST_F(ControllerTest, UserDataChangesByOutOfLoopWrite) {
   auto options = std::make_unique<MockCollectUserDataOptions>();
   auto user_data = std::make_unique<UserData>();
 
-  options->request_payer_name = true;
-  options->request_payer_email = true;
-  options->request_payer_phone = true;
+  options->required_contact_data_pieces.push_back(
+      MakeRequiredDataPiece(autofill::ServerFieldType::NAME_FULL));
+  options->required_contact_data_pieces.push_back(
+      MakeRequiredDataPiece(autofill::ServerFieldType::EMAIL_ADDRESS));
+  options->required_contact_data_pieces.push_back(MakeRequiredDataPiece(
+      autofill::ServerFieldType::PHONE_HOME_WHOLE_NUMBER));
   options->contact_details_name = "selected_profile";
 
   testing::InSequence sequence;

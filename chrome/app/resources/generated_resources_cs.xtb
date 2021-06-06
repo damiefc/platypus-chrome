@@ -673,6 +673,7 @@
 <translation id="1706625117072057435">Úrovně přiblížení</translation>
 <translation id="1708338024780164500">(Neaktivní)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Experimentální prohlížeč! Může dojít ke ztrátě dat nebo porušení ochrany soukromí či zabezpečení. Problémy hlaste v sekci Nápověda &gt; Nahlásit problém…</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> × <ph name="HEIGHT" /> (nativní)</translation>
 <translation id="1709217939274742847">Vyberte lístek, který chcete použít k ověření. <ph name="LINK_BEGIN" />Další informace<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Sdílení se nezdařilo</translation>
@@ -1089,6 +1090,7 @@ Chcete-li spravovat nastavení tohoto účtu, nainstalujte si do zařízení apl
 <translation id="2144557304298909478">Vývoj aplikací Android pro Linux</translation>
 <translation id="2146263598007866206">Weby mohou automaticky stahovat související soubory, aby vám ušetřily čas</translation>
 <translation id="2147151613919729065">Pokud chcete vymazat historii režimu hosta, zavřete všechna okna hosta.</translation>
+<translation id="2147218225094845757">Skrýt boční panel</translation>
 <translation id="2148219725039824548">Při připojování sdílené složky došlo k chybě. Zadaná sdílená složka v síti nebyla nalezena.</translation>
 <translation id="2148756636027685713">Formátování je dokončeno</translation>
 <translation id="2148892889047469596">Odeslat kartu</translation>
@@ -3162,6 +3164,7 @@ Zpráva serveru: <ph name="SERVER_MSG" /></translation>
 <translation id="4410545552906060960">Zařízení budete místo heslem odemykat pomocí kódu PIN. PIN můžete nastavit později v Nastavení.</translation>
 <translation id="4411578466613447185">Slouží k podepsání kódu</translation>
 <translation id="4412698727486357573">Centrum nápovědy</translation>
+<translation id="4413088271097062326">Kterou aplikaci chcete použít?</translation>
 <translation id="44141919652824029">Povolit aplikaci <ph name="APP_NAME" /> získat seznam připojených zařízení USB?</translation>
 <translation id="4414232939543644979">Nové &amp;anonymní okno</translation>
 <translation id="4414515549596849729">soubory cookie a data webu</translation>
@@ -3934,6 +3937,7 @@ Zpráva serveru: <ph name="SERVER_MSG" /></translation>
 <translation id="5269977353971873915">Tisk se nezdařil</translation>
 <translation id="5275352920323889391">Pes</translation>
 <translation id="527605982717517565">Vždy povolovat JavaScript z webu <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Zobrazit boční panel</translation>
 <translation id="5278823018825269962">ID stavu</translation>
 <translation id="5280064835262749532">Aktualizujte identifikační údaje pro <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Smazat soubory cookie a data webů, když zavřete všechna okna</translation>
@@ -6112,7 +6116,6 @@ Zpráva serveru: <ph name="SERVER_MSG" /></translation>
 <translation id="7685049629764448582">Paměť JavaScriptu</translation>
 <translation id="7685087414635069102">Je vyžadován kód PIN</translation>
 <translation id="768549422429443215">Přidejte jazyky nebo přeuspořádejte seznam.</translation>
-<translation id="7686424868232681412">Lacros je experimentální prohlížeč. Problémy hlaste v sekci Nápověda &gt; Nahlásit problém…</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Potvrďte nové heslo</translation>
 <translation id="7690378713476594306">Vybrat ze seznamu</translation>

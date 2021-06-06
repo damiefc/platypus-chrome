@@ -415,8 +415,7 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::Layout(
 
     // We may have to update the margins on box_; we reuse the layout result
     // even if a percentage margin may have changed.
-    if (UNLIKELY(Style().MayHaveMargin() && !constraint_space.IsTableCell()))
-      box_->SetMargin(ComputePhysicalMargins(constraint_space, Style()));
+    UpdateMarginPaddingInfoIfNeeded(constraint_space);
 
     UpdateShapeOutsideInfoIfNeeded(
         *layout_result, constraint_space.PercentageResolutionInlineSize());
@@ -685,6 +684,11 @@ void NGBlockNode::FinishLayout(
     const NGConstraintSpace& constraint_space,
     const NGBlockBreakToken* break_token,
     scoped_refptr<const NGLayoutResult> layout_result) const {
+  // Computing MinMax after layout. Do not modify the |LayoutObject| tree, paint
+  // properties, and other global states.
+  if (constraint_space.SideEffectsDisabled())
+    return;
+
   // If we abort layout and don't clear the cached layout-result, we can end
   // up in a state where the layout-object tree doesn't match fragment tree
   // referenced by this layout-result.
@@ -798,8 +802,18 @@ MinMaxSizesResult NGBlockNode::ComputeMinMaxSizes(
                                /* depends_on_block_constraints */ false);
     }
 
-    scoped_refptr<const NGLayoutResult> layout_result =
-        Layout(constraint_space);
+    scoped_refptr<const NGLayoutResult> layout_result;
+    if (GetLayoutBox()->NeedsLayout() ||
+        constraint_space.SideEffectsDisabled()) {
+      layout_result = Layout(constraint_space);
+    } else {
+      // If we're computing MinMax after layout, we need to set
+      // |SideEffectsDisabled| so that |Layout| does not update the
+      // |LayoutObject| tree and other global states.
+      NGConstraintSpace side_effects_disabled =
+          constraint_space.CloneWithSideEffectsDisabled();
+      layout_result = Layout(side_effects_disabled);
+    }
     DCHECK_EQ(layout_result->Status(), NGLayoutResult::kSuccess);
     sizes = NGFragment({container_writing_mode, TextDirection::kLtr},
                        layout_result->PhysicalFragment())
@@ -1094,21 +1108,7 @@ void NGBlockNode::CopyFragmentDataToLayoutBox(
   // TODO(mstensho): This should always be done by the parent algorithm, since
   // we may have auto margins, which only the parent is able to resolve. Remove
   // the following line when all layout modes do this properly.
-  if (UNLIKELY(box_->IsTableCell())) {
-    // Table-cell margins compute to zero.
-    box_->SetMargin(NGPhysicalBoxStrut());
-  } else {
-    box_->SetMargin(ComputePhysicalMargins(constraint_space, Style()));
-  }
-
-  // We copy back the %-size so that |LayoutBoxModelObject::ComputedCSSPadding|
-  // is able to return the correct value. This isn't ideal, but eventually
-  // we'll answer these queries from the fragment.
-  const auto* containing_block = box_->ContainingBlock();
-  if (UNLIKELY(containing_block && containing_block->IsLayoutNGGrid())) {
-    box_->SetOverrideContainingBlockContentLogicalWidth(
-        constraint_space.PercentageResolutionInlineSizeForParentWritingMode());
-  }
+  UpdateMarginPaddingInfoIfNeeded(constraint_space);
 
   auto* block_flow = DynamicTo<LayoutBlockFlow>(box_);
   LayoutMultiColumnFlowThread* flow_thread = GetFlowThread(block_flow);
@@ -1325,8 +1325,13 @@ void NGBlockNode::PlaceChildrenInFlowThread(
     }
 
     DCHECK(!child_box);
-
     LogicalSize logical_size = converter.ToLogical(child_fragment.Size());
+
+    // TODO(layout-dev): This should really be checking if there are any
+    // descendants that take up block space rather than if it has overflow. In
+    // other words, we would still want to clamp a zero height fragmentainer if
+    // it had content with zero inline size and non-zero block size. This would
+    // likely require us to store an extra flag on NGPhysicalBoxFragment.
     if (child_fragment.HasLayoutOverflow()) {
       // Don't clamp the fragmentainer to a block size of 1 if it is truly a
       // zero-height column.
@@ -1707,19 +1712,23 @@ scoped_refptr<const NGLayoutResult> NGBlockNode::RunLegacyLayout(
     CopyBaselinesFromLegacyLayout(constraint_space, &builder);
     layout_result = builder.ToBoxFragment();
 
-    box_->SetCachedLayoutResult(layout_result);
+    // When |SideEffectsDisabled|, it's not possible to disable side effects
+    // completely for legacy, but at least keep the fragment tree unaffected.
+    if (!constraint_space.SideEffectsDisabled()) {
+      box_->SetCachedLayoutResult(layout_result);
 
-    // If |SetCachedLayoutResult| did not update cached |LayoutResult|,
-    // |NeedsLayout()| flag should not be cleared.
-    if (needed_layout) {
-      if (layout_result != box_->GetCachedLayoutResult()) {
-        // TODO(kojii): If we failed to update CachedLayoutResult for other
-        // reasons, we'd like to review it.
-        NOTREACHED();
-        box_->SetNeedsLayout(layout_invalidation_reason::kUnknown);
+      // If |SetCachedLayoutResult| did not update cached |LayoutResult|,
+      // |NeedsLayout()| flag should not be cleared.
+      if (needed_layout) {
+        if (layout_result != box_->GetCachedLayoutResult()) {
+          // TODO(kojii): If we failed to update CachedLayoutResult for other
+          // reasons, we'd like to review it.
+          NOTREACHED();
+          box_->SetNeedsLayout(layout_invalidation_reason::kUnknown);
+        }
       }
     }
-  } else if (layout_result) {
+  } else if (layout_result && !constraint_space.SideEffectsDisabled()) {
     // OOF-positioned nodes have a two-tier cache, and their layout results
     // must always contain the correct percentage resolution size.
     // See |NGBlockNode::CachedLayoutResultForOutOfFlowPositioned|.
@@ -1805,7 +1814,28 @@ LayoutUnit NGBlockNode::AtomicInlineBaselineFromLegacyLayout(
   return box_->InlineBlockBaseline(line_direction);
 }
 
-// Floats can optionally have a shape area, specifed by "shape-outside". The
+void NGBlockNode::UpdateMarginPaddingInfoIfNeeded(
+    const NGConstraintSpace& space) const {
+  // Table-cells don't have margins, and aren't grid-items.
+  if (space.IsTableCell())
+    return;
+
+  if (Style().MayHaveMargin())
+    box_->SetMargin(ComputePhysicalMargins(space, Style()));
+
+  if (Style().MayHaveMargin() || Style().MayHavePadding()) {
+    // Copy back the %-size so that |LayoutBoxModelObject::ComputedCSSPadding|
+    // is able to return the correct value. This isn't ideal, but eventually
+    // we'll answer these queries from the fragment.
+    const auto* containing_block = box_->ContainingBlock();
+    if (UNLIKELY(containing_block && containing_block->IsLayoutNGGrid())) {
+      box_->SetOverrideContainingBlockContentLogicalWidth(
+          space.PercentageResolutionInlineSizeForParentWritingMode());
+    }
+  }
+}
+
+// Floats can optionally have a shape area, specified by "shape-outside". The
 // current shape machinery requires setting the size of the float after layout
 // in the parents writing mode.
 void NGBlockNode::UpdateShapeOutsideInfoIfNeeded(

@@ -313,6 +313,8 @@
 #include "chrome/browser/ash/login/users/chrome_user_manager_impl.h"
 #include "chrome/browser/ash/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_pref_names.h"
+#include "chrome/browser/ash/power/auto_screen_brightness/metrics_reporter.h"
+#include "chrome/browser/ash/power/power_metrics_reporter.h"
 #include "chrome/browser/ash/release_notes/release_notes_storage.h"
 #include "chrome/browser/ash/settings/device_settings_cache.h"
 #include "chrome/browser/ash/system/automatic_reboot_manager.h"
@@ -321,22 +323,20 @@
 #include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/policy/adb_sideloading_allowance_mode_policy_handler.h"
-#include "chrome/browser/chromeos/policy/app_install_event_log_manager_wrapper.h"
-#include "chrome/browser/chromeos/policy/arc_app_install_event_logger.h"
 #include "chrome/browser/chromeos/policy/auto_enrollment_client_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_impl.h"
 #include "chrome/browser/chromeos/policy/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
-#include "chrome/browser/chromeos/policy/extension_install_event_log_manager_wrapper.h"
-#include "chrome/browser/chromeos/policy/external_data_handlers/device_wallpaper_image_external_data_handler.h"
+#include "chrome/browser/chromeos/policy/external_data/handlers/device_wallpaper_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
-#include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
+#include "chrome/browser/chromeos/policy/networking/policy_cert_service_factory.h"
+#include "chrome/browser/chromeos/policy/reporting/app_install_event_log_manager_wrapper.h"
+#include "chrome/browser/chromeos/policy/reporting/arc_app_install_event_logger.h"
+#include "chrome/browser/chromeos/policy/reporting/extension_install_event_log_manager_wrapper.h"
 #include "chrome/browser/chromeos/policy/status_collector/device_status_collector.h"
 #include "chrome/browser/chromeos/policy/status_collector/status_collector.h"
-#include "chrome/browser/chromeos/power/auto_screen_brightness/metrics_reporter.h"
-#include "chrome/browser/chromeos/power/power_metrics_reporter.h"
 #include "chrome/browser/chromeos/preferences.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/enterprise_printers_provider.h"
@@ -578,6 +578,10 @@ const char kToolbarSize[] = "extensions.toolbarsize";
 #endif
 const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 
+// Deprecated 05/2021
+const char kSpellCheckBlacklistedDictionaries[] =
+    "spellcheck.blacklisted_dictionaries";
+
 // Register local state used only for migration (clearing or moving to a new
 // key).
 void RegisterLocalStatePrefsForMigration(PrefRegistrySimple* registry) {
@@ -713,6 +717,15 @@ void RegisterProfilePrefsForMigration(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   registry->RegisterInt64Pref(kFeatureUsageDailySampleFingerprint, 0);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  registry->RegisterListPref(kSpellCheckBlacklistedDictionaries);
+
+#if !defined(OS_ANDROID)
+  registry->RegisterListPref(
+      prefs::kManagedProfileSerialAllowAllPortsForUrlsDeprecated);
+  registry->RegisterListPref(
+      prefs::kManagedProfileSerialAllowUsbDevicesForUrlsDeprecated);
+#endif
 }
 
 }  // namespace
@@ -753,6 +766,9 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   RegisterScreenshotPrefs(registry);
   safe_browsing::RegisterLocalStatePrefs(registry);
   secure_origin_allowlist::RegisterPrefs(registry);
+#if !defined(OS_ANDROID)
+  SerialPolicyAllowedPorts::RegisterPrefs(registry);
+#endif
   sessions::SessionIdGenerator::RegisterPrefs(registry);
   SSLConfigServiceManager::RegisterPrefs(registry);
   subresource_filter::IndexedRulesetVersion::RegisterPrefs(registry);
@@ -841,8 +857,8 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   chromeos::PowerMetricsReporter::RegisterLocalStatePrefs(registry);
   chromeos::platform_keys::KeyPermissionsManagerImpl::RegisterLocalStatePrefs(
       registry);
-  chromeos::power::auto_screen_brightness::MetricsReporter::
-      RegisterLocalStatePrefs(registry);
+  ash::power::auto_screen_brightness::MetricsReporter::RegisterLocalStatePrefs(
+      registry);
   chromeos::Preferences::RegisterPrefs(registry);
   ash::ResetScreen::RegisterPrefs(registry);
   chromeos::SchedulerConfigurationManager::RegisterLocalStatePrefs(registry);
@@ -1001,9 +1017,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
       registry);
   security_interstitials::InsecureFormBlockingPage::RegisterProfilePrefs(
       registry);
-#if !defined(OS_ANDROID)
-  SerialPolicyAllowedPorts::RegisterProfilePrefs(registry);
-#endif
   SessionStartupPref::RegisterProfilePrefs(registry);
   SharingSyncPreference::RegisterProfilePrefs(registry);
   site_engagement::SiteEngagementService::RegisterProfilePrefs(registry);
@@ -1436,6 +1449,17 @@ void MigrateObsoleteProfilePrefs(Profile* profile) {
   // Added 05/2021
   profile_prefs->ClearPref(kFeatureUsageDailySampleFingerprint);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  // Added 05/2021
+  profile_prefs->ClearPref(kSpellCheckBlacklistedDictionaries);
+
+#if !defined(OS_ANDROID)
+  // Added 05/2021
+  profile_prefs->ClearPref(
+      prefs::kManagedProfileSerialAllowAllPortsForUrlsDeprecated);
+  profile_prefs->ClearPref(
+      prefs::kManagedProfileSerialAllowUsbDevicesForUrlsDeprecated);
+#endif
 
   // Please don't delete the following line. It is used by PRESUBMIT.py.
   // END_MIGRATE_OBSOLETE_PROFILE_PREFS

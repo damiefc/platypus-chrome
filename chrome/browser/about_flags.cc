@@ -188,6 +188,7 @@
 #include "ui/events/event_switches.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/buildflags.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
 
@@ -922,13 +923,23 @@ const FeatureEntry::Choice kMemlogSamplingRateChoices[] = {
      heap_profiling::kMemlogSamplingRate5MB},
 };
 
-const FeatureEntry::FeatureVariation kMemoriesVariations[] = {{
-    "Persist Context",
-    (FeatureEntry::FeatureParam[]){
-        {"MemoriesPersistContextAnnotationsInHistoryDb", "true"}},
-    1,
-    nullptr,
-}};
+const FeatureEntry::FeatureVariation kMemoriesVariations[] = {
+    {
+        "Persist Context + Limit 1k",
+        (FeatureEntry::FeatureParam[]){
+            {"MemoriesPersistContextAnnotationsInHistoryDb", "true"}},
+        1,
+        nullptr,
+    },
+    {
+        "Persist Context + Limit 10k",
+        (FeatureEntry::FeatureParam[]){
+            {"MemoriesPersistContextAnnotationsInHistoryDb", "true"},
+            {"MemoriesMaxVisitsToCluster", "10000"}},
+        2,
+        nullptr,
+    },
+};
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) || \
     defined(OS_WIN)
@@ -2627,6 +2638,10 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-webrtc-hybrid-agc", flag_descriptions::kWebrtcHybridAgcName,
      flag_descriptions::kWebrtcHybridAgcDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kWebRtcHybridAgc)},
+    {"enable-webrtc-analog-agc-clipping-control",
+     flag_descriptions::kWebrtcAnalogAgcClippingControlName,
+     flag_descriptions::kWebrtcAnalogAgcClippingControlDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kWebRtcAnalogAgcClippingControl)},
     {"enable-webrtc-hide-local-ips-with-mdns",
      flag_descriptions::kWebrtcHideLocalIpsWithMdnsName,
      flag_descriptions::kWebrtcHideLocalIpsWithMdnsDecription, kOsDesktop,
@@ -3239,7 +3254,7 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_WITH_PARAMS_VALUE_TYPE(
          chrome::android::kAdaptiveButtonInTopToolbar,
          kAdaptiveButtonInTopToolbarVariations,
-         "AdaptiveButtonInTopToolbar")},
+         "OptionalToolbarButton")},
     {"adaptive-button-in-top-toolbar-customization",
      flag_descriptions::kAdaptiveButtonInTopToolbarCustomizationName,
      flag_descriptions::kAdaptiveButtonInTopToolbarCustomizationDescription,
@@ -4582,12 +4597,6 @@ const FeatureEntry kFeatureEntries[] = {
 
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
-    {"direct-manipulation-stylus",
-     flag_descriptions::kDirectManipulationStylusName,
-     flag_descriptions::kDirectManipulationStylusDescription,
-     kOsWin | kOsMac | kOsLinux,
-     FEATURE_VALUE_TYPE(features::kDirectManipulationStylus)},
-
     {"webui-feedback", flag_descriptions::kWebuiFeedbackName,
      flag_descriptions::kWebuiFeedbackDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(features::kWebUIFeedback)},
@@ -4686,15 +4695,6 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(features::kUserMediaScreenCapturing)},
 #endif
 
-#if defined(OS_ANDROID)
-    {"prefetch-notification-scheduling-integration",
-     flag_descriptions::kPrefetchNotificationSchedulingIntegrationName,
-     flag_descriptions::kPrefetchNotificationSchedulingIntegrationDescription,
-     kOsAndroid,
-     FEATURE_VALUE_TYPE(
-         chrome::android::kPrefetchNotificationSchedulingIntegration)},
-#endif
-
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"chrome-tips-in-main-menu", flag_descriptions::kChromeTipsInMainMenuName,
      flag_descriptions::kChromeTipsInMainMenuDescription, kOsDesktop,
@@ -4743,16 +4743,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"accessible-pdf-form", flag_descriptions::kAccessiblePDFFormName,
      flag_descriptions::kAccessiblePDFFormDescription, kOsDesktop,
      FEATURE_VALUE_TYPE(chrome_pdf::features::kAccessiblePDFForm)},
-
-    {"pdf-viewer-document-properties",
-     flag_descriptions::kPdfViewerDocumentPropertiesName,
-     flag_descriptions::kPdfViewerDocumentPropertiesDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(chrome_pdf::features::kPdfViewerDocumentProperties)},
-
-    {"pdf-viewer-presentation-mode",
-     flag_descriptions::kPdfViewerPresentationModeName,
-     flag_descriptions::kPdfViewerPresentationModeDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(chrome_pdf::features::kPdfViewerPresentationMode)},
 #endif  // BUILDFLAG(ENABLE_PDF)
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -4873,6 +4863,12 @@ const FeatureEntry kFeatureEntries[] = {
          chrome::android::kConditionalTabStripAndroid,
          kConditionalTabStripAndroidVariations,
          "ConditioanlTabStrip")},
+
+    {"enable-quick-action-search-widget-android",
+     flag_descriptions::kQuickActionSearchWidgetAndroidName,
+     flag_descriptions::kQuickActionSearchWidgetAndroidDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kQuickActionSearchWidgetAndroid)},
+
 #endif  // OS_ANDROID
 
     {"enable-layout-ng", flag_descriptions::kEnableLayoutNGName,
@@ -5128,10 +5124,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableArcUnifiedAudioFocusName,
      flag_descriptions::kEnableArcUnifiedAudioFocusDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(arc::kEnableUnifiedAudioFocusFeature)},
-    {"enable-kerberos-settings-section",
-     flag_descriptions::kKerberosSettingsSectionName,
-     flag_descriptions::kKerberosSettingsSectionDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kKerberosSettingsSection)},
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
@@ -5149,13 +5141,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableAssistantAppSupportName,
      flag_descriptions::kEnableAssistantAppSupportDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::assistant::features::kAssistantAppSupport)},
-
-    {"enable-assistant-media-session-integration",
-     flag_descriptions::kEnableAssistantMediaSessionIntegrationName,
-     flag_descriptions::kEnableAssistantMediaSessionIntegrationDescription,
-     kOsCrOS,
-     FEATURE_VALUE_TYPE(
-         chromeos::assistant::features::kEnableMediaSessionIntegration)},
 
     {"enable-quick-answers", flag_descriptions::kEnableQuickAnswersName,
      flag_descriptions::kEnableQuickAnswersDescription, kOsCrOS,
@@ -5457,10 +5442,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kMeteredShowToggleDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kMeteredShowToggle)},
 
-    {"printer-status-dialog", flag_descriptions::kPrinterStatusDialogName,
-     flag_descriptions::kPrinterStatusDialogDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kPrinterStatusDialog)},
-
     {"wifi-sync-allow-deletes", flag_descriptions::kWifiSyncAllowDeletesName,
      flag_descriptions::kWifiSyncAllowDeletesDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kWifiSyncAllowDeletes)},
@@ -5499,10 +5480,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSelectToSpeakNavigationControlName,
      flag_descriptions::kSelectToSpeakNavigationControlDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kSelectToSpeakNavigationControl)},
-
-    {"print-server-scaling", flag_descriptions::kPrintServerScalingName,
-     flag_descriptions::kPrintServerScalingDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(chromeos::features::kPrintServerScaling)},
 
     {"enable-networking-in-diagnostics-app",
      flag_descriptions::kEnableNetworkingInDiagnosticsAppName,
@@ -5965,10 +5942,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kScrollUnificationDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kScrollUnification)},
 
-#if defined(OS_WIN)
-    {"elastic-overscroll-win", flag_descriptions::kElasticOverscrollWinName,
-     flag_descriptions::kElasticOverscrollWinDescription, kOsWin,
-     FEATURE_VALUE_TYPE(features::kElasticOverscrollWin)},
+#if defined(OS_WIN) || defined(OS_ANDROID)
+    {"elastic-overscroll", flag_descriptions::kElasticOverscrollName,
+     flag_descriptions::kElasticOverscrollDescription, kOsWin | kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kElasticOverscroll)},
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -6412,10 +6389,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kClientStorageAccessContextAuditingDescription, kOsAll,
      FEATURE_VALUE_TYPE(features::kClientStorageAccessContextAuditing)},
 
-    {"clipboard-filenames", flag_descriptions::kClipboardFilenamesName,
-     flag_descriptions::kClipboardFilenamesDescription, kOsAll,
-     FEATURE_VALUE_TYPE(features::kClipboardFilenames)},
-
 #if defined(OS_WIN)
     {"safety-check-chrome-cleaner-child",
      flag_descriptions::kSafetyCheckChromeCleanerChildName,
@@ -6548,6 +6521,12 @@ const FeatureEntry kFeatureEntries[] = {
      kOsDesktop,
      FEATURE_VALUE_TYPE(features::kIncognitoBrandConsistencyForDesktop)},
 
+    {"incognito-clear-browsing-data-dialog-for-desktop",
+     flag_descriptions::kIncognitoClearBrowsingDataDialogForDesktopName,
+     flag_descriptions::kIncognitoClearBrowsingDataDialogForDesktopDescription,
+     kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kIncognitoClearBrowsingDataDialogForDesktop)},
+
     {"inherit-native-theme-from-parent-widget",
      flag_descriptions::kInheritNativeThemeFromParentWidgetName,
      flag_descriptions::kInheritNativeThemeFromParentWidgetDescription,
@@ -6634,6 +6613,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAndroidDetailedLanguageSettingsName,
      flag_descriptions::kAndroidDetailedLanguageSettingsDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(language::kDetailedLanguageSettings)},
+    {"android-force-app-language-prompt",
+     flag_descriptions::kAndroidForceAppLanguagePromptName,
+     flag_descriptions::kAndroidForceAppLanguagePromptDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(language::kForceAppLanguagePrompt)},
 #endif
 
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
@@ -7203,6 +7186,27 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-generated-webapks", flag_descriptions::kEnableGeneratedWebApksName,
      flag_descriptions::kEnableGeneratedWebApksDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(ash::features::kWebApkGenerator)},
+
+    {"enable-projector-feature-pod",
+     flag_descriptions::kProjectorFeaturePodName,
+     flag_descriptions::kProjectorFeaturePodDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(ash::features::kProjectorFeaturePod)},
+
+    {"enable-projector-feature", flag_descriptions::kProjectorName,
+     flag_descriptions::kProjectorDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(ash::features::kProjector)},
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+    {"use-passthrough-command-decoder",
+     flag_descriptions::kUsePassthroughCommandDecoderName,
+     flag_descriptions::kUsePassthroughCommandDecoderDescription,
+     kOsMac | kOsLinux | kOsCrOS | kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kDefaultPassthroughCommandDecoder)},
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    {"focus-follows-cursor", flag_descriptions::kFocusFollowsCursorName,
+     flag_descriptions::kFocusFollowsCursorDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(::features::kFocusFollowsCursor)},
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum

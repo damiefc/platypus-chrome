@@ -22,13 +22,12 @@ PrerenderNavigationThrottle::MaybeCreateThrottleFor(
     NavigationHandle* navigation_handle) {
   auto* navigation_request = NavigationRequest::From(navigation_handle);
   FrameTreeNode* frame_tree_node = navigation_request->frame_tree_node();
-  if (!blink::features::IsPrerender2Enabled() ||
-      !frame_tree_node->IsMainFrame() ||
-      !frame_tree_node->frame_tree()->is_prerendering()) {
-    return nullptr;
+  if (frame_tree_node->IsMainFrame() &&
+      frame_tree_node->frame_tree()->is_prerendering()) {
+    DCHECK(blink::features::IsPrerender2Enabled());
+    return base::WrapUnique(new PrerenderNavigationThrottle(navigation_handle));
   }
-
-  return base::WrapUnique(new PrerenderNavigationThrottle(navigation_handle));
+  return nullptr;
 }
 
 const char* PrerenderNavigationThrottle::GetNameForLogging() {
@@ -73,12 +72,11 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
           : nullptr;
   if (initiator_render_frame_host_impl &&
       initiator_render_frame_host_impl->frame_tree()->is_prerendering()) {
-    prerender_host_registry->AbandonHostAsync(
+    prerender_host_registry->AbandonHost(
         frame_tree_node->frame_tree_node_id(),
         PrerenderHost::FinalStatus::kMainFrameNavigation);
     // TODO(https://crbug.com/1194414): Handle the case the prerendering page
-    // is reserved for activation, and AbandonHostAsync() could not do nothing
-    // here.
+    // is reserved for activation.
     return CANCEL;
   }
 
@@ -86,7 +84,7 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
   // https://jeremyroman.github.io/alternate-loading-modes/#no-bad-navs
   GURL prerendering_url = navigation_handle()->GetURL();
   if (!prerendering_url.SchemeIsHTTPOrHTTPS()) {
-    prerender_host_registry->AbandonHostAsync(
+    prerender_host_registry->AbandonHost(
         frame_tree_node->frame_tree_node_id(),
         is_redirection ? PrerenderHost::FinalStatus::kInvalidSchemeRedirect
                        : PrerenderHost::FinalStatus::kInvalidSchemeNavigation);
@@ -115,10 +113,7 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
   // prerendered page.
   url::Origin prerendering_origin = url::Origin::Create(prerendering_url);
   if (prerendering_origin != prerender_host->initiator_origin()) {
-    // Asynchronously abandon the prerender host so that the navigation request
-    // and the render frame tree indirectly owned by the prerender host can
-    // outlive the current callstack.
-    prerender_host_registry->AbandonHostAsync(
+    prerender_host_registry->AbandonHost(
         frame_tree_node->frame_tree_node_id(),
         is_redirection ? PrerenderHost::FinalStatus::kCrossOriginRedirect
                        : PrerenderHost::FinalStatus::kCrossOriginNavigation);
@@ -126,6 +121,26 @@ PrerenderNavigationThrottle::WillStartOrRedirectRequest(bool is_redirection) {
     return CANCEL;
   }
 
+  return PROCEED;
+}
+
+NavigationThrottle::ThrottleCheckResult
+PrerenderNavigationThrottle::WillProcessResponse() {
+  // Disallow downloads during prerendering and cancel the prerender.
+  if (navigation_handle()->IsDownload()) {
+    auto* navigation_request = NavigationRequest::From(navigation_handle());
+    FrameTreeNode* frame_tree_node = navigation_request->frame_tree_node();
+    DCHECK(frame_tree_node->frame_tree()->is_prerendering());
+
+    PrerenderHostRegistry* prerender_host_registry =
+        frame_tree_node->current_frame_host()
+            ->delegate()
+            ->GetPrerenderHostRegistry();
+
+    prerender_host_registry->AbandonHost(frame_tree_node->frame_tree_node_id(),
+                                         PrerenderHost::FinalStatus::kDownload);
+    return CANCEL;
+  }
   return PROCEED;
 }
 

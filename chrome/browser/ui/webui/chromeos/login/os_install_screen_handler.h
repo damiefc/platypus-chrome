@@ -32,6 +32,9 @@ class OsInstallScreenView {
 
   // Unbinds the screen from the view.
   virtual void Unbind() = 0;
+
+  virtual void ShowConfirmStep() = 0;
+  virtual void StartInstall() = 0;
 };
 
 class OsInstallScreenHandler : public BaseScreenHandler,
@@ -49,16 +52,24 @@ class OsInstallScreenHandler : public BaseScreenHandler,
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
   void Initialize() override;
-  void RegisterMessages() override;
 
   // OsInstallScreenView:
   void Show() override;
   void Bind(OsInstallScreen* screen) override;
   void Unbind() override;
+  void ShowConfirmStep() override;
+  void StartInstall() override;
 
   OsInstallScreen* screen_ = nullptr;
 };
 
 }  // namespace chromeos
+
+// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
+// source migration is finished.
+namespace ash {
+using ::chromeos::OsInstallScreenHandler;
+using ::chromeos::OsInstallScreenView;
+}  // namespace ash
 
 #endif  // CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_OS_INSTALL_SCREEN_HANDLER_H_

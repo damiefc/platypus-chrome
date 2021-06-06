@@ -219,6 +219,7 @@
 <translation id="168841957122794586">Certificatul de server conține o cheie criptografică slabă.</translation>
 <translation id="1696290444144917273">Vezi detaliile cardului virtual</translation>
 <translation id="1697532407822776718">Ești gata!</translation>
+<translation id="1699570257714336246">Informații lipsă</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Acest server nu a putut dovedi că este <ph name="DOMAIN" />. Data de emitere a certificatului său de securitate este mâine. Cauza poate fi o eroare de configurare sau interceptarea conexiunii de către un atacator.}few{Acest server nu a putut dovedi că este <ph name="DOMAIN" />. Data de emitere a certificatului său de securitate este în viitor, peste # zile. Cauza poate fi o eroare de configurare sau interceptarea conexiunii de către un atacator.}other{Acest server nu a putut dovedi că este <ph name="DOMAIN" />. Data de emitere a certificatului său de securitate este în viitor, peste # de zile. Cauza poate fi o eroare de configurare sau interceptarea conexiunii de către un atacator.}}</translation>
 <translation id="1710259589646384581">Sistem de operare</translation>
@@ -732,6 +733,7 @@
 <translation id="3631244953324577188">Sisteme biometrice</translation>
 <translation id="3633738897356909127">Butonul Actualizează Chrome, apasă pe Enter pentru a actualiza Chrome din setările Chrome</translation>
 <translation id="3634530185120165534">Tava 5</translation>
+<translation id="3637662659967048211">Salvează în Contul Google</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Aplicație:</translation>
 <translation id="3650584904733503804">Validarea a reușit</translation>
@@ -1025,6 +1027,7 @@
 <translation id="4731967714531604179">Prc2 (Plic)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> dorește să utilizeze locația dispozitivului</translation>
 <translation id="4736825316280949806">repornește Chromium;</translation>
+<translation id="4736934858538408121">Card virtual</translation>
 <translation id="473775607612524610">Actualizează</translation>
 <translation id="4738601419177586157">Sugestie de căutare <ph name="TEXT" /></translation>
 <translation id="4742407542027196863">Gestionează parolele…</translation>
@@ -1409,6 +1412,7 @@
 <translation id="6106989379647458772">Este posibil ca pagina web de la <ph name="PAGE" /> să fie blocată temporar sau să fi fost mutată definitiv la o nouă adresă web.</translation>
 <translation id="6107012941649240045">Emis către</translation>
 <translation id="610911394827799129">Contul Google poate să ofere alte forme ale istoricului de navigare la <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /></translation>
+<translation id="6113594885686374546">Butonul Repetă experiența, apasă pe Enter pentru a repeta experiența și a vedea activitatea relevantă din istoricul Chrome</translation>
 <translation id="6116338172782435947">să afișeze textul și imaginile copiate în clipboard</translation>
 <translation id="6120179357481664955">Îți amintești ID-ul UPI?</translation>
 <translation id="6123290840358279103">Vezi cardul virtual</translation>
@@ -1484,6 +1488,7 @@
 <translation id="6423385022588644828">Confirmă-ți cardurile mai rapid, folosind Touch ID</translation>
 <translation id="6425092077175753609">Material</translation>
 <translation id="6427730057873428458">Îndoire de tip fereastră</translation>
+<translation id="6428146287756735566">Repetă experiența pentru a vedea activitatea relevantă din istoricul Chrome</translation>
 <translation id="6428450836711225518">Confirmă numărul de telefon</translation>
 <translation id="6433490469411711332">Editează informațiile de contact</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refuzat conexiunea.</translation>
@@ -1535,6 +1540,7 @@
 <translation id="6643016212128521049">Șterge</translation>
 <translation id="6645291930348198241">să acceseze cookie-urile și datele privind site-urile.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Niciunul}=1{De pe un site (nu te va deconecta de la Contul Google)}few{De pe # site-uri (nu te va deconecta de la Contul Google)}other{De pe # de site-uri (nu te va deconecta de la Contul Google)}}</translation>
+<translation id="6647197322759179819">Repetă experiența</translation>
 <translation id="6648459603387803038">Administratorul poate schimba configurația browserului de la distanță. Este posibil ca activitatea de pe acest dispozitiv să fie gestionată și din afara Chrome.</translation>
 <translation id="6648524591329069940">Font Serif</translation>
 <translation id="6651270836885078973">Gestionat de:</translation>
@@ -2028,7 +2034,7 @@ Detalii suplimentare:
 <translation id="8490137692873530638">Receptorul de hârtie 10</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> a răspuns prea târziu.</translation>
 <translation id="8503559462189395349">Parole Chrome</translation>
-<translation id="8503813439785031346">Nume utilizator</translation>
+<translation id="8503813439785031346">Nume de utilizator</translation>
 <translation id="8507227106804027148">Linie de comandă</translation>
 <translation id="8508648098325802031">Pictograma Căutare</translation>
 <translation id="8511402995811232419">Gestionează cookie-urile</translation>
@@ -2187,6 +2193,7 @@ Detalii suplimentare:
 <translation id="9114524666733003316">Se confirmă cardul…</translation>
 <translation id="9114581008513152754">Browserul nu este gestionat de o companie sau o altă organizație. Este posibil ca activitatea de pe acest dispozitiv să fie gestionată în afara Chrome. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Prospețime</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />, apasă pe Tab, apoi pe Enter pentru a repeta experiența și a vedea activitatea relevantă din istoricul Chrome</translation>
 <translation id="9119042192571987207">Încărcat</translation>
 <translation id="9128016270925453879">Politicile s-au încărcat</translation>
 <translation id="9128870381267983090">Conectați-vă la rețea</translation>

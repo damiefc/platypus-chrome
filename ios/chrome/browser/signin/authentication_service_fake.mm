@@ -6,11 +6,12 @@
 
 #include <memory>
 
+#import "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_delegate_fake.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
-#include "ios/chrome/browser/sync/profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
@@ -28,14 +29,14 @@ AuthenticationServiceFake::AuthenticationServiceFake(
     : AuthenticationService(pref_service,
                             sync_setup_service,
                             identity_manager,
-                            sync_service),
-      have_accounts_changed_while_in_background_(false) {}
+                            sync_service) {}
 
 AuthenticationServiceFake::~AuthenticationServiceFake() {}
 
 void AuthenticationServiceFake::SignIn(ChromeIdentity* identity) {
   // Needs to call PrepareForFirstSyncSetup to behave like
   // AuthenticationService.
+  DCHECK(identity);
   sync_setup_service_->PrepareForFirstSyncSetup();
   authenticated_identity_ = identity;
 }
@@ -59,15 +60,6 @@ void AuthenticationServiceFake::SignOutInternal(ProceduralBlock completion) {
   authenticated_identity_ = nil;
   if (completion)
     completion();
-}
-
-void AuthenticationServiceFake::SetHaveAccountsChangedWhileInBackground(
-    bool changed) {
-  have_accounts_changed_while_in_background_ = changed;
-}
-
-bool AuthenticationServiceFake::HaveAccountsChangedWhileInBackground() const {
-  return have_accounts_changed_while_in_background_;
 }
 
 bool AuthenticationServiceFake::IsAuthenticated() const {
@@ -95,7 +87,7 @@ AuthenticationServiceFake::CreateAuthenticationService(
       browser_state->GetPrefs(),
       SyncSetupServiceFactory::GetForBrowserState(browser_state),
       IdentityManagerFactory::GetForBrowserState(browser_state),
-      ProfileSyncServiceFactory::GetForBrowserState(browser_state)));
+      SyncServiceFactory::GetForBrowserState(browser_state)));
   service->Initialize(std::make_unique<AuthenticationServiceDelegateFake>());
   return service;
 }

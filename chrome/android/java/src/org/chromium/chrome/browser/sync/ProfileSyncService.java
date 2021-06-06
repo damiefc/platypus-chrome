@@ -30,7 +30,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * This class mostly makes calls to native and contains a minimum of business logic. It is only
  * usable from the UI thread as the native ProfileSyncService requires its access to be on the
- * UI thread. See components/sync/driver/profile_sync_service.h for more details.
+ * UI thread. See components/sync/driver/sync_service_impl.h for more details.
  */
 public class ProfileSyncService {
 
@@ -117,8 +117,7 @@ public class ProfileSyncService {
         // This may cause us to create ProfileSyncService even if sync has not
         // been set up, but ProfileSyncService won't actually start until
         // credentials are available.
-        mNativeProfileSyncServiceAndroid =
-                ProfileSyncServiceJni.get().init(ProfileSyncService.this);
+        mNativeProfileSyncServiceAndroid = ProfileSyncServiceJni.get().init(this);
     }
 
     /**
@@ -540,6 +539,12 @@ public class ProfileSyncService {
                 mNativeProfileSyncServiceAndroid, keyRetrievalTrigger);
     }
 
+    /** @return Whether the user should be offered to opt in to trusted vault encryption. */
+    public boolean shouldOfferTrustedVaultOptIn() {
+        return ProfileSyncServiceJni.get().shouldOfferTrustedVaultOptIn(
+                mNativeProfileSyncServiceAndroid);
+    }
+
     /**
      * @return Whether sync is enabled to sync urls or open tabs with a non custom passphrase.
      */
@@ -551,7 +556,7 @@ public class ProfileSyncService {
 
     @VisibleForTesting
     public long getNativeProfileSyncServiceForTest() {
-        return ProfileSyncServiceJni.get().getProfileSyncServiceForTest(
+        return ProfileSyncServiceJni.get().getSyncServiceImplForTest(
                 mNativeProfileSyncServiceAndroid);
     }
 
@@ -672,10 +677,11 @@ public class ProfileSyncService {
                 long nativeProfileSyncServiceAndroid);
         void markPassphrasePromptMutedForCurrentProductVersion(
                 long nativeProfileSyncServiceAndroid);
-        long getProfileSyncServiceForTest(long nativeProfileSyncServiceAndroid);
+        long getSyncServiceImplForTest(long nativeProfileSyncServiceAndroid);
         long getLastSyncedTimeForTest(long nativeProfileSyncServiceAndroid);
         void getAllNodes(long nativeProfileSyncServiceAndroid, GetAllNodesCallback callback);
         void recordKeyRetrievalTrigger(
                 long nativeProfileSyncServiceAndroid, int keyRetrievalTrigger);
+        boolean shouldOfferTrustedVaultOptIn(long nativeProfileSyncServiceAndroid);
     }
 }

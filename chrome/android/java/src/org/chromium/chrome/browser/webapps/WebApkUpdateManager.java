@@ -202,10 +202,10 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         ModalDialogManager dialogManager =
                 mTabProvider.get().getWindowAndroid().getModalDialogManager();
         WebApkIconNameUpdateDialog dialog = new WebApkIconNameUpdateDialog();
-        dialog.show(dialogManager, iconChanging, shortNameChanging, nameChanging, mInfo.shortName(),
-                mFetchedInfo.shortName(), mInfo.name(), mFetchedInfo.name(), mInfo.icon().bitmap(),
-                mFetchedInfo.icon().bitmap(), mInfo.isIconAdaptive(), mFetchedInfo.isIconAdaptive(),
-                this::onUserApprovedUpdate);
+        dialog.show(dialogManager, mInfo.webApkPackageName(), iconChanging, shortNameChanging,
+                nameChanging, mInfo.shortName(), mFetchedInfo.shortName(), mInfo.name(),
+                mFetchedInfo.name(), mInfo.icon().bitmap(), mFetchedInfo.icon().bitmap(),
+                mInfo.isIconAdaptive(), mFetchedInfo.isIconAdaptive(), this::onUserApprovedUpdate);
     }
 
     protected void onUserApprovedUpdate(int dismissalCause) {
@@ -213,7 +213,11 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         // {@link onBuiltWebApk} being called.
         recordUpdate(mStorage, WebApkInstallResult.FAILURE, false /* relaxUpdates*/);
 
-        if (dismissalCause != DialogDismissalCause.POSITIVE_BUTTON_CLICKED) {
+        // Continue if the user explicitly allows the update using the button, or isn't interested
+        // in the update dialog warning (presses Back). Otherwise, they can be left in a state where
+        // they always press Back and are stuck on an old version of the app forever.
+        if (dismissalCause != DialogDismissalCause.POSITIVE_BUTTON_CLICKED
+                && dismissalCause != DialogDismissalCause.NAVIGATE_BACK_OR_TOUCH_OUTSIDE) {
             return;
         }
 

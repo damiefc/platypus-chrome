@@ -10,6 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -93,6 +94,15 @@ class StartupBrowserCreator {
                      chrome::startup::IsFirstRun is_first_run,
                      std::unique_ptr<LaunchModeRecorder> launch_mode_recorder);
 
+  // Launch browser for `last_opened_profiles` if it's not empty. Otherwise,
+  // launch browser for `last_used_profile`. Return false if any browser is
+  // failed to be launched. Otherwise, return true.
+  bool LaunchBrowserForLastProfiles(const base::CommandLine& command_line,
+                                    const base::FilePath& cur_dir,
+                                    bool process_startup,
+                                    Profile* last_used_profile,
+                                    const Profiles& last_opened_profiles);
+
   // If Incognito or Guest mode are requested by policy or command line returns
   // the appropriate private browsing profile. Otherwise returns |profile|.
   Profile* GetPrivateProfileIfRequested(const base::CommandLine& command_line,
@@ -113,8 +123,14 @@ class StartupBrowserCreator {
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-  // Return true if |urls| are handled, false otherwise.
-  static bool MaybeHandleProfileAgnosticUrls(const std::vector<GURL>& urls);
+#if defined(OS_MAC)
+  // Searches for web apps to handle `urls` and prompts the user to pick one.
+  // Runs `on_urls_unhandled_cb` (either synchronously or asynchronously) if no
+  // web app is found or selected to open `urls`.
+  static void MaybeHandleProfileAgnosticUrls(
+      const std::vector<GURL>& urls,
+      base::OnceClosure on_urls_unhandled_cb);
+#endif
 
  private:
   friend class CloudPrintProxyPolicyTest;
@@ -138,6 +154,8 @@ class StartupBrowserCreator {
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest,
                            OpenAppShortcutWindowPref);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorTest, OpenAppUrlShortcut);
+  FRIEND_TEST_ALL_PREFIXES(StartupBrowserWithRealWebAppTest,
+                           LastUsedProfilesWithRealWebApp);
   FRIEND_TEST_ALL_PREFIXES(web_app::WebAppEngagementBrowserTest,
                            CommandLineTab);
   FRIEND_TEST_ALL_PREFIXES(web_app::WebAppEngagementBrowserTest,
@@ -150,15 +168,6 @@ class StartupBrowserCreator {
                           bool process_startup,
                           Profile* last_used_profile,
                           const Profiles& last_opened_profiles);
-
-  // Launch browser for |last_opened_profiles| if it's not empty. Otherwise,
-  // launch browser for |last_used_profile|. Return false if any browser is
-  // failed to be launched. Otherwise, return true.
-  bool LaunchBrowserForLastProfiles(const base::CommandLine& command_line,
-                                    const base::FilePath& cur_dir,
-                                    bool process_startup,
-                                    Profile* last_used_profile,
-                                    const Profiles& last_opened_profiles);
 
   // Launch the |last_used_profile| with the full command line, and the other
   // |last_opened_profiles| without the URLs to launch. Return false if any
@@ -188,6 +197,16 @@ class StartupBrowserCreator {
       const base::FilePath& cur_dir,
       Profile* profile,
       Profile::CreateStatus status);
+
+  // TODO(crbug/1213171): Move web-app functionality to its own file.
+  // The startup launch logic that is shared between ProcessCmdLineImpl()
+  // and web_app::MaybeLaunchProtocolHandlerWebApp().
+  bool StartupLaunchAfterProtocolHandler(const base::CommandLine& command_line,
+                                         const base::FilePath& cur_dir,
+                                         Profile* privacy_safe_profile,
+                                         bool process_startup,
+                                         Profile* last_used_profile,
+                                         const Profiles& last_opened_profiles);
 
   // Returns true once a profile was activated. Used by the
   // StartupBrowserCreatorTest.LastUsedProfileActivated test.

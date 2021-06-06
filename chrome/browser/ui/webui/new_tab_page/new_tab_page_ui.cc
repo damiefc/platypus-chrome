@@ -19,6 +19,7 @@
 #include "chrome/browser/search/task_module/task_module_handler.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/webui/cr_components/most_visited/most_visited_handler.h"
 #include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
@@ -68,22 +69,6 @@ using content::WebContents;
 namespace {
 
 constexpr char kPrevNavigationTimePrefName[] = "NewTabPage.PrevNavigationTime";
-
-bool IsDriveModuleEnabled(Profile* profile) {
-  if (!base::FeatureList::IsEnabled(ntp_features::kNtpDriveModule)) {
-    return false;
-  }
-  if (base::GetFieldTrialParamValueByFeature(
-          ntp_features::kNtpDriveModule,
-          ntp_features::kNtpDriveModuleManagedUsersOnlyParam) != "true") {
-    return true;
-  }
-  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-  return identity_manager
-      ->FindExtendedAccountInfoByAccountId(
-          identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSync))
-      .IsManaged();
-}
 
 content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
     Profile* profile,
@@ -275,7 +260,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
   source->AddBoolean(
       "chromeCartModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule));
-  source->AddBoolean("driveModuleEnabled", IsDriveModuleEnabled(profile));
+  source->AddBoolean("driveModuleEnabled",
+                     NewTabPageUI::IsDriveModuleEnabled(profile));
   source->AddBoolean(
       "ruleBasedDiscountEnabled",
       base::GetFieldTrialParamValueByFeature(
@@ -316,6 +302,7 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
       content::WebContentsObserver(web_ui->GetWebContents()),
       page_factory_receiver_(this),
       customize_themes_factory_receiver_(this),
+      most_visited_page_factory_receiver_(this),
       profile_(Profile::FromWebUI(web_ui)),
       instant_service_(InstantServiceFactory::GetForProfile(profile_)),
       web_contents_(web_ui->GetWebContents()),
@@ -364,6 +351,24 @@ void NewTabPageUI::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterTimePref(kPrevNavigationTimePrefName, base::Time());
 }
 
+// static
+bool NewTabPageUI::IsDriveModuleEnabled(Profile* profile) {
+  if (!base::FeatureList::IsEnabled(ntp_features::kNtpDriveModule)) {
+    return false;
+  }
+  if (base::GetFieldTrialParamValueByFeature(
+          ntp_features::kNtpDriveModule,
+          ntp_features::kNtpDriveModuleManagedUsersOnlyParam) != "true") {
+    return true;
+  }
+  // TODO(https://crbug.com/1213351): Stop calling the private method
+  // FindExtendedPrimaryAccountInfo().
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  return identity_manager
+      ->FindExtendedPrimaryAccountInfo(signin::ConsentLevel::kSync)
+      .IsManaged();
+}
+
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<new_tab_page::mojom::PageHandlerFactory>
         pending_receiver) {
@@ -395,6 +400,15 @@ void NewTabPageUI::BindInterface(
     customize_themes_factory_receiver_.reset();
   }
   customize_themes_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<most_visited::mojom::MostVisitedPageHandlerFactory>
+        pending_receiver) {
+  if (most_visited_page_factory_receiver_.is_bound()) {
+    most_visited_page_factory_receiver_.reset();
+  }
+  most_visited_page_factory_receiver_.Bind(std::move(pending_receiver));
 }
 
 void NewTabPageUI::BindInterface(
@@ -443,6 +457,17 @@ void NewTabPageUI::CreateCustomizeThemesHandler(
   customize_themes_handler_ = std::make_unique<ChromeCustomizeThemesHandler>(
       std::move(pending_client), std::move(pending_handler), web_contents_,
       profile_);
+}
+
+void NewTabPageUI::CreatePageHandler(
+    mojo::PendingRemote<most_visited::mojom::MostVisitedPage> pending_page,
+    mojo::PendingReceiver<most_visited::mojom::MostVisitedPageHandler>
+        pending_page_handler) {
+  DCHECK(pending_page.is_valid());
+  most_visited_page_handler_ = std::make_unique<MostVisitedHandler>(
+      std::move(pending_page_handler), std::move(pending_page), profile_,
+      web_contents_, GURL(chrome::kChromeUINewTabPageThirdPartyURL),
+      navigation_start_time_);
 }
 
 void NewTabPageUI::NtpThemeChanged(const NtpTheme& theme) {

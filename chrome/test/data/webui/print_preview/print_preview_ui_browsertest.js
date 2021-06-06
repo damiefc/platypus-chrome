@@ -772,15 +772,6 @@ var PrintPreviewDestinationDialogCrosTest = class extends PrintPreviewTest {
     return destination_dialog_cros_test.suiteName;
   }
 
-  /** @override */
-  get featureList() {
-    const featureList = super.featureList || [];
-    const kPrintServerScaling = ['chromeos::features::kPrintServerScaling'];
-    featureList.enabled = featureList.enabled ?
-        featureList.enabled.concat(kPrintServerScaling) :
-        kPrintServerScaling;
-    return featureList;
-  }
 };
 
 TEST_F('PrintPreviewDestinationDialogCrosTest', 'PrinterList', function() {
@@ -1123,16 +1114,6 @@ var PrintPreviewDestinationItemTestCros = class extends PrintPreviewTest {
   /** @override */
   get suiteName() {
     return destination_item_test_cros.suiteName;
-  }
-
-  /** @override */
-  get featureList() {
-    const kPrinterStatusDialog = ['chromeos::features::kPrinterStatusDialog'];
-    const featureList = super.featureList || [];
-    featureList.enabled = featureList.enabled ?
-        featureList.enabled.concat(kPrinterStatusDialog) :
-        kPrinterStatusDialog;
-    return featureList;
   }
 };
 

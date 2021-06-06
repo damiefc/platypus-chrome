@@ -57,6 +57,8 @@ if (is_win || is_mac) {
       "app/app_uninstall.h",
       "app/app_update.cc",
       "app/app_update.h",
+      "app/app_utils.cc",
+      "app/app_utils.h",
       "app/app_wake.cc",
       "app/app_wake.h",
       "check_for_updates_task.cc",
@@ -110,6 +112,7 @@ if (is_win || is_mac) {
       "update_service_internal_impl_inactive.h",
       "updater.cc",
       "updater.h",
+      "updater_scope.cc",
       "updater_scope.h",
       "util.cc",
       "util.h",
@@ -434,6 +437,7 @@ if (is_win || is_mac) {
 
     if (is_win) {
       sources += [
+        "activity_impl_win_unittest.cc",
         "policy/win/group_policy_manager_unittest.cc",
         "test/integration_tests_win.cc",
         "win/installer_api_unittest.cc",

@@ -146,8 +146,6 @@ const char* ToString(ax::mojom::Role role) {
       return "alertDialog";
     case ax::mojom::Role::kAlert:
       return "alert";
-    case ax::mojom::Role::kAnchor:
-      return "anchor";
     case ax::mojom::Role::kApplication:
       return "application";
     case ax::mojom::Role::kArticle:
@@ -975,8 +973,8 @@ const char* ToString(ax::mojom::BoolAttribute bool_attribute) {
       return "none";
     case ax::mojom::BoolAttribute::kBusy:
       return "busy";
-    case ax::mojom::BoolAttribute::kContentEditableRoot:
-      return "contentEditableRoot";
+    case ax::mojom::BoolAttribute::kNonAtomicTextFieldRoot:
+      return "nonAtomicTextFieldRoot";
     case ax::mojom::BoolAttribute::kContainerLiveAtomic:
       return "containerLiveAtomic";
     case ax::mojom::BoolAttribute::kContainerLiveBusy:

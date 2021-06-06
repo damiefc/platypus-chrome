@@ -112,12 +112,11 @@ const char kURLsToRestoreOnStartup[] = "session.startup_urls";
 const char kUserFeedbackAllowed[] = "feedback_allowed";
 
 #if !defined(OS_ANDROID)
-// Used to store the value of the SerialAllowAllPortsForUrls policy.
-const char kManagedSerialAllowAllPortsForUrls[] =
+// Replaced by kManagedSerialAllowAllPortsForUrls in M-93.
+const char kManagedProfileSerialAllowAllPortsForUrlsDeprecated[] =
     "profile.managed.serial_allow_all_ports_for_urls";
-
-// Used to store the value of the SerialAllowUsbDevicesForUrls policy.
-const char kManagedSerialAllowUsbDevicesForUrls[] =
+// Replaced by kManagedSerialAllowUsbDevicesForUrls in M-93.
+const char kManagedProfileSerialAllowUsbDevicesForUrlsDeprecated[] =
     "profile.managed.serial_allow_usb_devices_for_urls";
 #endif  // !defined(OS_ANDROID)
 
@@ -1317,6 +1316,12 @@ const char kProfileUsingGAIAAvatar[] = "profile.using_gaia_avatar";
 // The supervised user ID.
 const char kSupervisedUserId[] = "profile.managed_user_id";
 
+// Boolean specifying if the user has accepted account management. This enables
+// the browser to fetch profile policies even if they have not consented to
+// sync.
+extern const char kUserAcceptedAccountManagement[] =
+    "profile.user_accepted_account_management";
+
 // Integer that specifies the number of times that we have shown the upgrade
 // tutorial card in the avatar menu bubble.
 const char kProfileAvatarTutorialShown[] =
@@ -1604,6 +1609,16 @@ const char kSuppressDifferentOriginSubframeJSDialogs[] =
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
 
+#if !defined(OS_ANDROID)
+// Used to store the value of the SerialAllowAllPortsForUrls policy.
+const char kManagedSerialAllowAllPortsForUrls[] =
+    "managed.serial_allow_all_ports_for_urls";
+
+// Used to store the value of the SerialAllowUsbDevicesForUrls policy.
+const char kManagedSerialAllowUsbDevicesForUrls[] =
+    "managed.serial_allow_usb_devices_for_urls";
+#endif  // !defined(OS_ANDROID)
+
 // Directory of the last profile used.
 const char kProfileLastUsed[] = "profile.last_used";
 
@@ -1847,11 +1862,6 @@ const char kNtpSearchSuggestionsBlocklist[] =
 const char kNtpSearchSuggestionsImpressions[] =
     "ntp.search_suggestions_impressions";
 const char kNtpSearchSuggestionsOptOut[] = "ntp.search_suggestions_opt_out";
-// Tracks whether the user has chosen to hide the shortcuts tiles on the NTP.
-const char kNtpShortcutsVisible[] = "ntp.shortcust_visible";
-// Tracks whether the user has chosen to use custom links or most visited sites
-// for the shortcut tiles on the NTP.
-const char kNtpUseMostVisitedTiles[] = "ntp.use_most_visited_tiles";
 #endif  // defined(OS_ANDROID)
 
 // Which page should be visible on the new tab page v4
@@ -1968,6 +1978,10 @@ const char kWebAppsUninstalledDefaultChromeApps[] =
 // Used only in the new web applications system to store app preferences which
 // outlive the app installation and uninstallation.
 const char kWebAppsPreferences[] = "web_apps.web_app_ids";
+
+// Dictionary that maps the origin of a web app to other preferences related to
+// its isolation requirements.
+const char kWebAppsIsolationState[] = "web_apps.isolation_state";
 
 #if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !BUILDFLAG(IS_CHROMEOS_LACROS))
@@ -2387,12 +2401,12 @@ const char kExtensionInstallEventLoggingEnabled[] =
 const char kRemoveUsersRemoteCommand[] = "remove_users_remote_command";
 
 // Integer pref used by the metrics::DailyEvent owned by
-// chromeos::power::auto_screen_brightness::MetricsReporter.
+// ash::power::auto_screen_brightness::MetricsReporter.
 const char kAutoScreenBrightnessMetricsDailySample[] =
     "auto_screen_brightness.metrics.daily_sample";
 
 // Integer prefs used to back event counts reported by
-// chromeos::power::auto_screen_brightness::MetricsReporter.
+// ash::power::auto_screen_brightness::MetricsReporter.
 const char kAutoScreenBrightnessMetricsAtlasUserAdjustmentCount[] =
     "auto_screen_brightness.metrics.atlas_user_adjustment_count";
 const char kAutoScreenBrightnessMetricsEveUserAdjustmentCount[] =

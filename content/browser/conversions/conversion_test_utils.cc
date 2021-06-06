@@ -115,6 +115,10 @@ int ConfigurableStorageDelegate::GetMaxImpressionsPerOrigin() const {
 int ConfigurableStorageDelegate::GetMaxConversionsPerOrigin() const {
   return max_conversions_per_origin_;
 }
+int ConfigurableStorageDelegate::GetMaxAttributionDestinationsPerEventSource()
+    const {
+  return max_attribution_destinations_per_event_source_;
+}
 ConversionStorage::Delegate::RateLimitConfig
 ConfigurableStorageDelegate::GetRateLimits() const {
   return rate_limits_;
@@ -271,12 +275,13 @@ StorableImpression ImpressionBuilder::Build() const {
                             source_type_, priority_, impression_id_);
 }
 
-StorableConversion DefaultConversion() {
+StorableConversion DefaultConversion(uint64_t event_source_trigger_data) {
   StorableConversion conversion(
       /*conversion_data=*/111,
       /*conversion_destination=*/
       net::SchemefulSite(GURL(kDefaultConversionDestination)),
-      /*reporting_origin=*/url::Origin::Create(GURL(kDefaultReportOrigin)));
+      /*reporting_origin=*/url::Origin::Create(GURL(kDefaultReportOrigin)),
+      event_source_trigger_data);
   return conversion;
 }
 
@@ -289,7 +294,7 @@ testing::AssertionResult ImpressionsEqual(const StorableImpression& expected,
         impression.impression_data(), impression.impression_origin(),
         impression.conversion_origin(), impression.reporting_origin(),
         impression.impression_time(), impression.expiry_time(),
-        impression.priority());
+        impression.source_type(), impression.priority());
   };
 
   if (tie(expected) != tie(actual)) {
@@ -311,8 +316,10 @@ testing::AssertionResult ReportsEqual(
                            conversion.impression.reporting_origin(),
                            conversion.impression.impression_time(),
                            conversion.impression.expiry_time(),
+                           conversion.impression.source_type(),
                            conversion.impression.priority(),
-                           conversion.conversion_data, conversion.report_time);
+                           conversion.conversion_data, conversion.report_time,
+                           conversion.extra_delay);
   };
 
   if (expected.size() != actual.size())

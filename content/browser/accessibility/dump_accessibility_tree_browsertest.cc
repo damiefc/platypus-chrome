@@ -201,6 +201,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSContentVisibilityAutoAriaHidden) {
+  RunCSSTest(FILE_PATH_LITERAL("content-visibility-auto-aria-hidden.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCSSContentVisibilityHiddenCheckFailure) {
   RunCSSTest(FILE_PATH_LITERAL("content-visibility-hidden-check-failure.html"));
 }
@@ -616,6 +621,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityContinuations) {
   RunHtmlTest(FILE_PATH_LITERAL("continuations.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityContinuationsParserSplitsMarkup) {
+  RunHtmlTest(FILE_PATH_LITERAL("continuations-parser-splits-markup.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaControls) {
@@ -1293,6 +1303,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTerm) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTextbox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-textbox.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaTextboxWithAriaTextboxChild) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-textbox-with-aria-textbox-child.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaTextboxWithNonTextChildren) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-textbox-with-non-text-children.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -2944,6 +2964,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        ContentVisibilityWithPseudoElement) {
   RunRegressionTest(
       FILE_PATH_LITERAL("content-visibility-with-pseudo-element.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, ContentVisibilityLabel) {
+  RunRegressionTest(FILE_PATH_LITERAL("content-visibility-label.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DisplayContentsSelectCrash) {

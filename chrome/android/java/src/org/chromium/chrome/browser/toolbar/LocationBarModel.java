@@ -213,7 +213,7 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
         if (!hasTab() || !getTab().isInitialized()) return "";
 
         // Tab.getUrl() returns empty string if it does not have a URL.
-        return getTab().getUrlString().trim();
+        return getTab().getUrl().getSpec().trim();
     }
 
     public void notifyUrlChanged() {
@@ -449,6 +449,13 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
     @Override
     public boolean isPaintPreview() {
+        // Start Surface homepage is not bound with a tab and mTab is kept as the previous tab if
+        // the homepage is shown. This is added here to make sure Start Surface homepage is not
+        // regarded as a paint preview.
+        if (isInOverviewAndShowingOmnibox()
+                || StartSurfaceConfiguration.shouldHandleAsNtp(getTab())) {
+            return false;
+        }
         return hasTab() && TabbedPaintPreview.get(mTab).isShowing();
     }
 

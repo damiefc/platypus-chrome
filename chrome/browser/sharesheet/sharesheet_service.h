@@ -75,7 +75,8 @@ class SharesheetService : public KeyedService {
   void ShowNearbyShareBubble(content::WebContents* web_contents,
                              apps::mojom::IntentPtr intent,
                              SharesheetMetrics::LaunchSource source,
-                             sharesheet::DeliveredCallback delivered_callback);
+                             sharesheet::DeliveredCallback delivered_callback,
+                             sharesheet::CloseCallback close_callback);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   void OnBubbleClosed(gfx::NativeWindow native_window,
                       const std::u16string& active_action);
@@ -130,6 +131,8 @@ class SharesheetService : public KeyedService {
   void RecordUserActionMetrics(const std::u16string& target_name);
   void RecordTargetCountMetrics(const std::vector<TargetInfo>& targets);
   void RecordShareActionMetrics(const std::u16string& target_name);
+  // Makes |intent| related UMA recordings.
+  void RecordShareDataMetrics(const apps::mojom::IntentPtr& intent);
 
   Profile* profile_;
   std::unique_ptr<SharesheetActionCache> sharesheet_action_cache_;

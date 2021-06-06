@@ -20,9 +20,9 @@
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "components/webapps/browser/banners/app_banner_manager.h"
 #include "components/webapps/browser/banners/app_banner_settings_helper.h"
-#include "components/webapps/browser/installable/installable_data.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
@@ -90,9 +90,7 @@ UpdateShortcutsMenuItemInfosFromManifest(
     shortcut_info.name = shortcut.name;
     shortcut_info.url = shortcut.url;
 
-    std::array<IconPurpose, 3> purposes = {
-        IconPurpose::ANY, IconPurpose::MASKABLE, IconPurpose::MONOCHROME};
-    for (IconPurpose purpose : purposes) {
+    for (IconPurpose purpose : kIconPurposes) {
       std::vector<WebApplicationShortcutsMenuItemInfo::Icon> shortcut_icons;
       for (const auto& icon : shortcut.icons) {
         DCHECK(!icon.purpose.empty());
@@ -289,6 +287,11 @@ void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
 
   web_app_info->url_handlers = ToWebAppUrlHandlers(manifest.url_handlers);
 
+  if (base::FeatureList::IsEnabled(blink::features::kWebAppNoteTaking) &&
+      manifest.note_taking && manifest.note_taking->new_note_url.is_valid()) {
+    web_app_info->note_taking_new_note_url = manifest.note_taking->new_note_url;
+  }
+
   // If any shortcuts are specified in the manifest, they take precedence over
   // any we picked up from the web_app stuff.
   if (!manifest.shortcuts.empty() &&
@@ -302,6 +305,8 @@ void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
 
   if (manifest_url.is_valid())
     web_app_info->manifest_url = manifest_url;
+
+  web_app_info->is_storage_isolated = manifest.isolated_storage;
 }
 
 std::vector<GURL> GetValidIconUrlsToDownload(
@@ -315,10 +320,8 @@ std::vector<GURL> GetValidIconUrlsToDownload(
   if (base::FeatureList::IsEnabled(
           features::kDesktopPWAsAppIconShortcutsMenu)) {
     // Also add shortcut icon urls, so they can be downloaded.
-    std::array<IconPurpose, 3> purposes = {
-        IconPurpose::ANY, IconPurpose::MASKABLE, IconPurpose::MONOCHROME};
     for (const auto& shortcut : web_app_info.shortcuts_menu_item_infos) {
-      for (IconPurpose purpose : purposes) {
+      for (IconPurpose purpose : kIconPurposes) {
         for (const auto& icon :
              shortcut.GetShortcutIconInfosForPurpose(purpose)) {
           if (!icon.url.is_valid())
@@ -338,9 +341,7 @@ void PopulateShortcutItemIcons(WebApplicationInfo* web_app_info,
   for (auto& shortcut : web_app_info->shortcuts_menu_item_infos) {
     IconBitmaps shortcut_icon_bitmaps;
 
-    std::array<IconPurpose, 3> purposes = {
-        IconPurpose::ANY, IconPurpose::MASKABLE, IconPurpose::MONOCHROME};
-    for (IconPurpose purpose : purposes) {
+    for (IconPurpose purpose : kIconPurposes) {
       std::map<SquareSizePx, SkBitmap> bitmaps;
       for (const auto& icon :
            shortcut.GetShortcutIconInfosForPurpose(purpose)) {

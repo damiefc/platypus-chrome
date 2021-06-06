@@ -1885,19 +1885,19 @@ const CSSValue* Contain::CSSValueFromComputedStyleInternal(
     return CSSIdentifierValue::Create(CSSValueID::kContent);
 
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  if (style.ContainsSize()) {
+  if ((style.Contain() & kContainsSize) == kContainsSize) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kSize));
   } else {
-    if (style.ContainsInlineSize())
+    if (style.Contain() & kContainsInlineSize)
       list->Append(*CSSIdentifierValue::Create(CSSValueID::kInlineSize));
-    else if (style.ContainsBlockSize())
+    else if (style.Contain() & kContainsBlockSize)
       list->Append(*CSSIdentifierValue::Create(CSSValueID::kBlockSize));
   }
-  if (style.ContainsLayout())
+  if (style.Contain() & kContainsLayout)
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kLayout));
-  if (style.ContainsStyle())
+  if (style.Contain() & kContainsStyle)
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kStyle));
-  if (style.ContainsPaint())
+  if (style.Contain() & kContainsPaint)
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kPaint));
   DCHECK(list->length());
   return list;
@@ -1936,6 +1936,43 @@ const CSSValue* ContainIntrinsicSize::CSSValueFromComputedStyleInternal(
       ComputedStyleUtils::ZoomAdjustedPixelValueForLength(
           style.ContainIntrinsicSize().Height(), style),
       CSSValuePair::kDropIdenticalValues);
+}
+
+const CSSValue* ContainerName::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeContainerName(range, context);
+}
+
+const CSSValue* ContainerName::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  if (style.ContainerName().IsNull())
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  return MakeGarbageCollected<CSSCustomIdentValue>(style.ContainerName());
+}
+
+const CSSValue* ContainerType::ParseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&) const {
+  return css_parsing_utils::ConsumeContainerType(range);
+}
+
+const CSSValue* ContainerType::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style) const {
+  if (style.ContainerType() == kContainerTypeNone)
+    return CSSIdentifierValue::Create(CSSValueID::kNone);
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  if (style.ContainerType() & kContainerTypeInlineSize)
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kInlineSize));
+  if (style.ContainerType() & kContainerTypeBlockSize)
+    list->Append(*CSSIdentifierValue::Create(CSSValueID::kBlockSize));
+  return list;
 }
 
 namespace {
@@ -5337,20 +5374,18 @@ const CSSValue* Perspective::ParseSingleValue(
   if (range.Peek().Id() == CSSValueID::kNone)
     return css_parsing_utils::ConsumeIdent(range);
   CSSPrimitiveValue* parsed_value =
-      css_parsing_utils::ConsumeLength(range, context, kValueRangeAll);
+      css_parsing_utils::ConsumeLength(range, context, kValueRangeNonNegative);
   bool use_legacy_parsing = localContext.UseAliasParsing();
   if (!parsed_value && use_legacy_parsing) {
     double perspective;
-    if (!css_parsing_utils::ConsumeNumberRaw(range, context, perspective))
+    if (!css_parsing_utils::ConsumeNumberRaw(range, context, perspective) ||
+        perspective < 0.0)
       return nullptr;
     context.Count(WebFeature::kUnitlessPerspectiveInPerspectiveProperty);
     parsed_value = CSSNumericLiteralValue::Create(
         perspective, CSSPrimitiveValue::UnitType::kPixels);
   }
-  if (parsed_value &&
-      (parsed_value->IsCalculated() || parsed_value->GetDoubleValue() > 0))
-    return parsed_value;
-  return nullptr;
+  return parsed_value;
 }
 
 const CSSValue* Perspective::CSSValueFromComputedStyleInternal(

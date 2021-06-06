@@ -4,6 +4,7 @@
 
 #include "components/autofill_assistant/browser/protocol_utils.h"
 
+#include <map>
 #include <utility>
 
 #include "base/feature_list.h"
@@ -12,7 +13,6 @@
 #include "components/autofill_assistant/browser/actions/check_element_tag_action.h"
 #include "components/autofill_assistant/browser/actions/check_option_element_action.h"
 #include "components/autofill_assistant/browser/actions/clear_persistent_ui_action.h"
-#include "components/autofill_assistant/browser/actions/click_action.h"
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
 #include "components/autofill_assistant/browser/actions/configure_ui_state_action.h"
@@ -173,8 +173,6 @@ std::string ProtocolUtils::CreateNextScriptActionsRequest(
 std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
                                                     const ActionProto& action) {
   switch (action.action_info_case()) {
-    case ActionProto::ActionInfoCase::kClick:
-      return std::make_unique<ClickAction>(delegate, action);
     case ActionProto::ActionInfoCase::kTell:
       return std::make_unique<TellAction>(delegate, action);
     case ActionProto::ActionInfoCase::kShowCast:
@@ -432,11 +430,13 @@ bool ProtocolUtils::ParseTriggerScripts(
     std::vector<std::unique_ptr<TriggerScript>>* trigger_scripts,
     std::vector<std::string>* additional_allowed_domains,
     int* trigger_condition_check_interval_ms,
-    absl::optional<int>* timeout_ms) {
+    absl::optional<int>* timeout_ms,
+    absl::optional<std::unique_ptr<ScriptParameters>>* script_parameters) {
   DCHECK(trigger_scripts);
   DCHECK(additional_allowed_domains);
   DCHECK(trigger_condition_check_interval_ms);
   DCHECK(timeout_ms);
+  DCHECK(script_parameters);
 
   GetTriggerScriptsResponseProto response_proto;
   if (!response_proto.ParseFromString(response)) {
@@ -470,6 +470,14 @@ bool ProtocolUtils::ParseTriggerScripts(
       response_proto.trigger_condition_check_interval_ms();
   if (response_proto.has_timeout_ms()) {
     *timeout_ms = response_proto.timeout_ms();
+  }
+
+  if (!response_proto.script_parameters().empty()) {
+    std::map<std::string, std::string> parameters;
+    for (const auto& param : response_proto.script_parameters()) {
+      parameters.emplace(param.name(), param.value());
+    }
+    *script_parameters = std::make_unique<ScriptParameters>(parameters);
   }
   return true;
 }

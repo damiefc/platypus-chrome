@@ -71,6 +71,15 @@
 #include "chrome/browser/ash/notifications/gnubby_notification.h"
 #include "chrome/browser/ash/notifications/low_disk_notification.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
+#include "chrome/browser/ash/power/auto_screen_brightness/controller.h"
+#include "chrome/browser/ash/power/freezer_cgroup_process_manager.h"
+#include "chrome/browser/ash/power/idle_action_warning_observer.h"
+#include "chrome/browser/ash/power/ml/adaptive_screen_brightness_manager.h"
+#include "chrome/browser/ash/power/power_data_collector.h"
+#include "chrome/browser/ash/power/power_metrics_reporter.h"
+#include "chrome/browser/ash/power/process_data_collector.h"
+#include "chrome/browser/ash/power/renderer_freezer.h"
+#include "chrome/browser/ash/power/smart_charging/smart_charging_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/settings/shutdown_policy_forwarder.h"
@@ -103,6 +112,7 @@
 #include "chrome/browser/chromeos/dbus/screen_lock_service_provider.h"
 #include "chrome/browser/chromeos/dbus/smb_fs_service_provider.h"
 #include "chrome/browser/chromeos/dbus/virtual_file_request_service_provider.h"
+#include "chrome/browser/chromeos/dbus/vm/vm_disk_management_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm/vm_permission_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm/vm_sk_forwarding_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm_applications_service_provider.h"
@@ -125,15 +135,6 @@
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/lock_to_single_user_manager.h"
-#include "chrome/browser/chromeos/power/auto_screen_brightness/controller.h"
-#include "chrome/browser/chromeos/power/freezer_cgroup_process_manager.h"
-#include "chrome/browser/chromeos/power/idle_action_warning_observer.h"
-#include "chrome/browser/chromeos/power/ml/adaptive_screen_brightness_manager.h"
-#include "chrome/browser/chromeos/power/power_data_collector.h"
-#include "chrome/browser/chromeos/power/power_metrics_reporter.h"
-#include "chrome/browser/chromeos/power/process_data_collector.h"
-#include "chrome/browser/chromeos/power/renderer_freezer.h"
-#include "chrome/browser/chromeos/power/smart_charging/smart_charging_manager.h"
 #include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/chromeos/scheduler_configuration_manager.h"
 #include "chrome/browser/chromeos/startup_settings_cache.h"
@@ -354,6 +355,13 @@ class DBusServices {
         CrosDBusService::CreateServiceProviderList(
             std::make_unique<VmApplicationsServiceProvider>()));
 
+    vm_disk_management_service_ = CrosDBusService::Create(
+        system_bus, vm_tools::disk_management::kVmDiskManagementServiceName,
+        dbus::ObjectPath(
+            vm_tools::disk_management::kVmDiskManagementServicePath),
+        CrosDBusService::CreateServiceProviderList(
+            std::make_unique<VmDiskManagementServiceProvider>()));
+
     vm_sk_forwarding_service_ = CrosDBusService::Create(
         system_bus, vm_tools::sk_forwarding::kVmSKForwardingServiceName,
         dbus::ObjectPath(vm_tools::sk_forwarding::kVmSKForwardingServicePath),
@@ -465,6 +473,7 @@ class DBusServices {
     component_updater_service_.reset();
     chrome_features_service_.reset();
     vm_applications_service_.reset();
+    vm_disk_management_service_.reset();
     vm_sk_forwarding_service_.reset();
     vm_permission_service_.reset();
     drive_file_stream_service_.reset();
@@ -494,6 +503,7 @@ class DBusServices {
   std::unique_ptr<CrosDBusService> component_updater_service_;
   std::unique_ptr<CrosDBusService> chrome_features_service_;
   std::unique_ptr<CrosDBusService> vm_applications_service_;
+  std::unique_ptr<CrosDBusService> vm_disk_management_service_;
   std::unique_ptr<CrosDBusService> vm_sk_forwarding_service_;
   std::unique_ptr<CrosDBusService> vm_permission_service_;
   std::unique_ptr<CrosDBusService> drive_file_stream_service_;
@@ -1192,9 +1202,10 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
+  // This needs to be called before the
+  // ChromeBrowserMainPartsLinux::PostMainMessageLoopRun, because the
+  // SessionControllerClientImpl is destroyed there.
   browser_manager_->RemoveObserver(SessionControllerClientImpl::Get());
-  browser_manager_.reset();
-  crosapi_manager_.reset();
 
   if (lock_screen_apps_state_controller_)
     lock_screen_apps_state_controller_->Shutdown();
@@ -1333,11 +1344,13 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // Cleans up dbus services depending on ash.
   dbus_services_->PreAshShutdown();
 
-  // Destroy the SystemTokenCertDbStorage global instance.
-  SystemTokenCertDbStorage::Shutdown();
-
   // NOTE: Closes ash and destroys ash::Shell.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();
+
+  // BrowserManager and CrosapiManager need to outlive the Profile, which
+  // is destroyed inside ChromeBrowserMainPartsLinux::PostMainMessageLoopRun().
+  browser_manager_.reset();
+  crosapi_manager_.reset();
 
   // Destroy classes that may have ash observers or dependencies.
   arc_kiosk_app_manager_.reset();
@@ -1390,7 +1403,7 @@ void ChromeBrowserMainPartsChromeos::PostDestroyThreads() {
 
   // The cert database initializer must be shut down before DBus services are
   // destroyed.
-  system_token_certdb_initializer_->ShutDown();
+  system_token_certdb_initializer_.reset();
 
   // Destroy DBus services immediately after threads are stopped.
   dbus_services_.reset();
@@ -1401,9 +1414,9 @@ void ChromeBrowserMainPartsChromeos::PostDestroyThreads() {
 
   ShutdownDBus();
 
-  // Reset SystemTokenCertDBInitializer after DBus services because it should
-  // outlive NetworkCertLoader.
-  system_token_certdb_initializer_.reset();
+  // Destroy the SystemTokenCertDbStorage global instance which should outlive
+  // NetworkCertLoader and |system_token_certdb_initializer_|.
+  SystemTokenCertDbStorage::Shutdown();
 
   ChromeBrowserMainPartsLinux::PostDestroyThreads();
 

@@ -671,6 +671,7 @@
 <translation id="1706625117072057435">მასშტაბირების დონეები</translation>
 <translation id="1708338024780164500">(არააქტიური)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">ბრაუზერი ექსპერიმენტულია! შესაძლებელია მონაცემების დაკარგვა ან კონფიდენციალურობის/უსაფრთხოების დარღვევა. პრობლემების შესატყობინებლად გადადით აქ: დახმარება &gt; „შეტყობინება პრობლემის შესახებ...“.</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (საკუთარი)</translation>
 <translation id="1709217939274742847">აირჩიეთ ავტორიზაციისთვის გამოსაყენებელი ბილეთი. <ph name="LINK_BEGIN" />შეიტყვეთ მეტი<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">გაზიარება ვერ ხერხდება</translation>
@@ -1088,6 +1089,7 @@
 <translation id="2144557304298909478">Linux-ის Android აპის შემუშავება</translation>
 <translation id="2146263598007866206">საიტებმა შეიძლება ავტომატურად, ერთდროულად ჩამოტვირთოს დაკავშირებული ფაილები, რომ დროის დაზოგვაში დაგეხმაროთ</translation>
 <translation id="2147151613919729065">სტუმრის რეჟიმის ისტორიის წასაშლელად დახურეთ სტუმრის ყველა ფანჯარა.</translation>
+<translation id="2147218225094845757">გვერდითი პანელის დამალვა</translation>
 <translation id="2148219725039824548">გაზიარების მიერთებისას მოხდა შეცდომა. მითითებული გაზიარება ქველში ვერ მოიძებნა.</translation>
 <translation id="2148756636027685713">ფორმატირება დასრულდა</translation>
 <translation id="2148892889047469596">ჩანართის ტრანსლირება</translation>
@@ -3164,6 +3166,7 @@
 <translation id="4410545552906060960">გამოიყენეთ ციფრები (PIN-კოდი) პაროლის ნაცვლად თქვენი მოწყობილობის განსაბლოკად. PIN-კოდის მოგვიანებით დასაყენებლად გადადით პარამეტრებზე.</translation>
 <translation id="4411578466613447185">ხელმომწერის კოდი</translation>
 <translation id="4412698727486357573">დახმარების ცენტრი</translation>
+<translation id="4413088271097062326">რომელი აპლიკაციის გამოყენება გსურთ?</translation>
 <translation id="44141919652824029">გსურთ, „<ph name="APP_NAME" />“-მა შეძლოს დაკავშირებული USB მოწყობილობების სიაზე წვდომა?</translation>
 <translation id="4414232939543644979">ახალი &amp;ინკოგნიტო ფანჯარა</translation>
 <translation id="4414515549596849729">ქუქი-ჩანაწერები და საიტების მონაცემები</translation>
@@ -3936,6 +3939,7 @@
 <translation id="5269977353971873915">ბეჭვდის შეცდომა</translation>
 <translation id="5275352920323889391">ძაღლი</translation>
 <translation id="527605982717517565">ყოველთვის დაუშვით JavaScript <ph name="HOST" />-ზე</translation>
+<translation id="5277127016695466621">გვერდითი პანელის ჩვენება</translation>
 <translation id="5278823018825269962">სტატუსის ID</translation>
 <translation id="5280064835262749532">განაახლეთ ავტორიზაციის მონაცემები <ph name="SHARE_PATH" />-ისთვის</translation>
 <translation id="5280243692621919988">ქუქი-ჩანაწერებისა და საიტების მონაცემების გასუფთავება ყველა ფანჯრის დახურვისას</translation>
@@ -6116,7 +6120,6 @@
 <translation id="7685049629764448582">JavaScript მეხსიერება</translation>
 <translation id="7685087414635069102">საჭიროა PIN-კოდი</translation>
 <translation id="768549422429443215">დაამატეთ ენები, ან შეცვალეთ სიის მიმდევრობა.</translation>
-<translation id="7686424868232681412">Lacros ექსპერიმენტული ბრაუზერია. პრობლემების შესატყობინებლად გადადით აქ: დახმარება &gt; „შეტყობინება პრობლემის შესახებ...“.</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">დაადასტურეთ ახალი პაროლი</translation>
 <translation id="7690378713476594306">სიიდან არჩევა</translation>

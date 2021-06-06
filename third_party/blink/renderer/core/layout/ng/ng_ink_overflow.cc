@@ -378,7 +378,7 @@ absl::optional<PhysicalRect> NGInkOverflow::ComputeTextInkOverflow(
   // so compute text decoration overflow first.
   if (!style.AppliedTextDecorations().IsEmpty() && font.PrimaryFont()) {
     LayoutRect decoration_rect =
-        ComputeTextDecorationOverflow(text_info, style, ink_overflow);
+        ComputeTextDecorationOverflow(style, ink_overflow);
     ink_overflow.Unite(decoration_rect);
   }
 
@@ -422,7 +422,6 @@ absl::optional<PhysicalRect> NGInkOverflow::ComputeTextInkOverflow(
 }
 
 LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
-    const NGTextFragmentPaintInfo& text_info,
     const ComputedStyle& style,
     const LayoutRect& ink_overflow) {
   // TODO(https://crbug.com/1145160): Reduce code duplication between here and
@@ -431,7 +430,7 @@ LayoutRect NGInkOverflow::ComputeTextDecorationOverflow(
   // Use a zero offset because all offsets
   // are applied to the ink overflow after it has been computed.
   PhysicalOffset offset;
-  TextDecorationInfo decoration_info(offset, offset, ink_overflow.Width(),
+  TextDecorationInfo decoration_info(offset, ink_overflow.Width(),
                                      style.GetFontBaseline(), style,
                                      absl::nullopt, nullptr);
   NGTextDecorationOffset decoration_offset(decoration_info.Style(), style,

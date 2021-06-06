@@ -2430,7 +2430,7 @@ TEST_F(
   `,
           function(root) {
             const contentEditable =
-                root.find({attributes: {contentEditableRoot: true}});
+                root.find({attributes: {nonAtomicTextFieldRoot: true}});
             mockFeedback.call(contentEditable.focus.bind(contentEditable))
                 .expectSpeech(/Testing testing\s+one two three/)
                 .call(doCmd('nextLine'))
@@ -3074,9 +3074,13 @@ TEST_F('ChromeVoxBackgroundTest', 'ReadFromHereBlankNodes', function() {
   const site = `<a tabindex=0></a><p>start</p><a tabindex=0></a><p>end</p>`;
   this.runWithLoadedTree(site, function(root) {
     assertEquals(
-        RoleType.ANCHOR, ChromeVoxState.instance.currentRange.start.node.role);
+        RoleType.STATIC_TEXT,
+        ChromeVoxState.instance.currentRange.start.node.role);
 
-    mockFeedback.call(doCmd('readFromHere'))
+    // "start" is uttered twice, once for the initial focus as the page loads,
+    // and once during the 'read from here' command.
+    mockFeedback.expectSpeech('start')
+        .call(doCmd('readFromHere'))
         .expectSpeech('start', 'end')
         .replay();
   });
@@ -3484,6 +3488,31 @@ TEST_F('ChromeVoxBackgroundTest', 'MixedNavWithRangeInvalidation', function() {
         .call(nextObjectKeyboard)
         .call(() => assertTrue(!!ChromeVoxState.instance.currentRange))
 
+        .replay();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'DetailsChanged', function() {
+  const mockFeedback = this.createMockFeedback();
+
+  // Make sure we're not testing reading of the hint from the button's output
+  // below.
+  localStorage['useVerboseMode'] = false;
+  const site = `
+    <button id="click">ok</button>
+    <p id="details">hello</p>
+    <script>
+      const button = document.getElementById('click');
+      button.addEventListener('click', () => {
+        button.setAttribute('aria-details', 'details');
+      });
+    </script>
+  `;
+  this.runWithLoadedTree(site, function(root) {
+    const button = root.find({role: RoleType.BUTTON});
+    mockFeedback.expectSpeech('ok')
+        .call(button.doDefault.bind(button))
+        .expectSpeech('Press Search+A, J to jump to details')
         .replay();
   });
 });

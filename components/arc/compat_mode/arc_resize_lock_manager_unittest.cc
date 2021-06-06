@@ -7,7 +7,7 @@
 #include <set>
 #include <string>
 
-#include "ash/public/cpp/app_types.h"
+#include "ash/constants/app_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "base/containers/contains.h"
 #include "base/stl_util.h"
@@ -83,6 +83,10 @@ TEST_F(ArcResizeLockManagerTest, ConstructDestruct) {}
 TEST_F(ArcResizeLockManagerTest, TestArcWindowPropertyChange) {
   auto* arc_window = CreateFakeWindow(true);
 
+  EXPECT_FALSE(IsResizeLockEnabled(arc_window));
+
+  // App id needs to be set to toogle resize lock state.
+  arc_window->SetProperty(ash::kAppIDKey, new std::string("app-id"));
   EXPECT_FALSE(IsResizeLockEnabled(arc_window));
 
   // Test EnableResizeLock will be called by the property change.

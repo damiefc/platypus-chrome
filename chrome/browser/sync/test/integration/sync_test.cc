@@ -33,8 +33,8 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_invalidations_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/committed_all_nudged_changes_checker.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
@@ -63,8 +63,8 @@
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/sync_base_switches.h"
-#include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_service_impl.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/engine/sync_scheduler_impl.h"
@@ -107,7 +107,7 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #endif
 
-using syncer::ProfileSyncService;
+using syncer::SyncServiceImpl;
 
 namespace {
 
@@ -587,9 +587,8 @@ std::vector<ProfileSyncServiceHarness*> SyncTest::GetSyncClients() {
   return clients;
 }
 
-ProfileSyncService* SyncTest::GetSyncService(int index) {
-  return ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
-      GetProfile(index));
+SyncServiceImpl* SyncTest::GetSyncService(int index) {
+  return SyncServiceFactory::GetAsSyncServiceImplForProfile(GetProfile(index));
 }
 
 syncer::UserSelectableTypeSet SyncTest::GetRegisteredSelectableTypes(
@@ -599,8 +598,8 @@ syncer::UserSelectableTypeSet SyncTest::GetRegisteredSelectableTypes(
       ->GetRegisteredSelectableTypes();
 }
 
-std::vector<ProfileSyncService*> SyncTest::GetSyncServices() {
-  std::vector<ProfileSyncService*> services;
+std::vector<SyncServiceImpl*> SyncTest::GetSyncServices() {
+  std::vector<SyncServiceImpl*> services;
   for (int i = 0; i < num_clients(); ++i) {
     services.push_back(GetSyncService(i));
   }
@@ -731,15 +730,14 @@ void SyncTest::InitializeProfile(int index, Profile* profile) {
   DCHECK_EQ(static_cast<size_t>(index), browsers_.size() - 1);
 #endif
 
-  // Make sure the ProfileSyncService has been created before creating the
-  // ProfileSyncServiceHarness - some tests expect the ProfileSyncService to
+  // Make sure the SyncServiceImpl has been created before creating the
+  // ProfileSyncServiceHarness - some tests expect the SyncServiceImpl to
   // already exist.
-  ProfileSyncService* profile_sync_service =
-      ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
-          GetProfile(index));
+  SyncServiceImpl* sync_service_impl =
+      SyncServiceFactory::GetAsSyncServiceImplForProfile(GetProfile(index));
 
   if (server_type_ == IN_PROCESS_FAKE_SERVER) {
-    profile_sync_service->OverrideNetworkForTest(
+    sync_service_impl->OverrideNetworkForTest(
         fake_server::CreateFakeServerHttpPostProviderFactory(
             GetFakeServer()->AsWeakPtr()));
   }
@@ -851,7 +849,7 @@ void SyncTest::InitializeInvalidations(int index) {
       break;
     case IN_PROCESS_FAKE_SERVER: {
       configuration_refresher_->Observe(
-          ProfileSyncServiceFactory::GetForProfile(GetProfile(index)));
+          SyncServiceFactory::GetForProfile(GetProfile(index)));
       break;
     }
     case SERVER_TYPE_UNDECIDED:

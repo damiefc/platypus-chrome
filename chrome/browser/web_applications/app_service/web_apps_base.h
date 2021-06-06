@@ -11,14 +11,10 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/apps/app_service/app_icon_factory.h"
-#include "chrome/browser/apps/app_service/icon_key_util.h"
 #include "chrome/browser/web_applications/app_service/web_app_publisher_helper.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "components/content_settings/core/browser/content_settings_observer.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/services/app_service/public/cpp/publisher_base.h"
 #include "components/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -28,14 +24,6 @@
 
 class Profile;
 
-namespace apps {
-struct AppLaunchParams;
-}  // namespace apps
-
-namespace content {
-class WebContents;
-}
-
 namespace webapps {
 enum class WebappUninstallSource;
 }  // namespace webapps
@@ -43,15 +31,14 @@ enum class WebappUninstallSource;
 namespace web_app {
 
 class WebApp;
-class WebAppLaunchManager;
 class WebAppProvider;
 class WebAppRegistrar;
 
 // An app publisher (in the App Service sense) of Web Apps.
 class WebAppsBase : public apps::PublisherBase,
+                    public WebAppPublisherHelper::Delegate,
                     public base::SupportsWeakPtr<WebAppsBase>,
-                    public AppRegistrarObserver,
-                    public content_settings::Observer {
+                    public AppRegistrarObserver {
  public:
   WebAppsBase(const mojo::Remote<apps::mojom::AppService>& app_service,
               Profile* profile);
@@ -64,24 +51,14 @@ class WebAppsBase : public apps::PublisherBase,
  protected:
   const WebApp* GetWebApp(const AppId& app_id) const;
 
+  bool Accepts(const std::string& app_id) const;
+
   // AppRegistrarObserver:
   void OnWebAppInstalled(const AppId& app_id) override;
   void OnWebAppWillBeUninstalled(const AppId& app_id) override;
   void OnWebAppLastLaunchTimeChanged(
       const std::string& app_id,
       const base::Time& last_launch_time) override;
-
-  apps::IconEffects GetIconEffects(const WebApp* web_app);
-
-  content::WebContents* LaunchAppWithIntentImpl(
-      const std::string& app_id,
-      int32_t event_flags,
-      apps::mojom::IntentPtr intent,
-      apps::mojom::LaunchSource launch_source,
-      int64_t display_id);
-
-  virtual content::WebContents* LaunchAppWithParams(
-      apps::AppLaunchParams params);
 
   const mojo::RemoteSet<apps::mojom::Subscriber>& subscribers() const {
     return subscribers_;
@@ -90,18 +67,12 @@ class WebAppsBase : public apps::PublisherBase,
   Profile* profile() const { return profile_; }
   WebAppProvider* provider() const { return provider_; }
 
-  apps_util::IncrementingIconKeyFactory& icon_key_factory() {
-    return icon_key_factory_;
-  }
-
   // Can return nullptr in tests.
   const WebAppRegistrar* GetRegistrar() const;
 
   apps::mojom::AppType app_type() { return app_type_; }
 
-  web_app::WebAppPublisherHelper& publisher_helper() {
-    return publisher_helper_;
-  }
+  WebAppPublisherHelper& publisher_helper() { return publisher_helper_; }
 
  private:
   void Initialize(const mojo::Remote<apps::mojom::AppService>& app_service);
@@ -133,10 +104,8 @@ class WebAppsBase : public apps::PublisherBase,
                      apps::mojom::PermissionPtr permission) override;
   void OpenNativeSettings(const std::string& app_id) override;
 
-  // content_settings::Observer overrides.
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  // WebAppPublisherHelper::Delegate overrides.
+  void PublishWebApp(apps::mojom::AppPtr app) override;
 
   // AppRegistrarObserver:
   void OnWebAppManifestUpdated(const AppId& app_id,
@@ -152,23 +121,14 @@ class WebAppsBase : public apps::PublisherBase,
   void StartPublishingWebApps(
       mojo::PendingRemote<apps::mojom::Subscriber> subscriber_remote);
 
-  virtual bool Accepts(const std::string& app_id) = 0;
-
   mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
 
   Profile* const profile_;
 
-  apps_util::IncrementingIconKeyFactory icon_key_factory_;
-
   base::ScopedObservation<AppRegistrar, AppRegistrarObserver>
       registrar_observation_{this};
 
-  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
-      content_settings_observation_{this};
-
   WebAppProvider* provider_ = nullptr;
-
-  std::unique_ptr<WebAppLaunchManager> web_app_launch_manager_;
 
   // app_service_ is owned by the object that owns this object.
   apps::mojom::AppService* app_service_;

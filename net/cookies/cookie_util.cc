@@ -11,11 +11,11 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check.h"
+#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_tokenizer.h"
@@ -146,8 +146,12 @@ std::pair<ContextType, bool> ComputeSameSiteContext(
       url_chain.size() == 1u ||
       base::ranges::all_of(url_chain, is_same_site_with_site_for_cookies);
 
-  if (same_site_initiator && same_site_redirect_chain)
+  if (same_site_initiator &&
+      (!base::FeatureList::IsEnabled(
+           features::kCookieSameSiteConsidersRedirectChain) ||
+       same_site_redirect_chain)) {
     return {ContextType::SAME_SITE_STRICT, false};
+  }
 
   if (is_http) {
     base::UmaHistogramBoolean("Cookie.SameSiteContextAffectedByBugfix1166211",

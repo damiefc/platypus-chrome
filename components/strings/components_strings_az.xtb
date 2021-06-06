@@ -219,6 +219,7 @@
 <translation id="168841957122794586">Server sertifikatının kriptoqrafik açarı zəifdir.</translation>
 <translation id="1696290444144917273">Virtual kart detallarına baxın</translation>
 <translation id="1697532407822776718">Hər şey hazırdır!</translation>
+<translation id="1699570257714336246">Əskik məlumat var</translation>
 <translation id="1703835215927279855">Letter</translation>
 <translation id="1706954506755087368">{1,plural, =1{Bu server <ph name="DOMAIN" /> olduğunu sübut edə bilmədi; böyük ehtimal təhlükəsizlik sertifikatı sabahdan etibarən nəzərdə tutulub. Buna yanlış konfiqurasiya və ya hücumçu tərəfindən bağlantının ələ keçirilməsi səbəb ola bilər.}other{Bu server <ph name="DOMAIN" /> olduğunu sübut edə bilmədi; təhlükəsizlik sertifikatı gələcəkdə # gündən sonra nəzərdə tutulub. Buna yanlış konfiqurasiya və ya hücumçu tərəfindən bağlantının ələ keçirilməsi səbəb ola bilər.}}</translation>
 <translation id="1710259589646384581">OS</translation>
@@ -730,6 +731,7 @@
 <translation id="3631244953324577188">Biometriklər</translation>
 <translation id="3633738897356909127">"Chrome'u güncəlləyin" düyməsi, Chrome ayarlarında Chrome'u güncəlləmək üçün Enter düyməsinə basın</translation>
 <translation id="3634530185120165534">Qab 5</translation>
+<translation id="3637662659967048211">Google Hesabında saxlayın</translation>
 <translation id="3640766068866876100">Index-4x6-Ext</translation>
 <translation id="3642638418806704195">Tətbiq:</translation>
 <translation id="3650584904733503804">Yoxlama uğurludur</translation>
@@ -1022,6 +1024,7 @@
 <translation id="4731967714531604179">Prc2 (Zərf)</translation>
 <translation id="4733082559415072992"><ph name="URL" /> cihazın məkanını istifadə etmək istəyir</translation>
 <translation id="4736825316280949806">Chromium'u yenidən başladın</translation>
+<translation id="4736934858538408121">Virtual kart</translation>
 <translation id="473775607612524610">Güncəlləşdirin</translation>
 <translation id="4738601419177586157"><ph name="TEXT" /> axtarış təklifi</translation>
 <translation id="4742407542027196863">Parolları idarə edin...</translation>
@@ -1406,6 +1409,7 @@
 <translation id="6106989379647458772"><ph name="PAGE" /> veb səhifəsi müvəqqəti işləməyə bilər və ya yeni veb ünvana köçürülmüş ola bilər.</translation>
 <translation id="6107012941649240045">Verildi:</translation>
 <translation id="610911394827799129"><ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> linkində Google Hesabına məxsus axtarış tarixçəsinin başqa formaları ola bilər</translation>
+<translation id="6113594885686374546">"Baxışa davam edin" düyməsi, Enter düyməsinə basaraq baxışa davam edin və Chrome tarixçəsində əlaqəli fəaliyyəti görün</translation>
 <translation id="6116338172782435947">Buferə kopyalanan mətn və şəkillərə baxın</translation>
 <translation id="6120179357481664955">UPI ID'niz yadda saxlansın?</translation>
 <translation id="6123290840358279103">Virtual karta baxın</translation>
@@ -1481,6 +1485,7 @@
 <translation id="6423385022588644828">Bundan sonra Toxunuş İD'si istifadə edərək kartlarınızı daha sürətli təsdiqləyin</translation>
 <translation id="6425092077175753609">Material</translation>
 <translation id="6427730057873428458">Qapı şəklində qatlayın</translation>
+<translation id="6428146287756735566">Chrome tarixçəsində əlaqəli fəaliyyəti görmək üçün baxışa davam edin</translation>
 <translation id="6428450836711225518">Telefon nömrənizi doğrulayın</translation>
 <translation id="6433490469411711332">Kontakt məlumatını redaktə edin</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> qoşulmaq istəmədi.</translation>
@@ -1532,6 +1537,7 @@
 <translation id="6643016212128521049">Silin</translation>
 <translation id="6645291930348198241">Kukilər və sayt datasına giriş.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Yoxdur}=1{1 saytdan (Google Hesabınızdan çıxmayacaqsınız)}other{ # saytdan (Google Hesabınızdan çıxmayacaqsınız)}}</translation>
+<translation id="6647197322759179819">Baxışa davam edin</translation>
 <translation id="6648459603387803038">Administrator brauzer quraşdırmasını uzaqdan dəyişə bilər. Bu cihazdakı fəaliyyət Chrome'dan kənarda da idarə edilə bilər.</translation>
 <translation id="6648524591329069940">Serif Şrifti</translation>
 <translation id="6651270836885078973">İdarə edən:</translation>
@@ -1715,7 +1721,7 @@
 <translation id="7378594059915113390">Media Nəzarətləri</translation>
 <translation id="7378627244592794276">Xeyr</translation>
 <translation id="7378810950367401542">/</translation>
-<translation id="7386364858855961704">Tətbiq edilə bilməz</translation>
+<translation id="7386364858855961704">Tətbiq olunmur</translation>
 <translation id="7390545607259442187">Kartı Təsdiqləyin</translation>
 <translation id="7392089738299859607">Ünvanı yeniləyin</translation>
 <translation id="7399802613464275309">Təhlükəsizlik Yoxlanışı</translation>
@@ -2183,6 +2189,7 @@
 <translation id="9114524666733003316">Kart təsdiqlənir...</translation>
 <translation id="9114581008513152754">Bu brauzer şirkət və ya başqa təşkilat tərəfindən idarə edilmir. Bu cihazdakı fəaliyyət Chrome'dan kənarda idarə edilə bilər. <ph name="BEGIN_LINK" />Ətraflı məlumat<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Təzə</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />, Tab düyməsi, sonra Enter düyməsinə basaraq baxışa davam edin və Chrome tarixçəsində əlaqəli fəaliyyəti görün</translation>
 <translation id="9119042192571987207">Yüklənib</translation>
 <translation id="9128016270925453879">Siyasətlər yüklənib</translation>
 <translation id="9128870381267983090">Şəbəkəyə qoşulun</translation>

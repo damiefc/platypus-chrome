@@ -194,7 +194,8 @@ void CollectX11GpuExtraInfo(bool enable_native_gpu_memory_buffers,
 
 ScopedEnableTextureRectangleInShaderCompiler::
     ScopedEnableTextureRectangleInShaderCompiler(gl::GLApi* gl_api) {
-  if (gl_api && !gl_api->glIsEnabledFn(GL_TEXTURE_RECTANGLE_ANGLE)) {
+  if (gl_api) {
+    DCHECK(!gl_api->glIsEnabledFn(GL_TEXTURE_RECTANGLE_ANGLE));
     gl_api->glEnableFn(GL_TEXTURE_RECTANGLE_ANGLE);
     gl_api_ = gl_api;
   } else {

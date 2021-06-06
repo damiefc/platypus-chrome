@@ -682,6 +682,7 @@
 <translation id="1706625117072057435">Zoomnivåer</translation>
 <translation id="1708338024780164500">(Inaktiv)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (id: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Detta är en experimentell webbläsare. Data kan gå förlorad, och det kan innebära en integritets- och säkerhetsrisk. Rapportera problem via Hjälp &gt; Rapportera ett problem …</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (standard)</translation>
 <translation id="1709217939274742847">Välj vilken biljett som ska användas till autentisering. <ph name="LINK_BEGIN" />Läs mer<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Det går inte att dela</translation>
@@ -1100,6 +1101,7 @@ Du kan hantera inställningarna för det här kontot genom att installera Family
 <translation id="2144557304298909478">Android-apputveckling i Linux</translation>
 <translation id="2146263598007866206">Webbplatser kan automatiskt ladda ned relaterade filer samtidigt så att du sparar tid</translation>
 <translation id="2147151613919729065">Stäng alla gästfönster för att rensa gästlägets historik.</translation>
+<translation id="2147218225094845757">Dölj sidopanel</translation>
 <translation id="2148219725039824548">Det gick inte att montera den delade resursen. Den angivna resursen hittades inte i nätverket.</translation>
 <translation id="2148756636027685713">Formateringen är klar</translation>
 <translation id="2148892889047469596">Casta fliken</translation>
@@ -3179,6 +3181,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="4410545552906060960">Lås upp enheten med en sifferkod (pinkod) i stället för ett lösenord. Du kan ange en pinkod senare i inställningarna.</translation>
 <translation id="4411578466613447185">Kodsigneringscertifikat</translation>
 <translation id="4412698727486357573">Hjälpcenter</translation>
+<translation id="4413088271097062326">Vilken app vill du använda?</translation>
 <translation id="44141919652824029">Vill du ge <ph name="APP_NAME" /> åtkomstbehörighet till listan med anslutna USB-enheter?</translation>
 <translation id="4414232939543644979">Nytt &amp;inkognitofönster</translation>
 <translation id="4414515549596849729">cookies och webbplatsdata</translation>
@@ -3282,7 +3285,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="4519935350946509010">Anslutningsfel.</translation>
 <translation id="4520385623207007473">Cookies är aktiverade</translation>
 <translation id="452039078290142656">okända enheter från <ph name="VENDOR_NAME" /></translation>
-<translation id="4522570452068850558">Info</translation>
+<translation id="4522570452068850558">Detaljer</translation>
 <translation id="4522600456902129422">Ge den här webbplatsen tillgång till Urklipp även i fortsättningen</translation>
 <translation id="4522890784888918985">Barnkonton stöds inte</translation>
 <translation id="4524832533047962394">Det angivna registreringsläget stöds inte av den här versionen av operativsystemet. Kontrollera att du har den senaste versionen.</translation>
@@ -3952,6 +3955,7 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="5269977353971873915">Det gick inte att skriva ut dokumentet</translation>
 <translation id="5275352920323889391">Hund</translation>
 <translation id="527605982717517565">Tillåt alltid JavaScript på <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Visa sidopanel</translation>
 <translation id="5278823018825269962">Status-id</translation>
 <translation id="5280064835262749532">Uppdatera användaruppgifterna för <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Rensa cookies och webbplatsdata när du stänger alla fönster</translation>
@@ -6132,7 +6136,6 @@ och Ctrl + Alt + Minska ljusstyrka för att zooma ut.</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
 <translation id="7685087414635069102">Pinkod krävs</translation>
 <translation id="768549422429443215">Lägg till språk eller ändra ordning på listan.</translation>
-<translation id="7686424868232681412">Lacros är en experimentell webbläsare. Rapportera problem via Hjälp &gt; Rapportera ett problem …</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Bekräfta det nya lösenordet</translation>
 <translation id="7690378713476594306">Välj i lista</translation>

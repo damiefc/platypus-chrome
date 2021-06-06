@@ -92,6 +92,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_shortcut_mac.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -144,7 +145,7 @@ bool g_is_opening_new_window = false;
 // there are only minimized windows), it will unminimize it.
 Browser* ActivateBrowser(Profile* profile) {
   Browser* browser = chrome::FindLastActiveWithProfile(
-      profile->IsGuestSession()
+      (profile->IsGuestSession() || profile->IsEphemeralGuestProfile())
           ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
           : profile);
   if (browser)
@@ -307,6 +308,27 @@ base::FilePath GetStartupProfilePathMac(const base::FilePath& user_data_dir) {
                                /*current_directory=*/base::FilePath(),
                                *base::CommandLine::ForCurrentProcess(),
                                /*ignore_profile_picker=*/true);
+}
+
+// Open the urls in the last used browser from a regular profile.
+void OpenUrlsInBrowser(const std::vector<GURL>& urls,
+                       Profile* safe_last_profile) {
+  Profile* profile =
+      g_browser_process->profile_manager()->GetLastUsedProfileAllowedByPolicy();
+  Browser* browser = chrome::FindLastActiveWithProfile(profile);
+  // if no browser window exists then create one with no tabs to be filled in
+  if (!browser) {
+    browser = Browser::Create(
+        Browser::CreateParams(safe_last_profile, /*user_gesture=*/true));
+    browser->window()->Show();
+  }
+
+  base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
+  chrome::startup::IsFirstRun first_run =
+      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
+                                    : chrome::startup::IS_NOT_FIRST_RUN;
+  StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
+  launch.OpenURLsInBrowser(browser, false, urls);
 }
 
 }  // namespace
@@ -748,7 +770,14 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     _tabMenuBridge.reset();
   }
 
-  [self windowChangedToProfile:browser->profile()];
+  Profile* profile = browser->profile();
+  // If kUpdateHistoryEntryPointsInIncognito is not enabled, always pass
+  // original profile.
+  if (!base::FeatureList::IsEnabled(
+          features::kUpdateHistoryEntryPointsInIncognito)) {
+    profile = profile->GetOriginalProfile();
+  }
+  [self windowChangedToProfile:profile];
 }
 
 - (void)windowDidResignMain:(NSNotification*)notify {
@@ -1158,7 +1187,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   if (g_browser_process->IsShuttingDown())
     return;
 
-  Profile* lastProfile = [self safeLastProfileForNewWindows];
+  Profile* lastProfile = [self safeProfileForNewWindows:[self lastProfile]];
 
   // Handle the case where we're dispatching a command from a sender that's in a
   // browser window. This means that the command came from a background window
@@ -1193,8 +1222,10 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // locked profile needs authentication and the system profile cannot have a
   // browser.
   const PrefService* prefService = g_browser_process->local_state();
+  bool is_last_profile_guest =
+      lastProfile->IsGuestSession() || lastProfile->IsEphemeralGuestProfile();
   if (IsProfileSignedOut(lastProfile) || lastProfile->IsSystemProfile() ||
-      (lastProfile->IsGuestSession() && prefService &&
+      (is_last_profile_guest && prefService &&
        !prefService->GetBoolean(prefs::kBrowserGuestModeEnabled))) {
     ProfilePicker::Show(ProfilePicker::EntryPoint::kProfileLocked);
     return;
@@ -1396,8 +1427,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     // to AppKit as there's nothing that it can do either.
     return NO;
   }
-  if (lastProfile->IsGuestSession() || IsProfileSignedOut(lastProfile) ||
-      lastProfile->IsSystemProfile()) {
+  if (lastProfile->IsGuestSession() || lastProfile->IsEphemeralGuestProfile() ||
+      IsProfileSignedOut(lastProfile) || lastProfile->IsSystemProfile()) {
     ProfilePicker::Show(ProfilePicker::EntryPoint::kProfileLocked);
   } else if (ProfilePicker::ShouldShowAtLaunch()) {
     ProfilePicker::Show(
@@ -1517,9 +1548,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   return GetLastProfileMac();
 }
 
-- (Profile*)safeLastProfileForNewWindows {
-  Profile* profile = [self lastProfile];
-
+- (Profile*)safeProfileForNewWindows:(Profile*)profile {
   if (!profile)
     return nullptr;
 
@@ -1532,10 +1561,10 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
 // Returns true if a browser window may be opened for the last active profile.
 - (bool)canOpenNewBrowser {
-  Profile* profile = [self safeLastProfileForNewWindows];
+  Profile* profile = [self safeProfileForNewWindows:[self lastProfile]];
 
   const PrefService* prefs = g_browser_process->local_state();
-  return !profile->IsGuestSession() ||
+  return (!profile->IsGuestSession() && !profile->IsEphemeralGuestProfile()) ||
          prefs->GetBoolean(prefs::kBrowserGuestModeEnabled);
 }
 
@@ -1549,26 +1578,9 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
     return;
   }
 
-  if (StartupBrowserCreator::MaybeHandleProfileAgnosticUrls(urls))
-    return;
-
-  // Pick the last used browser from a regular profile to open the urls.
-  Profile* profile =
-      g_browser_process->profile_manager()->GetLastUsedProfileAllowedByPolicy();
-  Browser* browser = chrome::FindLastActiveWithProfile(profile);
-  // if no browser window exists then create one with no tabs to be filled in
-  if (!browser) {
-    browser = Browser::Create(
-        Browser::CreateParams([self safeLastProfileForNewWindows], true));
-    browser->window()->Show();
-  }
-
-  base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
-  chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
-  StartupBrowserCreatorImpl launch(base::FilePath(), dummy, first_run);
-  launch.OpenURLsInBrowser(browser, false, urls);
+  StartupBrowserCreator::MaybeHandleProfileAgnosticUrls(
+      urls, base::BindOnce(&OpenUrlsInBrowser, urls,
+                           [self safeProfileForNewWindows:[self lastProfile]]));
 }
 
 - (void)getUrl:(NSAppleEventDescriptor*)event
@@ -1619,12 +1631,13 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 // Show the preferences window, or bring it to the front if it's already
 // visible.
 - (IBAction)showPreferences:(id)sender {
-  if (Browser* browser = ActivateBrowser([self lastProfile])) {
+  Profile* lastProfile = [self lastProfile];
+  if (Browser* browser = ActivateBrowser(lastProfile)) {
     // Show options tab in the active browser window.
     chrome::ShowSettings(browser);
   } else if ([self canOpenNewBrowser]) {
     // No browser window, so create one for the options tab.
-    chrome::OpenOptionsWindow([self safeLastProfileForNewWindows]);
+    chrome::OpenOptionsWindow([self safeProfileForNewWindows:lastProfile]);
   } else {
     // No way to create a browser, default to the Profile Picker. On profile
     // selection, it opens the profile on the settings page.
@@ -1634,11 +1647,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 }
 
 - (IBAction)orderFrontStandardAboutPanel:(id)sender {
-  if (Browser* browser = ActivateBrowser([self lastProfile])) {
+  Profile* lastProfile = [self lastProfile];
+  if (Browser* browser = ActivateBrowser(lastProfile)) {
     chrome::ShowAboutChrome(browser);
   } else if ([self canOpenNewBrowser]) {
     // No browser window, so create one for the options tab.
-    chrome::OpenAboutWindow([self safeLastProfileForNewWindows]);
+    chrome::OpenAboutWindow([self safeProfileForNewWindows:lastProfile]);
   } else {
     // No way to create a browser, default to the User Manager. On profile
     // selection, it opens the profile on chrome help page.
@@ -1759,8 +1773,12 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   }
 
   _lastProfile = profile;
-  _lastProfileKeepAlive = std::make_unique<ScopedProfileKeepAlive>(
-      _lastProfile, ProfileKeepAliveOrigin::kAppControllerMac);
+  if (profile->IsOffTheRecord()) {
+    _lastProfileKeepAlive.reset();
+  } else {
+    _lastProfileKeepAlive = std::make_unique<ScopedProfileKeepAlive>(
+        _lastProfile, ProfileKeepAliveOrigin::kAppControllerMac);
+  }
 }
 
 - (void)windowChangedToProfile:(Profile*)profile {
@@ -1771,6 +1789,10 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // its initial state.
   if (_historyMenuBridge)
     _historyMenuBridge->ResetMenu();
+
+  // Clear the profile pref registrar before tearing down.
+  if (_profilePrefRegistrar)
+    _profilePrefRegistrar->RemoveAll();
 
   // Rebuild the menus with the new profile. The bookmarks submenu is cached to
   // avoid slowdowns when switching between profiles with large numbers of

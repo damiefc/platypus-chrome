@@ -21,7 +21,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/services/storage/public/cpp/quota_client_callback_wrapper.h"
 #include "content/browser/log_console_message.h"
-#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_consts.h"
@@ -43,6 +42,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/console_message.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/url_utils.h"
 #include "ipc/ipc_message.h"
@@ -108,19 +108,18 @@ class RegistrationDeletionListener
 void SuccessReportingCallback(
     int* expected_calls,
     std::vector<std::unique_ptr<RegistrationDeletionListener>>* listeners,
-    const base::RepeatingCallback<void(blink::ServiceWorkerStatusCode)>&
-        callback,
+    base::OnceCallback<void(blink::ServiceWorkerStatusCode)>& callback,
     blink::ServiceWorkerStatusCode status) {
   if (status != blink::ServiceWorkerStatusCode::kOk) {
     *expected_calls = -1;
     listeners->clear();
-    callback.Run(blink::ServiceWorkerStatusCode::kErrorFailed);
+    std::move(callback).Run(blink::ServiceWorkerStatusCode::kErrorFailed);
     return;
   }
   (*expected_calls)--;
   if (*expected_calls == 0) {
     listeners->clear();
-    callback.Run(blink::ServiceWorkerStatusCode::kOk);
+    std::move(callback).Run(blink::ServiceWorkerStatusCode::kOk);
   }
 }
 
@@ -523,7 +522,8 @@ void ServiceWorkerContextCore::RegisterServiceWorker(
     const blink::mojom::ServiceWorkerRegistrationOptions& options,
     blink::mojom::FetchClientSettingsObjectPtr
         outside_fetch_client_settings_object,
-    RegistrationCallback callback) {
+    RegistrationCallback callback,
+    const GlobalFrameRoutingId& requesting_frame_id) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   std::string error_message;
   if (!IsValidRegisterRequest(script_url, options.scope, key, &error_message)) {
@@ -535,6 +535,7 @@ void ServiceWorkerContextCore::RegisterServiceWorker(
   was_service_worker_registered_ = true;
   job_coordinator_->Register(
       script_url, options, std::move(outside_fetch_client_settings_object),
+      requesting_frame_id,
       base::BindOnce(&ServiceWorkerContextCore::RegistrationComplete,
                      AsWeakPtr(), options.scope, key, std::move(callback)));
 }
@@ -625,7 +626,7 @@ void ServiceWorkerContextCore::DidGetRegistrationsForDeleteForStorageKey(
   base::RepeatingCallback<void(blink::ServiceWorkerStatusCode)> barrier =
       base::BindRepeating(SuccessReportingCallback, base::Owned(expected_calls),
                           base::Owned(listeners),
-                          base::AdaptCallbackForRepeating(std::move(callback)));
+                          base::OwnedRef(std::move(callback)));
   for (const auto& registration : registrations) {
     DCHECK(registration);
     if (*expected_calls != -1) {

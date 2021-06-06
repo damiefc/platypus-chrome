@@ -14,6 +14,7 @@
 #include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -45,6 +47,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
@@ -360,6 +363,90 @@ IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, MediaRequest) {
   EXPECT_EQ(
       mock_app_publisher.get_capability_access_deltas().back()->microphone,
       apps::mojom::OptionalBool::kFalse);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, Launch) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  AppId app_id = InstallWebAppFromManifest(browser(), app_url);
+
+  MockAppPublisher mock_app_publisher;
+  WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
+  mock_app_publisher.Wait();
+
+  content::TestNavigationObserver navigation_observer(app_url);
+  navigation_observer.StartWatchingNewWebContents();
+  web_apps_publisher_host.Launch(app_id, 0,
+                                 apps::mojom::LaunchSource::kFromTest, nullptr);
+  navigation_observer.Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, PauseUnpause) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  const AppId app_id = InstallWebAppFromManifest(browser(), app_url);
+  LaunchWebAppBrowserAndWait(app_id);
+
+  MockAppPublisher mock_app_publisher;
+  WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 1U);
+
+  web_apps_publisher_host.PauseApp(app_id);
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 3U);
+
+  EXPECT_EQ(mock_app_publisher.get_deltas()[1]->app_type,
+            apps::mojom::AppType::kWeb);
+  EXPECT_EQ(mock_app_publisher.get_deltas()[1]->app_id, app_id);
+  EXPECT_EQ(mock_app_publisher.get_deltas()[1]->icon_key->icon_effects,
+            IconEffects::kRoundCorners | IconEffects::kCrOsStandardIcon |
+                IconEffects::kPaused);
+
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_type,
+            apps::mojom::AppType::kWeb);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->paused,
+            apps::mojom::OptionalBool::kTrue);
+
+  web_apps_publisher_host.UnpauseApps(app_id);
+  mock_app_publisher.Wait();
+  EXPECT_EQ(mock_app_publisher.get_deltas().size(), 5U);
+
+  EXPECT_EQ(mock_app_publisher.get_deltas()[3]->app_type,
+            apps::mojom::AppType::kWeb);
+  EXPECT_EQ(mock_app_publisher.get_deltas()[3]->app_id, app_id);
+  EXPECT_EQ(mock_app_publisher.get_deltas()[3]->icon_key->icon_effects,
+            IconEffects::kRoundCorners | IconEffects::kCrOsStandardIcon);
+
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_type,
+            apps::mojom::AppType::kWeb);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->app_id, app_id);
+  EXPECT_EQ(mock_app_publisher.get_deltas().back()->paused,
+            apps::mojom::OptionalBool::kFalse);
+}
+
+IN_PROC_BROWSER_TEST_F(WebAppsPublisherHostBrowserTest, OpenNativeSettings) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  AppId app_id = InstallWebAppFromManifest(browser(), app_url);
+
+  MockAppPublisher mock_app_publisher;
+  WebAppsPublisherHost web_apps_publisher_host(profile());
+  web_apps_publisher_host.SetPublisherForTesting(&mock_app_publisher);
+  web_apps_publisher_host.Init();
+  mock_app_publisher.Wait();
+
+  web_apps_publisher_host.OpenNativeSettings(app_id);
+  content::WebContents* const web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(base::StartsWith(web_contents->GetVisibleURL().spec(),
+                               chrome::kChromeUIContentSettingsURL,
+                               base::CompareCase::SENSITIVE));
 }
 
 }  // namespace web_app

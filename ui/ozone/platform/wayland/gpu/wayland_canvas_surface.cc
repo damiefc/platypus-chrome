@@ -92,9 +92,9 @@ class WaylandCanvasSurface::SharedMemoryBuffer {
     return true;
   }
 
-  void CommitBuffer(const gfx::Rect& damage) {
+  void CommitBuffer(const gfx::Rect& damage, int32_t buffer_scale) {
     buffer_manager_->CommitBuffer(widget_, buffer_id_, gfx::Rect(size_),
-                                  damage);
+                                  buffer_scale, damage);
   }
 
   void OnUse() {
@@ -207,7 +207,8 @@ SkCanvas* WaylandCanvasSurface::GetCanvas() {
   return pending_buffer_->sk_surface()->getCanvas();
 }
 
-void WaylandCanvasSurface::ResizeCanvas(const gfx::Size& viewport_size) {
+void WaylandCanvasSurface::ResizeCanvas(const gfx::Size& viewport_size,
+                                        float scale) {
   if (size_ == viewport_size)
     return;
   // TODO(https://crbug.com/930667): We could implement more efficient resizes
@@ -220,6 +221,7 @@ void WaylandCanvasSurface::ResizeCanvas(const gfx::Size& viewport_size) {
   pending_buffer_ = nullptr;
   unsubmitted_buffers_.clear();
   size_ = viewport_size;
+  viewport_scale_ = std::ceil(scale);
 }
 
 void WaylandCanvasSurface::PresentCanvas(const gfx::Rect& damage) {
@@ -271,7 +273,7 @@ void WaylandCanvasSurface::ProcessUnsubmittedBuffers() {
       buffer->UpdateDirtyRegion(damage, SkRegion::kUnion_Op);
   }
 
-  current_buffer_->CommitBuffer(damage);
+  current_buffer_->CommitBuffer(damage, viewport_scale_);
 }
 
 void WaylandCanvasSurface::OnSubmission(uint32_t buffer_id,

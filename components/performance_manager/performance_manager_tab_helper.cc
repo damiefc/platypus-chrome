@@ -81,7 +81,9 @@ PerformanceManagerTabHelper::PerformanceManagerTabHelper(
       web_contents->GetBrowserContext()->UniqueId(),
       web_contents->GetVisibleURL(),
       web_contents->GetVisibility() == content::Visibility::VISIBLE,
-      web_contents->IsCurrentlyAudible(), web_contents->GetLastActiveTime());
+      web_contents->IsCurrentlyAudible(), web_contents->GetLastActiveTime(),
+      // TODO(1211368): Support MPArch fully!
+      PageNode::PageState::kActive);
 
   // We have an early WebContents creation hook so should see it when there is
   // only a single frame, and it is not yet created. We sanity check that here.
@@ -177,7 +179,7 @@ void PerformanceManagerTabHelper::RenderFrameCreated(
                 frame_node->SetIsCurrent(is_current);
               },
               render_frame_host->GetLastCommittedURL(),
-              render_frame_host->IsCurrent()));
+              render_frame_host->IsActive()));
 
   frames_[render_frame_host] = std::move(frame);
 }
@@ -389,16 +391,7 @@ void PerformanceManagerTabHelper::InnerWebContentsAttached(
     // Note that guest views can simultaneously have openers *and* be embedded.
   }
   DCHECK_NE(PageNode::EmbeddingType::kInvalid, embedding_type);
-  if (!frame) {
-    DCHECK(!render_frame_host->IsRenderFrameCreated());
-    DCHECK(!inner_web_contents->IsPortal());
-    // TODO(crbug.com/1133361):
-    // WebContentsImplBrowserTest.AttachNestedInnerWebContents calls
-    // WebContents::AttachInnerWebContents without creating RenderFrame.
-    // Removing this conditional once either the test is fixed or this function
-    // is adjusted to handle the case without the render frame.
-    return;
-  }
+  DCHECK(frame);
 
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
@@ -433,7 +426,7 @@ void PerformanceManagerTabHelper::DidUpdateFaviconURL(
     const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   // This favicon change might have been initiated by a different frame some
   // time ago and the main frame might have changed.
-  if (!render_frame_host->IsCurrent())
+  if (!render_frame_host->IsActive())
     return;
 
   // TODO(siggi): This logic belongs in the policy layer rather than here.

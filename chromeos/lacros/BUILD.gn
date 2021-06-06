@@ -24,6 +24,7 @@ component("lacros") {
     "//chromeos/process_proxy",
     "//chromeos/startup",
     "//mojo/public/cpp/bindings",
+    "//ui/native_theme",
   ]
   sources = [
     "lacros_chrome_service_delegate.h",
@@ -32,6 +33,8 @@ component("lacros") {
     "lacros_chrome_service_impl_never_blocking_state.cc",
     "lacros_chrome_service_impl_never_blocking_state.h",
     "lacros_service.h",
+    "native_theme_cache.cc",
+    "native_theme_cache.h",
     "system_idle_cache.cc",
     "system_idle_cache.h",
   ]
@@ -62,9 +65,7 @@ if (is_chromeos_device) {
       "lacros.AppLauncherLaunch",
       "lacros.AudioPlay",
       "lacros.Basic",
-
-      # TODO(crbug.com/1205526): Enable this test again.
-      #"lacros.ShelfLaunch",
+      "lacros.ShelfLaunch",
     ]
   }
 

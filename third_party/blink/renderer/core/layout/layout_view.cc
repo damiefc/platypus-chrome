@@ -566,8 +566,7 @@ bool LayoutView::MapToVisualRectInAncestorSpaceInternal(
 
 PhysicalOffset LayoutView::OffsetForFixedPosition() const {
   NOT_DESTROYED();
-  return IsScrollContainer() ? PhysicalOffset(ScrolledContentOffset())
-                             : PhysicalOffset();
+  return IsScrollContainer() ? ScrolledContentOffset() : PhysicalOffset();
 }
 
 PhysicalOffset LayoutView::PixelSnappedOffsetForFixedPosition() const {
@@ -778,11 +777,6 @@ LayoutUnit LayoutView::ViewLogicalHeightForPercentages() const {
   if (ShouldUsePrintingLayout())
     return PageLogicalHeight();
   return LayoutUnit(ViewLogicalHeight());
-}
-
-float LayoutView::ZoomFactor() const {
-  NOT_DESTROYED();
-  return frame_view_->GetFrame().PageZoomFactor();
 }
 
 const LayoutBox& LayoutView::RootBox() const {

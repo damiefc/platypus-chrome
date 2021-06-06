@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/public/cpp/app_types.h"
+#include "ash/constants/app_types.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -23,6 +23,8 @@
 #include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_features.h"
+#include "components/arc/test/arc_util_test_support.h"
+#include "components/exo/shell_surface_util.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -318,15 +320,26 @@ TEST_F(ArcUtilTest, IsArcVmDevConfIgnored) {
 }
 
 TEST_F(ArcUtilTest, GetArcVmUreadaheadMode) {
+  constexpr char kArcMemProfile4GbName[] = "4G";
+  constexpr char kArcMemProfile8GbName[] = "8G";
+  auto callback_disabled = base::BindRepeating(&GetSystemMemoryInfoForTesting,
+                                               kArcMemProfile4GbName);
+  auto callback_readahead = base::BindRepeating(&GetSystemMemoryInfoForTesting,
+                                                kArcMemProfile8GbName);
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->InitFromArgv({""});
-  EXPECT_EQ(ArcVmUreadaheadMode::READAHEAD, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::READAHEAD,
+            GetArcVmUreadaheadMode(callback_readahead));
+  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED,
+            GetArcVmUreadaheadMode(callback_disabled));
 
   command_line->InitFromArgv({"", "--arcvm-ureadahead-mode=generate"});
-  EXPECT_EQ(ArcVmUreadaheadMode::GENERATE, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::GENERATE,
+            GetArcVmUreadaheadMode(callback_readahead));
 
   command_line->InitFromArgv({"", "--arcvm-ureadahead-mode=disabled"});
-  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED, GetArcVmUreadaheadMode());
+  EXPECT_EQ(ArcVmUreadaheadMode::DISABLED,
+            GetArcVmUreadaheadMode(callback_readahead));
 }
 
 // TODO(hidehiko): Add test for IsArcKioskMode().
@@ -515,6 +528,54 @@ TEST_F(ArcUtilTest, ConfigureUpstartJobs_StartFail) {
                        }));
   run_loop()->Run();
   EXPECT_FALSE(result);
+}
+
+TEST_F(ArcUtilTest, GetArcWindowTaskId) {
+  std::unique_ptr<aura::Window> window(
+      aura::test::CreateTestWindowWithId(100, nullptr));
+
+  exo::SetShellApplicationId(window.get(), "org.chromium.arc.100");
+
+  {
+    auto task_id = GetWindowTaskId(window.get());
+    EXPECT_TRUE(task_id.has_value());
+    EXPECT_EQ(task_id.value(), 100);
+  }
+
+  {
+    auto session_id = GetWindowSessionId(window.get());
+    EXPECT_FALSE(session_id.has_value());
+  }
+
+  {
+    auto task_or_session_id = GetWindowTaskOrSessionId(window.get());
+    EXPECT_TRUE(task_or_session_id.has_value());
+    EXPECT_EQ(task_or_session_id.value(), 100);
+  }
+}
+
+TEST_F(ArcUtilTest, GetArcWindowSessionId) {
+  std::unique_ptr<aura::Window> window(
+      aura::test::CreateTestWindowWithId(200, nullptr));
+
+  exo::SetShellApplicationId(window.get(), "org.chromium.arc.session.200");
+
+  {
+    auto task_id = GetWindowTaskId(window.get());
+    EXPECT_FALSE(task_id.has_value());
+  }
+
+  {
+    auto session_id = GetWindowSessionId(window.get());
+    EXPECT_TRUE(session_id.has_value());
+    EXPECT_EQ(session_id.value(), 200);
+  }
+
+  {
+    auto task_or_session_id = GetWindowTaskOrSessionId(window.get());
+    EXPECT_TRUE(task_or_session_id.has_value());
+    EXPECT_EQ(task_or_session_id.value(), 200);
+  }
 }
 
 }  // namespace

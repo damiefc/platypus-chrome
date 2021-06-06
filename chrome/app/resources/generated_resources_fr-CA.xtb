@@ -672,6 +672,7 @@ Les signets, l'historique et les mots de passe enregistrés ne seront pas touch�
 <translation id="1706625117072057435">Niveaux de zoom</translation>
 <translation id="1708338024780164500">(Inactive)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID : <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Navigateur expérimental! Il risque de perdre des données ou de compromettre votre sécurité ou la confidentialité de vos données. Veuillez signaler tout problème en sélectionnant Aide &gt; « Signaler un problème… ».</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (Résolution native)</translation>
 <translation id="1709217939274742847">Choisissez un ticket à utiliser pour l'authentification. <ph name="LINK_BEGIN" />En savoir plus<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Impossible de partager</translation>
@@ -1089,6 +1090,7 @@ Vous pouvez gérer les paramètres de ce compte en installant l'application Fami
 <translation id="2144557304298909478">Conception d'applications Android pour Linux</translation>
 <translation id="2146263598007866206">Les sites peuvent télécharger automatiquement et en même temps les fichiers associés pour vous faire gagner du temps</translation>
 <translation id="2147151613919729065">Pour effacer l'historique du mode Invité, fermez toutes les fenêtres de ce mode.</translation>
+<translation id="2147218225094845757">Masquer le panneau latéral</translation>
 <translation id="2148219725039824548">Erreur lors du partage. Le partage spécifié n'a pas été trouvé sur le réseau.</translation>
 <translation id="2148756636027685713">Formatage terminé</translation>
 <translation id="2148892889047469596">Diffuser l’onglet</translation>
@@ -2664,7 +2666,7 @@ et sur Ctrl+Alt+diminuer la luminosité pour effectuer un zoom arrière.</transl
 <translation id="3834775135533257713">Impossible d'ajouter l'application « <ph name="TO_INSTALL_APP_NAME" /> », car elle crée un conflit avec « <ph name="INSTALLED_APP_NAME" /> ».</translation>
 <translation id="3835233591525155343">Votre utilisation de l'appareil</translation>
 <translation id="3835522725882634757">Oh, non! Ce serveur envoie des données que <ph name="PRODUCT_NAME" /> ne peut pas comprendre. Veuillez <ph name="BEGIN_LINK" />signaler un bogue<ph name="END_LINK" /> et inclure la <ph name="BEGIN2_LINK" />liste brute<ph name="END2_LINK" />.</translation>
-<translation id="383669374481694771">Ces données d'ordre général concernent votre appareil et son utilisation (comme le niveau de la pile, les erreurs, ainsi que l'activité du système et des applications). Elles serviront à améliorer la plateforme Android. Certaines données collectées aideront également nos partenaires, tels que les concepteurs Android, à améliorer leurs applications et leurs produits.</translation>
+<translation id="383669374481694771">Ces données d'ordre général concernent votre appareil et son utilisation (comme le niveau de la pile, les erreurs, ainsi que l'activité du système et des applications). Elles serviront à améliorer la plateforme Android. Certaines données collectées aideront également nos partenaires, tels que les développeurs Android, à améliorer leurs applications et leurs produits.</translation>
 <translation id="3838085852053358637">Échec du chargement de l'extension</translation>
 <translation id="3838486795898716504">Pages suivantes pour <ph name="PAGE_TITLE" /></translation>
 <translation id="383891835335927981">Aucun site n'a fait l'objet d'un zoom avant ou arrière</translation>
@@ -3166,6 +3168,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="4410545552906060960">Utilisez un numéro (NIP) au lieu d'un mot de passe pour déverrouiller votre appareil. Pour définir votre NIP plus tard, accédez aux paramètres.</translation>
 <translation id="4411578466613447185">Signataire de code</translation>
 <translation id="4412698727486357573">Centre d'aide</translation>
+<translation id="4413088271097062326">Quelle application souhaitez-vous utiliser?</translation>
 <translation id="44141919652824029">Autoriser « <ph name="APP_NAME" /> » à obtenir la liste de vos appareils USB connectés?</translation>
 <translation id="4414232939543644979">Nouvelle fenêtre de navigation pr&amp;ivée</translation>
 <translation id="4414515549596849729">Témoins et données des sites</translation>
@@ -3938,6 +3941,7 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="5269977353971873915">Échec de l'impression</translation>
 <translation id="5275352920323889391">Chien</translation>
 <translation id="527605982717517565">Toujours autoriser l'utilisation de JavaScript sur <ph name="HOST" /></translation>
+<translation id="5277127016695466621">Afficher le panneau latéral</translation>
 <translation id="5278823018825269962">Identifiant d'état</translation>
 <translation id="5280064835262749532">Mettez à jour l'authentifiant pour <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Effacer les témoins et les données des sites à la fermeture de toutes les fenêtres</translation>
@@ -6118,7 +6122,6 @@ Souhaitez-vous lancer <ph name="CONTROL_PANEL_APPLET_NAME" />?</translation>
 <translation id="7685049629764448582">Mémoire pour JavaScript</translation>
 <translation id="7685087414635069102">NIP requis</translation>
 <translation id="768549422429443215">Ajoutez des langues ou triez la liste de nouveau.</translation>
-<translation id="7686424868232681412">Lacros est un navigateur expérimental. Veuillez signaler tout problème en sélectionnant Aide &gt; « Signaler un problème… ».</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Confirmez le nouveau mot de passe</translation>
 <translation id="7690378713476594306">Choisir dans la liste</translation>

@@ -219,6 +219,7 @@
 <translation id="168841957122794586">Le certificat du serveur contient une clé de chiffrement faible.</translation>
 <translation id="1696290444144917273">Afficher les renseignements de la carte virtuelle</translation>
 <translation id="1697532407822776718">Vous êtes prêt!</translation>
+<translation id="1699570257714336246">Renseignements manquants</translation>
 <translation id="1703835215927279855">Lettre</translation>
 <translation id="1706954506755087368">{1,plural, =1{Impossible de vérifier sur le serveur qu'il s'agit bien du domaine <ph name="DOMAIN" />, car la date d'émission de son certificat de sécurité semble dater de demain. Cela peut être dû à une mauvaise configuration ou à l'interception de votre connexion par un pirate informatique.}one{Impossible de vérifier sur le serveur qu'il s'agit bien du domaine <ph name="DOMAIN" />, car la date d'émission de son certificat de sécurité est ultérieure de # jour à la date du jour. Cela peut être dû à une mauvaise configuration ou à l'interception de votre connexion par un pirate informatique.}other{Impossible de vérifier sur le serveur qu'il s'agit bien du domaine <ph name="DOMAIN" />, car la date d'émission de son certificat de sécurité est ultérieure de # jours à la date du jour. Cela peut être dû à une mauvaise configuration ou à l'interception de votre connexion par un pirate informatique.}}</translation>
 <translation id="1710259589646384581">Systèmes d'exploitation</translation>
@@ -728,6 +729,7 @@
 <translation id="3631244953324577188">Données biométriques</translation>
 <translation id="3633738897356909127">Bouton Mise à jour de Chrome, appuyez sur la touche Entrée pour mettre à jour Chrome dans les paramètres de Chrome</translation>
 <translation id="3634530185120165534">Bac 5</translation>
+<translation id="3637662659967048211">Enregistrer dans le compte Google</translation>
 <translation id="3640766068866876100">Fiche, 4 po x 6 po, ext</translation>
 <translation id="3642638418806704195">Application :</translation>
 <translation id="3650584904733503804">Validation réussie</translation>
@@ -1016,6 +1018,7 @@
 <translation id="4731967714531604179">Enveloppe Prc2</translation>
 <translation id="4733082559415072992">L'URL <ph name="URL" /> veut utiliser la position de votre appareil</translation>
 <translation id="4736825316280949806">Redémarrer Chromium</translation>
+<translation id="4736934858538408121">Carte virtuelle</translation>
 <translation id="473775607612524610">Mise à jour</translation>
 <translation id="4738601419177586157">Suggestion de recherche <ph name="TEXT" /></translation>
 <translation id="4742407542027196863">Gérer les mots de passe…</translation>
@@ -1400,6 +1403,7 @@
 <translation id="6106989379647458772">Il se peut que la page Web à l'adresse <ph name="PAGE" /> soit temporairement inaccessible ou qu'elle ait été déplacée de façon permanente à une autre adresse Web.</translation>
 <translation id="6107012941649240045">Délivré à</translation>
 <translation id="610911394827799129">D'autres formes d'historique de navigation peuvent exister sur votre compte Google à l'adresse <ph name="BEGIN_LINK" />myactivity.google.com<ph name="END_LINK" /></translation>
+<translation id="6113594885686374546">Bouton de reprise de la recherche, appuyez sur Entrée pour reprendre votre recherche et voir l'activité pertinente dans votre historique de Chrome</translation>
 <translation id="6116338172782435947">Voir le texte et les images copiés dans le presse-papiers</translation>
 <translation id="6120179357481664955">Se souvenir de votre identifiant UPI?</translation>
 <translation id="6123290840358279103">Afficher la carte virtuelle</translation>
@@ -1475,6 +1479,7 @@
 <translation id="6423385022588644828">Vérifiez vos cartes plus rapidement en vous servant de Touch ID à partir de maintenant</translation>
 <translation id="6425092077175753609">Matériel</translation>
 <translation id="6427730057873428458">Pli fenêtre</translation>
+<translation id="6428146287756735566">Reprenez votre recherche pour voir l'activité pertinente dans votre historique de Chrome</translation>
 <translation id="6428450836711225518">Vérifier votre numéro de téléphone</translation>
 <translation id="6433490469411711332">Modifier les coordonnées</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> a refusé la connexion.</translation>
@@ -1526,6 +1531,7 @@
 <translation id="6643016212128521049">Effacer</translation>
 <translation id="6645291930348198241">Accéder aux témoins et aux données relatives aux sites.</translation>
 <translation id="6646269444027925224">{COUNT,plural, =0{Aucun}=1{De 1 site (vous ne serez pas déconnecté de votre compte Google)}one{De # site (vous ne serez pas déconnecté de votre compte Google)}other{De # sites (vous ne serez pas déconnecté de votre compte Google)}}</translation>
+<translation id="6647197322759179819">Reprendre la recherche</translation>
 <translation id="6648459603387803038">Votre administrateur peut modifier la configuration de votre navigateur à distance. L'activité sur cet appareil peut aussi être gérée à l'extérieur de Chrome.</translation>
 <translation id="6648524591329069940">Police avec empattement</translation>
 <translation id="6651270836885078973">Géré par :</translation>
@@ -2177,6 +2183,7 @@ Détails supplémentaires :
 <translation id="9114524666733003316">Confirmation de la carte en cours…</translation>
 <translation id="9114581008513152754">Ce navigateur n'est pas géré par une entreprise ou une organisation. L'activité sur cet appareil peut être gérée à l'extérieur de Chrome. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="9117930699067497412">Frais</translation>
+<translation id="9118692854637641831"><ph name="HISTORY_CLUSTERS_SEARCH_FOCUSED_FRIENDLY_MATCH_TEXT" />, appuyez sur la touche Tabulation, puis sur la touche Entrée pour reprendre votre recherche et voir l'activité pertinente dans votre historique de Chrome</translation>
 <translation id="9119042192571987207">Téléversé</translation>
 <translation id="9128016270925453879">Les politiques ont été chargées</translation>
 <translation id="9128870381267983090">Connexion au réseau</translation>

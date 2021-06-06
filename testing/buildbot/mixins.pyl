@@ -164,13 +164,6 @@
       ]
     },
   },
-  'android_q': {
-    'swarming': {
-      'dimensions': {
-        'device_os': 'Q',
-      },
-    },
-  },
   'android_r': {
     'swarming': {
       'dimensions': {
@@ -463,18 +456,6 @@
       },
     },
   },
-  'ios_runtime_cache_13_5': {
-    '$mixin_append': {
-      'swarming': {
-        'named_caches': [
-          {
-            'name': 'runtime_ios_13_5',
-            'path': 'Runtime-ios-13.5',
-          },
-        ],
-      },
-    },
-  },
   'ios_runtime_cache_13_6': {
     '$mixin_append': {
       'swarming': {
@@ -745,7 +726,7 @@
       'dimensions': {
         'cpu': 'x86-64',
         'gpu': '8086:0a2e',
-        'os': 'Mac-10.15.5',
+        'os': 'Mac-10.15.5|Mac-10.15.7',
         'display_attached': '1',
       },
     },
@@ -755,7 +736,7 @@
       'dimensions': {
         'cpu': 'x86-64',
         'gpu': '8086:0a2e',
-        'os': 'Mac-10.15.5',
+        'os': 'Mac-10.15.5|Mac-10.15.7',
         'display_attached': '1',
       },
     },
@@ -769,7 +750,7 @@
         {
           'cpu': 'x86-64',
           'gpu': '8086:0a2e',
-          'os': 'Mac-10.15.5',
+          'os': 'Mac-10.15.5|Mac-10.15.7',
           'display_attached': '1',
         },
       ],
@@ -1002,13 +983,6 @@
       },
     },
   },
-  'robocrop-swarming-pool': {
-    'swarming': {
-      'dimensions': {
-        'pool': 'chromium.tests.robocrop',
-      },
-    },
-  },
   'sailfish': {
     # Pixel 1
     'swarming': {
@@ -1214,23 +1188,6 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
-      },
-    },
-  },
-  # in use by ios-webkit-tot
-  'xcode_11e608c': {
-    '$mixin_append': {
-      'args': [
-        '--xcode-build-version',
-        '11e608c'
-      ],
-     'swarming': {
-        'named_caches': [
-          {
-            'name': 'xcode_ios_11e608c',
-            'path': 'Xcode.app',
-          },
-        ],
       },
     },
   },

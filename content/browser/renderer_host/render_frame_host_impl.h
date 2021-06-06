@@ -305,6 +305,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   RenderWidgetHostView* GetView() override;
   RenderFrameHostImpl* GetParent() override;
   RenderFrameHostImpl* GetMainFrame() override;
+  PageImpl& GetPage() override;
   std::vector<RenderFrameHost*> GetFramesInSubtree() override;
   bool IsDescendantOf(RenderFrameHost*) override;
   void ForEachRenderFrameHost(FrameIterationCallback on_frame) override;
@@ -354,7 +355,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool IsRenderFrameCreated() override;
   bool IsRenderFrameLive() override;
   LifecycleState GetLifecycleState() override;
-  bool IsCurrent() override;
+  bool IsActive() override;
   bool IsInactiveAndDisallowActivation() override;
   size_t GetProxyCount() override;
   bool HasSelection() override;
@@ -397,7 +398,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                                   bool animate) override;
   bool Reload() override;
   bool IsDOMContentLoaded() override;
-  void UpdateAdFrameType(blink::mojom::AdFrameType ad_frame_type) override;
+  void UpdateIsAdSubframe(bool is_ad_subframe) override;
   blink::mojom::AuthenticatorStatus PerformGetAssertionWebAuthSecurityChecks(
       const std::string& relying_party_id,
       const url::Origin& effective_origin) override;
@@ -495,14 +496,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // shown, at which point we can service navigation requests.
   void Init();
 
-  // Returns the Page associated with this RenderFrameHost. Both GetPage() and
-  // GetMainFrame()->GetPage() will always return the same value.
-  //
-  // NOTE: For now, the associated Page object might change (when a navigation
-  // is reusing RenderFrameHost and a new document is created in this
-  // RenderFrameHost). The removal of this case is tracked in crbug.com/936696.
-  PageImpl* GetPage();
-
   // This needs to be called to make sure that the parent-child relationship
   // between frames is properly established both for cross-process iframes as
   // well as for inner web contents (i.e. right after having attached it to the
@@ -585,6 +578,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // The most recent non-net-error URL to commit in this frame.  In almost all
   // cases, use GetLastCommittedURL instead.
   const GURL& last_successful_url() { return last_successful_url_; }
+
+  // The current URL of the document in the renderer process. Note that this
+  // includes URL updates due to document.open(), so it might be different than
+  // the "last committed URL" provided by GetLastCommittedURL(). In almost all
+  // cases, use GetLastCommittedURL() instead, as this should only be used when
+  // the caller wants to know the current state of the URL in the renderer (e.g.
+  // when predicting whether a navigation will do a replacement or not).
+  const GURL& last_url_in_renderer() const { return last_url_in_renderer_; }
 
   // Returns the http method of the last committed navigation.
   const std::string& last_http_method() { return last_http_method_; }
@@ -2102,7 +2103,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void EnableWebRtcEventLogOutput(int lid, int output_period_ms) override;
   void DisableWebRtcEventLogOutput(int lid) override;
   bool IsDocumentOnLoadCompletedInMainFrame() override;
-  const GURL& ManifestURL() override;
   const std::vector<blink::mojom::FaviconURLPtr>& FaviconURLs() override;
 
 #if BUILDFLAG(ENABLE_MDNS)
@@ -2356,7 +2356,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       mojom::DidCommitProvisionalLoadParamsPtr params,
       mojom::DidCommitSameDocumentNavigationParamsPtr same_document_params)
       override;
-
+  void DidOpenDocumentInputStream(const GURL& url) override;
   // |initiator_policy_container_host_keep_alive_handle| is needed to
   // ensure that the PolicyContainerHost of the initiator RenderFrameHost
   // can still be retrieved even if the RenderFrameHost has been deleted in
@@ -2710,6 +2710,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   bool ValidateDidCommitParams(NavigationRequest* navigation_request,
                                mojom::DidCommitProvisionalLoadParams* params,
                                bool is_same_document_navigation);
+  // Validates whether we can commit |url| and |origin| for a navigation or a
+  // document.open() URL update.
+  // A return value of true means that the URL & origin can be committed.
+  bool ValidateURLAndOrigin(const GURL& url,
+                            const url::Origin& origin,
+                            bool is_same_document_navigation,
+                            NavigationRequest* navigation_request);
 
   // Updates the site url if the navigation was successful and the page is not
   // an interstitial.
@@ -2972,8 +2979,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // FrameTreeNode has changed its current RenderFrameHost.
   RenderFrameHostImpl* const parent_;
 
-  // Track this frame's last committed URL.
+  // Track this frame's last committed URL. Note that this will be empty before
+  // the first commit in this *RenderFrameHost*, even if the FrameTreeNode has
+  // committed before with a different RenderFrameHost.
   GURL last_committed_url_;
+
+  // Track this frame's last URL on the renderer side, which might be different
+  // than `last_committed_url_` if the frame did document.open().
+  GURL last_url_in_renderer_;
 
   // Track this frame's last committed origin.
   //
@@ -3598,6 +3611,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
     // The Page object associated with the main document. It is nullptr for
     // subframes.
     std::unique_ptr<PageImpl> owned_page;
+
+    // Prerender2:
+    // The activation start time for prerendering which is passed to the
+    // renderer process, and will be accessible in the prerendered page as
+    // PerformanceNavigationTiming.activationStart.
+    absl::optional<base::TimeTicks> activation_start_time_for_prerendering;
   };
 
   std::unique_ptr<DocumentAssociatedData> document_associated_data_;
@@ -3717,6 +3736,14 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // JavaScript / WebAssembly resources.
   mojo::UniqueReceiverSet<blink::mojom::CodeCacheHost>
       code_cache_host_receivers_;
+
+  // Holds the mapping of names to URLs of reporting endpoints for the current
+  // document, as parsed from the Reporting-Endpoints response header. This data
+  // comes directly from the structured header parser, and does not necessarily
+  // represent a valid reporting configuration. This is passed to the network
+  // service to set up the actual endpoint configuration once the document load
+  // commits.
+  base::flat_map<std::string, std::string> reporting_endpoints_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_{this};

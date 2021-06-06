@@ -36,7 +36,7 @@
 #include "chrome/browser/safe_browsing/user_population.h"
 #include "chrome/browser/safe_browsing/verdict_cache_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -1543,8 +1543,7 @@ void ChromePasswordProtectionService::FillUserPopulation(
 }
 
 bool ChromePasswordProtectionService::IsPrimaryAccountSyncing() const {
-  syncer::SyncService* sync =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
+  syncer::SyncService* sync = SyncServiceFactory::GetForProfile(profile_);
   return sync && sync->IsSyncFeatureActive() && !sync->IsLocalSyncEnabled();
 }
 
@@ -1585,9 +1584,7 @@ AccountInfo ChromePasswordProtectionService::GetSignedInNonSyncAccount(
   if (account_iterator == signed_in_accounts.end())
     return AccountInfo();
 
-  return identity_manager
-      ->FindExtendedAccountInfoForAccountWithRefreshToken(*account_iterator)
-      .value_or(AccountInfo());
+  return identity_manager->FindExtendedAccountInfo(*account_iterator);
 }
 
 bool ChromePasswordProtectionService::IsInExcludedCountry() {
@@ -1660,11 +1657,8 @@ AccountInfo ChromePasswordProtectionService::GetAccountInfo() const {
   if (!identity_manager)
     return AccountInfo();
 
-  absl::optional<AccountInfo> primary_account_info =
-      identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync));
-
-  return primary_account_info.value_or(AccountInfo());
+  return identity_manager->FindExtendedAccountInfo(
+      identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSync));
 }
 
 ChromePasswordProtectionService::ChromePasswordProtectionService(

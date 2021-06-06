@@ -412,18 +412,6 @@ void AddPrintPreviewFlags(content::WebUIDataSource* source, Profile* profile) {
       "forceEnablePrivetPrinting",
       profile->GetPrefs()->GetBoolean(prefs::kForceEnablePrivetPrinting));
 #endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  source->AddBoolean(
-      "showPrinterStatusInDialog",
-      base::FeatureList::IsEnabled(chromeos::features::kPrinterStatusDialog));
-  source->AddBoolean(
-      "printServerScaling",
-      base::FeatureList::IsEnabled(chromeos::features::kPrintServerScaling));
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  source->AddBoolean("showPrinterStatusInDialog", true);
-  source->AddBoolean("printServerScaling", true);
-#endif
 }
 
 void SetupPrintPreviewPlugin(content::WebUIDataSource* source) {

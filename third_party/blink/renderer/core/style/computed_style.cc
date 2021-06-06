@@ -43,6 +43,8 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/html/html_body_element.h"
+#include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_progress_element.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/ng/custom/layout_worklet.h"
@@ -246,6 +248,15 @@ bool ComputedStyle::NeedsReattachLayoutTree(const Element& element,
   if (!RuntimeEnabledFeatures::LayoutNGEnabled())
     return false;
 
+  // We use LayoutNGTextCombine only for vertical writing mode.
+  if (RuntimeEnabledFeatures::LayoutNGTextCombineEnabled() &&
+      new_style->HasTextCombine() &&
+      old_style->IsHorizontalWritingMode() !=
+          new_style->IsHorizontalWritingMode()) {
+    DCHECK_EQ(old_style->HasTextCombine(), new_style->HasTextCombine());
+    return true;
+  }
+
   // LayoutNG needs an anonymous inline wrapper if ::first-line is applied.
   // Also see |LayoutBlockFlow::NeedsAnonymousInlineWrapper()|.
   if (new_style->HasPseudoElementStyle(kPseudoIdFirstLine) &&
@@ -291,7 +302,12 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
   DCHECK_NE(&old_style, &new_style);
   if (old_style.Display() != new_style.Display() &&
       old_style.BlockifiesChildren() != new_style.BlockifiesChildren())
-    return Difference::kDisplayAffectingDescendantStyles;
+    return Difference::kDescendantAffecting;
+  // TODO(crbug.com/1213888): Only recalc affected descendants.
+  if ((old_style.ContainerName() != new_style.ContainerName()) ||
+      (old_style.ContainerType() != new_style.ContainerType())) {
+    return Difference::kDescendantAffecting;
+  }
   if (!old_style.NonIndependentInheritedEqual(new_style))
     return Difference::kInherited;
   if (old_style.JustifyItems() != new_style.JustifyItems())
@@ -1679,13 +1695,41 @@ CSSTransitionData& ComputedStyle::AccessTransitions() {
 }
 
 FontBaseline ComputedStyle::GetFontBaseline() const {
-  // TODO(kojii): Incorporate 'dominant-baseline' when we support it.
-  // https://www.w3.org/TR/css-inline-3/#dominant-baseline-property
+  // CssDominantBaseline() always returns kAuto for non-SVG elements,
+  // and never returns kUseScript, kNoChange, and kResetSize.
+  // See StyleAdjuster::AdjustComputedStyle().
+  switch (CssDominantBaseline()) {
+    case EDominantBaseline::kAuto:
+      break;
+    case EDominantBaseline::kMiddle:
+      return kXMiddleBaseline;
+    case EDominantBaseline::kAlphabetic:
+      return kAlphabeticBaseline;
+    case EDominantBaseline::kHanging:
+      return kHangingBaseline;
+    case EDominantBaseline::kCentral:
+      return kCentralBaseline;
+    case EDominantBaseline::kTextBeforeEdge:
+      return kTextOverBaseline;
+    case EDominantBaseline::kTextAfterEdge:
+      return kTextUnderBaseline;
+    case EDominantBaseline::kIdeographic:
+      return kIdeographicUnderBaseline;
+    case EDominantBaseline::kMathematical:
+      return kMathBaseline;
+
+    case EDominantBaseline::kUseScript:
+    case EDominantBaseline::kNoChange:
+    case EDominantBaseline::kResetSize:
+      NOTREACHED();
+      break;
+  }
 
   // Vertical flow (except 'text-orientation: sideways') uses ideographic
-  // baseline. https://drafts.csswg.org/css-writing-modes-3/#intro-baselines
+  // central baseline.
+  // https://drafts.csswg.org/css-writing-modes-3/#text-baselines
   return !GetFontDescription().IsVerticalAnyUpright() ? kAlphabeticBaseline
-                                                      : kIdeographicBaseline;
+                                                      : kCentralBaseline;
 }
 
 FontHeight ComputedStyle::GetFontHeight(FontBaseline baseline) const {
@@ -2506,6 +2550,27 @@ EPaintOrderType ComputedStyle::PaintOrderType(unsigned index) const {
   pt =
       (pt >> (kPaintOrderBitwidth * index)) & ((1u << kPaintOrderBitwidth) - 1);
   return static_cast<EPaintOrderType>(pt);
+}
+
+bool ComputedStyle::ShouldApplyAnyContainment(const Element& element) const {
+  DCHECK(IsA<HTMLBodyElement>(element) || IsA<HTMLHtmlElement>(element))
+      << "Since elements can override the computed display for which box type "
+         "to create, this method is not generally correct. Use "
+         "LayoutObject::ShouldApplyAnyContainment if possible.";
+  if (ContainsStyle())
+    return true;
+  if (!element.LayoutObjectIsNeeded(*this))
+    return false;
+  if (Display() == EDisplay::kInline)
+    return false;
+  if ((ContainsInlineSize() || ContainsBlockSize()) &&
+      (!IsDisplayTableType() || Display() == EDisplay::kTableCaption)) {
+    return true;
+  }
+  return (ContainsLayout() || ContainsPaint()) &&
+         (!IsDisplayTableType() || IsDisplayTableBox() ||
+          Display() == EDisplay::kTableCell ||
+          Display() == EDisplay::kTableCaption);
 }
 
 STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kAuto,

@@ -674,6 +674,7 @@
 <translation id="1706625117072057435">Узроўні маштабавання</translation>
 <translation id="1708338024780164500">(Неактыўная)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ідэнтыфікатар: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Эксперыментальны браўзер! Існуе імавернасць страты даных і пагроза прыватнасці і бяспецы. Просім вас паведамляць пра праблемы праз меню "Даведка &gt; Паведаміць аб праблеме...".</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (уласная)</translation>
 <translation id="1709217939274742847">Выберыце, які білет выкарыстоўваць для аўтэнтыфікацыі. <ph name="LINK_BEGIN" />Даведацца больш<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Збой абагульвання</translation>
@@ -1028,7 +1029,7 @@
 <translation id="2082187087049518845">Дадаць укладку ў групу</translation>
 <translation id="2082510809738716738">Выберыце колер тэмы</translation>
 <translation id="208586643495776849">Паўтарыце спробу</translation>
-<translation id="208634871997892083">Заўсёды ўключаны VPN</translation>
+<translation id="208634871997892083">Заўсёды ўключаная VPN</translation>
 <translation id="2087822576218954668">Друк: <ph name="PRINT_NAME" /></translation>
 <translation id="2088690981887365033">Сетка VPN</translation>
 <translation id="208928984520943006">Каб у любы момант перайсці на галоўны экран, правядзіце знізу ўверх.</translation>
@@ -1091,6 +1092,7 @@
 <translation id="2144557304298909478">Распрацоўка праграм для Android у Linux</translation>
 <translation id="2146263598007866206">Сайты могуць аўтаматычна спампоўваць звязаныя файлы разам, каб эканоміць час</translation>
 <translation id="2147151613919729065">Каб выдаліць гісторыю гасцявога рэжыму, закрыйце ўсе вокны, адкрытыя ў гэтым рэжыме.</translation>
+<translation id="2147218225094845757">Схаваць бакавую панэль</translation>
 <translation id="2148219725039824548">Не ўдалося падключыць абагулены рэсурс. Вызначаны рэсурс не знойдзены ў сетцы.</translation>
 <translation id="2148756636027685713">Фармаціраванне завершана</translation>
 <translation id="2148892889047469596">Укладка трансляцыі</translation>
@@ -3166,6 +3168,7 @@
 <translation id="4410545552906060960">Выкарыстоўвайце свой PIN-код замест пароля для разблакіроўкі прылады. Каб задаць PIN-код пазней, перайдзіце ў налады.</translation>
 <translation id="4411578466613447185">Сертыфікат, які падпісвае код</translation>
 <translation id="4412698727486357573">Даведачны цэнтр</translation>
+<translation id="4413088271097062326">Якую праграму вы хочаце выкарыстаць?</translation>
 <translation id="44141919652824029">Дазволіць праграме "<ph name="APP_NAME" />" атрымліваць спіс падключаных USB-прылад?</translation>
 <translation id="4414232939543644979">Новае &amp;акно ў рэжыме інкогніта</translation>
 <translation id="4414515549596849729">файлы сookie і даныя сайтаў</translation>
@@ -3936,6 +3939,7 @@
 <translation id="5269977353971873915">Збой друку</translation>
 <translation id="5275352920323889391">Сабака</translation>
 <translation id="527605982717517565">Заўсёды дазваляць сайту <ph name="HOST" /> выкарыстоўваць JavaScript</translation>
+<translation id="5277127016695466621">Паказаць бакавую панэль</translation>
 <translation id="5278823018825269962">Ідэнтыфікатар стану</translation>
 <translation id="5280064835262749532">Змяніце ўліковыя даныя для <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">Выдаляць файлы cookie і даныя сайтаў пры закрыцці ўсіх вокнаў</translation>
@@ -6113,7 +6117,6 @@
 <translation id="7685049629764448582">Памяць JavaScript</translation>
 <translation id="7685087414635069102">Патрабуецца PIN-код</translation>
 <translation id="768549422429443215">Дадайце мовы або змяніце іх парадак у спісе.</translation>
-<translation id="7686424868232681412">Lacros — гэта эксперыментальны браўзер. Просім вас паведамляць пра праблемы праз меню "Даведка &gt; Паведаміць аб праблеме...".</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Пацвердзіце новы пароль</translation>
 <translation id="7690378713476594306">Выбраць са спіса</translation>

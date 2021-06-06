@@ -798,6 +798,9 @@ experimental domain Audits
     properties
       InspectorIssueCode code
       InspectorIssueDetails details
+      # A unique id for this issue. May be omitted if no other entity (e.g.
+      # exception, CDP message, etc.) is referencing this issue.
+      optional string issueId
 
   # Returns the response body and size if it were re-encoded with the specified settings. Only
   # applies to images.
@@ -1312,6 +1315,9 @@ experimental domain CSS
       # Media list array (for rules involving media queries). The array enumerates media queries
       # starting with the innermost one, going outwards.
       optional array of CSSMedia media
+      # Container query list array (for rules involving container queries).
+      # The array enumerates container queries starting with the innermost one, going outwards.
+      experimental optional array of CSSContainerQuery containerQueries
 
   # CSS coverage information.
   type RuleUsage extends object
@@ -1434,6 +1440,17 @@ experimental domain CSS
       optional SourceRange valueRange
       # Computed length of media query expression (if applicable).
       optional number computedLength
+
+  # CSS container query rule descriptor.
+  experimental type CSSContainerQuery extends object
+    properties
+      # Container query text.
+      string text
+      # The associated rule header range in the enclosing stylesheet (if
+      # available).
+      optional SourceRange range
+      # Identifier of the stylesheet containing this object (if exists).
+      optional StyleSheetId styleSheetId
 
   # Information about amount of glyphs that were rendered with given font.
   type PlatformFontUsage extends object
@@ -5965,7 +5982,7 @@ domain Network
   experimental type CrossOriginEmbedderPolicyValue extends string
     enum
       None
-      CorsOrCredentialless
+      Credentialless
       RequireCorp
 
   experimental type CrossOriginEmbedderPolicyStatus extends object

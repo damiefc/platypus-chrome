@@ -305,15 +305,13 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     }
   }
 
-  std::array<IconPurpose, 3> purposes = {
-      IconPurpose::ANY, IconPurpose::MASKABLE, IconPurpose::MONOCHROME};
   for (const WebApplicationShortcutsMenuItemInfo& shortcut_info :
        web_app.shortcuts_menu_item_infos()) {
     WebAppShortcutsMenuItemInfoProto* shortcut_info_proto =
         local_data->add_shortcuts_menu_item_infos();
     shortcut_info_proto->set_name(base::UTF16ToUTF8(shortcut_info.name));
     shortcut_info_proto->set_url(shortcut_info.url.spec());
-    for (IconPurpose purpose : purposes) {
+    for (IconPurpose purpose : kIconPurposes) {
       for (const WebApplicationShortcutsMenuItemInfo::Icon& icon_info :
            shortcut_info.GetShortcutIconInfosForPurpose(purpose)) {
         sync_pb::WebAppIconInfo* shortcut_icon_info_proto;
@@ -376,6 +374,11 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     url_handler_proto->set_has_origin_wildcard(url_handler.has_origin_wildcard);
   }
 
+  if (web_app.note_taking_new_note_url().is_valid()) {
+    local_data->set_note_taking_new_note_url(
+        web_app.note_taking_new_note_url().spec());
+  }
+
   if (web_app.capture_links() != blink::mojom::CaptureLinks::kUndefined)
     local_data->set_capture_links(CaptureLinksToProto(web_app.capture_links()));
   else
@@ -386,6 +389,11 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
 
   local_data->set_file_handler_permission_blocked(
       web_app.file_handler_permission_blocked());
+
+  local_data->set_window_controls_overlay_enabled(
+      web_app.window_controls_overlay_enabled());
+
+  local_data->set_is_storage_isolated(web_app.IsStorageIsolated());
   return local_data;
 }
 
@@ -469,14 +477,14 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
 
   auto& chromeos_data_proto = local_data.chromeos_data();
 
-  if (IsChromeOs() && !local_data.has_chromeos_data()) {
+  if (IsChromeOsDataMandatory() && !local_data.has_chromeos_data()) {
     DLOG(ERROR) << "WebApp proto parse error: no chromeos_data field. The web "
                 << "app might have been installed when running on an OS other "
                 << "than Chrome OS.";
     return nullptr;
   }
 
-  if (!IsChromeOs() && local_data.has_chromeos_data()) {
+  if (!IsChromeOsDataMandatory() && local_data.has_chromeos_data()) {
     DLOG(ERROR) << "WebApp proto parse error: has chromeos_data field. The web "
                 << "app might have been installed when running on Chrome OS.";
     return nullptr;
@@ -659,14 +667,12 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
 
   std::vector<WebApplicationShortcutsMenuItemInfo> shortcuts_menu_item_infos;
-  std::array<IconPurpose, 3> purposes = {
-      IconPurpose::ANY, IconPurpose::MASKABLE, IconPurpose::MONOCHROME};
   for (const auto& shortcut_info_proto :
        local_data.shortcuts_menu_item_infos()) {
     WebApplicationShortcutsMenuItemInfo shortcut_info;
     shortcut_info.name = base::UTF8ToUTF16(shortcut_info_proto.name());
     shortcut_info.url = GURL(shortcut_info_proto.url());
-    for (IconPurpose purpose : purposes) {
+    for (IconPurpose purpose : kIconPurposes) {
       // This default init needed to infer the sophisticated protobuf type.
       const auto* shortcut_icon_infos =
           &shortcut_info_proto.shortcut_icon_infos();
@@ -750,11 +756,6 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
   web_app->SetProtocolHandlers(std::move(protocol_handlers));
 
-  if (local_data.has_user_run_on_os_login_mode()) {
-    web_app->SetRunOnOsLoginMode(
-        ToRunOnOsLoginMode(local_data.user_run_on_os_login_mode()));
-  }
-
   std::vector<apps::UrlHandlerInfo> url_handlers;
   for (const auto& url_handler_proto : local_data.url_handlers()) {
     apps::UrlHandlerInfo url_handler;
@@ -770,6 +771,16 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     url_handlers.push_back(std::move(url_handler));
   }
   web_app->SetUrlHandlers(std::move(url_handlers));
+
+  if (local_data.has_note_taking_new_note_url()) {
+    web_app->SetNoteTakingNewNoteUrl(
+        GURL(local_data.note_taking_new_note_url()));
+  }
+
+  if (local_data.has_user_run_on_os_login_mode()) {
+    web_app->SetRunOnOsLoginMode(
+        ToRunOnOsLoginMode(local_data.user_run_on_os_login_mode()));
+  }
 
   if (local_data.has_capture_links())
     web_app->SetCaptureLinks(ProtoToCaptureLinks(local_data.capture_links()));
@@ -788,6 +799,12 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   if (local_data.has_file_handler_permission_blocked())
     web_app->SetFileHandlerPermissionBlocked(
         local_data.file_handler_permission_blocked());
+
+  if (local_data.has_window_controls_overlay_enabled()) {
+    web_app->SetWindowControlsOverlayEnabled(
+        local_data.window_controls_overlay_enabled());
+  }
+  web_app->SetStorageIsolated(local_data.is_storage_isolated());
   return web_app;
 }
 

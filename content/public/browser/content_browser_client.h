@@ -1882,6 +1882,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Creates the TtsEnvironmentAndroid. A return value of null results in using
   // a default implementation.
   virtual std::unique_ptr<TtsEnvironmentAndroid> CreateTtsEnvironmentAndroid();
+
+  // If enabled, DialogOverlays will observe the container view for location
+  // changes and reposition themselves automatically. Note that this comes with
+  // some overhead and should only be enabled if the embedder itself can be
+  // moved. Defaults to false.
+  virtual bool ShouldObserveContainerViewLocationForDialogOverlays();
 #endif
 
   // Obtains the list of MIME types that are for plugins with external handlers.
@@ -2065,6 +2071,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   // `render_frame_host`.
   virtual std::unique_ptr<SpeculationHostDelegate>
   CreateSpeculationHostDelegate(RenderFrameHost& render_frame_host);
+
+  // Allows the embedder to show a dialog that will be used to control whether a
+  // connection through the Direct Sockets API is permitted. If the connection
+  // is permitted, the remote address and port that the user input will be sent
+  // back to the caller through callback.
+  virtual void ShowDirectSocketsConnectionDialog(
+      RenderFrameHost* owner,
+      const std::string& address,
+      base::OnceCallback<void(bool accepted,
+                              const std::string& address,
+                              const std::string& port)> callback);
 };
 
 }  // namespace content

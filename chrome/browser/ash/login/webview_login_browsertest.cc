@@ -30,6 +30,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/signin_partition_manager.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
@@ -56,7 +57,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/scoped_test_system_nss_key_slot_mixin.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
@@ -81,8 +82,8 @@
 #include "components/policy/policy_constants.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_service_impl.h"
 #include "components/sync/driver/trusted_vault_client.h"
 #include "components/sync/trusted_vault/standalone_trusted_vault_client.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -135,6 +136,10 @@ constexpr test::UIPath kSecondaryButton = {"gaia-signin", "signin-frame-dialog",
 constexpr test::UIPath kBackButton = {"gaia-signin", "signin-frame-dialog",
                                       "signin-back-button"};
 constexpr char kSigninWebview[] = "$('gaia-signin').getSigninFrame_()";
+
+// UMA names for better test reading.
+const char kLoginRequests[] = "OOBE.GaiaScreen.LoginRequests";
+const char kSuccessLoginRequests[] = "OOBE.GaiaScreen.SuccessLoginRequests";
 
 void InjectCookieDoneCallback(base::OnceClosure done_closure,
                               net::CookieAccessResult result) {
@@ -528,6 +533,10 @@ IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, Basic) {
 
   histogram_tester_.ExpectUniqueSample("ChromeOS.SAML.APILogin", 0, 1);
   histogram_tester_.ExpectTotalCount("OOBE.GaiaLoginTime", 1);
+  histogram_tester_.ExpectUniqueSample(kLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
+  histogram_tester_.ExpectUniqueSample(kSuccessLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kOobe, 1);
 }
 
 IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, BackButton) {
@@ -613,9 +622,8 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTestWithSyncTrustedVaultEnabled,
   Browser* browser = ui_test_utils::WaitForBrowserToOpen();
   test::WaitForPrimaryUserSessionStart();
 
-  syncer::ProfileSyncService* sync_service =
-      ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
-          browser->profile());
+  syncer::SyncServiceImpl* sync_service =
+      SyncServiceFactory::GetAsSyncServiceImplForProfile(browser->profile());
   syncer::TrustedVaultClient* trusted_vault_client =
       sync_service->GetSyncClientForTest()->GetTrustedVaultClient();
 
@@ -1715,8 +1723,15 @@ IN_PROC_BROWSER_TEST_F(WebviewChildLoginTest, UserInfoSentAfterTimerSet) {
   EXPECT_TRUE(user_manager->GetActiveUser()->IsChild());
 }
 
+// crbug.com/1215441
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_UserInfoNeverSent DISABLED_UserInfoNeverSent
+#else
+#define MAYBE_UserInfoNeverSent UserInfoNeverSent
+#endif
+
 // Verifies flow when user info message is never sent.
-IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, UserInfoNeverSent) {
+IN_PROC_BROWSER_TEST_P(WebviewCloseViewLoginTest, MAYBE_UserInfoNeverSent) {
   WaitForGaiaPageLoadAndPropertyUpdate();
   ExpectIdentifierPage();
   DisableImplicitServices();
@@ -1763,6 +1778,40 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, PasswordMetrics) {
   test::WaitForPrimaryUserSessionStart();
   histogram_tester_.ExpectBucketCount("ChromeOS.Gaia.PasswordFlow", 0, 2);
   histogram_tester_.ExpectBucketCount("ChromeOS.Gaia.PasswordFlow", 1, 1);
+}
+
+class WebviewLoginEnrolledTest : public WebviewLoginTest {
+ public:
+  WebviewLoginEnrolledTest() = default;
+  ~WebviewLoginEnrolledTest() override = default;
+
+ private:
+  DeviceStateMixin device_state_{
+      &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+};
+
+// Verifies `OOBE.GaiaScreen.LoginRequests` and
+// `OOBE.GaiaScreen.SuccessLoginRequests` are correctly recorded.
+IN_PROC_BROWSER_TEST_F(WebviewLoginEnrolledTest, GaiaLoginVariantMetrics) {
+  WaitForGaiaPageLoadAndPropertyUpdate();
+  ExpectIdentifierPage();
+
+  SigninFrameJS().TypeIntoPath(FakeGaiaMixin::kFakeUserEmail,
+                               FakeGaiaMixin::kEmailPath);
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+
+  // This should generate first "Started" event.
+  SigninFrameJS().TypeIntoPath(FakeGaiaMixin::kFakeUserPassword,
+                               FakeGaiaMixin::kPasswordPath);
+  // This should generate second "Started" event. And also eventually
+  // "Completed" event.
+  test::OobeJS().ClickOnPath(kPrimaryButton);
+
+  test::WaitForPrimaryUserSessionStart();
+  histogram_tester_.ExpectUniqueSample(kLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kAddUser, 1);
+  histogram_tester_.ExpectUniqueSample(kSuccessLoginRequests,
+                                       GaiaView::GaiaLoginVariant::kAddUser, 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

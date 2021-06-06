@@ -4,7 +4,7 @@
 
 #include "components/full_restore/full_restore_save_handler.h"
 
-#include "ash/public/cpp/app_types.h"
+#include "ash/constants/app_types.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/no_destructor.h"
@@ -249,6 +249,22 @@ void FullRestoreSaveHandler::AddAppLaunchInfo(
   // restore data for the user with |profile_path|.
   profile_path_to_restore_data_[profile_path].AddAppLaunchInfo(
       std::move(app_launch_info));
+
+  pending_save_profile_paths_.insert(profile_path);
+
+  MaybeStartSaveTimer();
+}
+
+void FullRestoreSaveHandler::ModifyWindowId(const base::FilePath& profile_path,
+                                            const std::string& app_id,
+                                            int32_t old_window_id,
+                                            int32_t new_window_id) {
+  auto it = profile_path_to_restore_data_.find(profile_path);
+  if (it == profile_path_to_restore_data_.end())
+    return;
+
+  profile_path_to_restore_data_[profile_path].ModifyWindowId(
+      app_id, old_window_id, new_window_id);
 
   pending_save_profile_paths_.insert(profile_path);
 

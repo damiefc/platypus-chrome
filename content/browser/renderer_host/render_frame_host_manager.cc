@@ -22,6 +22,7 @@
 #include "base/notreached.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/trace_event/trace_event.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
@@ -43,6 +44,8 @@
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/content_navigation_policy.h"
@@ -282,9 +285,11 @@ void RenderFrameHostManager::InitChild(
       /*renderer_initiated_creation=*/false));
 }
 
-RenderWidgetHostView* RenderFrameHostManager::GetRenderWidgetHostView() const {
+RenderWidgetHostViewBase* RenderFrameHostManager::GetRenderWidgetHostView()
+    const {
   if (render_frame_host_)
-    return render_frame_host_->GetView();
+    return static_cast<RenderWidgetHostViewBase*>(
+        render_frame_host_->GetView());
   return nullptr;
 }
 
@@ -612,8 +617,9 @@ void RenderFrameHostManager::UnloadOldFrame(
 
     auto can_store =
         back_forward_cache.CanStorePageNow(old_render_frame_host.get());
-    TRACE_EVENT1("navigation", "BackForwardCache_MaybeStorePage", "can_store",
-                 can_store.ToString());
+    TRACE_EVENT("navigation", "BackForwardCache_MaybeStorePage",
+                "old_render_frame_host", old_render_frame_host, "can_store",
+                can_store.ToString());
     if (can_store) {
       auto entry = CollectPage(std::move(old_render_frame_host));
       // Ensures RenderViewHosts are not reused while they are in the cache.
@@ -1269,11 +1275,10 @@ void RenderFrameHostManager::OnDidUpdateOrigin(
   }
 }
 
-void RenderFrameHostManager::OnDidSetAdFrameType(
-    blink::mojom::AdFrameType ad_frame_type) {
+void RenderFrameHostManager::OnDidSetIsAdSubframe(bool is_ad_subframe) {
   for (const auto& pair : proxy_hosts_) {
-    pair.second->GetAssociatedRemoteFrame()->SetReplicatedAdFrameType(
-        ad_frame_type);
+    pair.second->GetAssociatedRemoteFrame()->SetReplicatedIsAdSubframe(
+        is_ad_subframe);
   }
 }
 
@@ -2792,8 +2797,9 @@ void RenderFrameHostManager::SwapOuterDelegateFrame(
 }
 
 void RenderFrameHostManager::SetRWHViewForInnerContents(
-    RenderWidgetHostView* child_rwhv) {
+    RenderWidgetHostViewChildFrame* child_rwhv) {
   DCHECK(IsMainFrameForInnerDelegate());
+  DCHECK(GetProxyToOuterDelegate());
   GetProxyToOuterDelegate()->SetChildRWHView(child_rwhv, nullptr);
 }
 
@@ -3346,8 +3352,11 @@ void RenderFrameHostManager::CommitPending(
   // Note: We do this after unloading the old RFH because that may create
   // the proxy we're looking for.
   RenderFrameProxyHost* proxy_to_parent = GetProxyToParent();
-  if (proxy_to_parent)
-    proxy_to_parent->SetChildRWHView(new_view, old_size ? &*old_size : nullptr);
+  if (proxy_to_parent) {
+    proxy_to_parent->SetChildRWHView(
+        static_cast<RenderWidgetHostViewChildFrame*>(new_view),
+        old_size ? &*old_size : nullptr);
+  }
 
   if (render_frame_host_->is_local_root()) {
     // RenderFrames are created with a hidden RenderWidgetHost. When navigation

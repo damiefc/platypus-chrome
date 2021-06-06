@@ -58,6 +58,7 @@
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> અને વધુ <ph name="NUM_MORE" />ની મંજૂરી આપી}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> અને વધુ <ph name="NUM_MORE" />ની મંજૂરી આપી}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> અને વધુ <ph name="NUM_MORE" />ની મંજૂરી આપી}}</translation>
 <translation id="2434158240863470628">ડાઉનલોડ પૂર્ણ <ph name="SEPARATOR" /><ph name="BYTES_DOWNLOADED" /></translation>
 <translation id="2482878487686419369">નોટિફિકેશનો</translation>
+<translation id="2485422356828889247">અનઇન્સ્ટૉલ કરો</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> દ્વારા મેનેજ થયેલ</translation>
 <translation id="2498359688066513246">સહાય અને પ્રતિસાદ</translation>
 <translation id="2501278716633472235">પાછા જાઓ</translation>
@@ -77,6 +78,7 @@
 <translation id="2903493209154104877">સરનામાંઓ</translation>
 <translation id="2910701580606108292">સાઇટને સંરક્ષિત કન્ટેન્ટ ચલાવવાની મંજૂરી આપતા પહેલાંં પૂછો</translation>
 <translation id="2913331724188855103">સાઇટને કૂકી ડેટા સાચવવા અને વાંચવાની મંજૂરી આપો (ભલામણ કરેલ)</translation>
+<translation id="2932883381142163287">દુરુપયોગ જણાવો</translation>
 <translation id="2968755619301702150">પ્રમાણપત્ર દર્શક</translation>
 <translation id="300526633675317032">આ <ph name="SIZE_IN_KB" /> નું બધું વેબસાઇટ સ્ટોરેજ સાફ કરશે.</translation>
 <translation id="3008272652534848354">પરવાનગીઓ રીસેટ કરો</translation>
@@ -199,6 +201,7 @@
 <translation id="6196640612572343990">ત્રીજા પક્ષની કુકીને બ્લૉક કરો</translation>
 <translation id="6206551242102657620">કનેક્શન સુરક્ષિત છે. સાઇટની માહિતી</translation>
 <translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" />ના વિકલ્પો</translation>
+<translation id="6231752747840485235">'<ph name="APP_NAME" />' અનઇન્સ્ટૉલ કરીએ?</translation>
 <translation id="6260852843601447737">બંધ કરો અને દુરુપયોગની જાણ કરો</translation>
 <translation id="6262279340360821358"><ph name="PERMISSION_1" /> અને <ph name="PERMISSION_2" />ને બ્લૉક કર્યા</translation>
 <translation id="6270391203985052864">સાઇટ તમને નોટિફિકેશન મોકલવા માટે પૂછી શકે છે</translation>

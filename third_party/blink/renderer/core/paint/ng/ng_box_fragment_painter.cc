@@ -348,13 +348,13 @@ bool ShouldPaintCarets(const NGPhysicalBoxFragment& fragment) {
 
 }  // anonymous namespace
 
-PhysicalRect NGBoxFragmentPainter::SelfInkOverflow() const {
+PhysicalRect NGBoxFragmentPainter::InkOverflowIncludingFilters() const {
   if (box_item_)
     return box_item_->SelfInkOverflow();
   const NGPhysicalFragment& fragment = PhysicalFragment();
   DCHECK(!fragment.IsInlineBox());
   return To<LayoutBox>(fragment.GetLayoutObject())
-      ->PhysicalSelfVisualOverflowRect();
+      ->PhysicalVisualOverflowRectIncludingFilters();
 }
 
 void NGBoxFragmentPainter::Paint(const PaintInfo& paint_info) {
@@ -561,6 +561,13 @@ void NGBoxFragmentPainter::PaintObject(
         }
       } else if (!fragment.IsInlineFormattingContext()) {
         PaintBlockChildren(paint_info, paint_offset);
+
+        if (is_visible && paint_info.phase == PaintPhase::kForeground &&
+            box_fragment_.IsTableNG()) {
+          NGTablePainter(box_fragment_)
+              .PaintCollapsedBorders(paint_info, paint_offset,
+                                     VisualRect(paint_offset));
+        }
       }
     }
 
@@ -709,12 +716,6 @@ void NGBoxFragmentPainter::PaintBlockChildren(const PaintInfo& paint_info,
       // NGBoxFragmentPainter directly for NG objects.
       layout_object->Paint(paint_info_for_descendants);
     }
-  }
-  if (paint_info.phase == PaintPhase::kForeground &&
-      box_fragment_.IsTableNG()) {
-    NGTablePainter(box_fragment_)
-        .PaintCollapsedBorders(paint_info, paint_offset,
-                               VisualRect(paint_offset));
   }
 }
 
@@ -1668,8 +1669,8 @@ PhysicalRect NGBoxFragmentPainter::AdjustRectForScrolledContent(
 
     // Adjust the paint rect to reflect a scrolled content box with borders at
     // the ends.
-    PhysicalOffset offset(physical.PixelSnappedScrolledContentOffset());
-    scrolled_paint_rect.Move(-offset);
+    scrolled_paint_rect.offset -=
+        PhysicalOffset(physical.PixelSnappedScrolledContentOffset());
     LayoutRectOutsets borders = AdjustedBorderOutsets(info);
     scrolled_paint_rect.size =
         physical.ScrollSize() + PhysicalSize(borders.Size());
@@ -1814,7 +1815,12 @@ bool NGBoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
     PhysicalRect bounds_rect(physical_offset, size);
     if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
                  HitTestRequest::kHitTestVisualOverflow)) {
-      bounds_rect = SelfInkOverflow();
+      // We'll include overflow from children here (in addition to self-overflow
+      // caused by filters), because we want to record a match if we hit the
+      // overflow of a child below the stop node. This matches legacy behavior
+      // in LayoutBox::NodeAtPoint(); see call to
+      // PhysicalVisualOverflowRectIncludingFilters().
+      bounds_rect = InkOverflowIncludingFilters();
       bounds_rect.Move(physical_offset);
     }
     // TODO(kojii): Don't have good explanation why only inline box needs to

@@ -182,6 +182,36 @@ source_set("safe_mode_app_state_agent") {
   ]
 }
 
+source_set("first_run_app_state_agent") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "first_run_app_state_agent.h",
+    "first_run_app_state_agent.mm",
+    "first_run_app_state_agent_testing.h",
+  ]
+  deps = [
+    ":tests_hook",
+    "//base",
+    "//ios/chrome/app:blocking_scene_commands",
+    "//ios/chrome/app/application_delegate:app_state_header",
+    "//ios/chrome/app/application_delegate:application_delegate_internal",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/browsing_data",
+    "//ios/chrome/browser/geolocation",
+    "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/ui/blocking_overlay",
+    "//ios/chrome/browser/ui/browser_view",
+    "//ios/chrome/browser/ui/commands:commands",
+    "//ios/chrome/browser/ui/first_run",
+    "//ios/chrome/browser/ui/first_run:field_trial",
+    "//ios/chrome/browser/ui/first_run:utils",
+    "//ios/chrome/browser/ui/main:browser_interface_provider",
+    "//ios/chrome/browser/ui/main:observing_scene_agent",
+    "//ios/chrome/browser/ui/main:scene",
+  ]
+}
+
 source_set("app_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -204,6 +234,7 @@ source_set("app_internal") {
     ":app_metrics_app_state_agent",
     ":blocking_scene_commands",
     ":content_suggestions_scheduler_app_state_agent",
+    ":first_run_app_state_agent",
     ":mode",
     ":safe_mode_app_state_agent",
     ":tests_hook",

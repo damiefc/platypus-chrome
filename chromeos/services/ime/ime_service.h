@@ -13,7 +13,7 @@
 #include "base/files/file_path.h"
 #include "chromeos/services/ime/input_engine.h"
 #include "chromeos/services/ime/public/cpp/shared_lib/interfaces.h"
-#include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
+#include "chromeos/services/ime/public/mojom/ime_service.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -43,6 +43,10 @@ class ImeService : public mojom::ImeService,
       mojo::PendingRemote<mojom::InputChannel> from_engine,
       const std::vector<uint8_t>& extra,
       ConnectToImeEngineCallback callback) override;
+  void ConnectToInputMethod(
+      const std::string& ime_spec,
+      mojo::PendingReceiver<mojom::InputChannel> to_engine,
+      ConnectToInputMethodCallback callback) override;
 
   // ImeCrosPlatform overrides:
   const char* GetImeBundleDir() override;
@@ -75,7 +79,7 @@ class ImeService : public mojom::ImeService,
 
   // For the duration of this service lifetime, there should be only one
   // input engine instance.
-  std::unique_ptr<InputEngine> input_engine_;
+  std::unique_ptr<mojom::InputChannel> input_engine_;
 
   // Platform delegate for access to privilege resources.
   mojo::Remote<mojom::PlatformAccessProvider> platform_access_;

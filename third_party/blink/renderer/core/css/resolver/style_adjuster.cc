@@ -58,6 +58,7 @@
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/layout/list_marker.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text_combine.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
@@ -230,6 +231,43 @@ void StyleAdjuster::AdjustStyleForEditing(ComputedStyle& style) {
     style.SetWhiteSpace(EWhiteSpace::kPre);
   else if (style.WhiteSpace() == EWhiteSpace::kPreLine)
     style.SetWhiteSpace(EWhiteSpace::kPreWrap);
+}
+
+void StyleAdjuster::AdjustStyleForTextCombine(ComputedStyle& style) {
+  DCHECK_EQ(style.Display(), EDisplay::kInlineBlock);
+  // Set box sizes
+  const Font& font = style.GetFont();
+  DCHECK(font.GetFontDescription().IsVerticalBaseline());
+  const auto one_em = style.ComputedFontSizeAsFixed();
+  const auto line_height = style.GetFontHeight().LineHeight();
+  const auto size =
+      LengthSize(Length::Fixed(line_height), Length::Fixed(one_em));
+  style.SetContainIntrinsicSize(size);
+  style.SetHeight(size.Height());
+  style.SetLineHeight(size.Height());
+  style.SetMaxHeight(size.Height());
+  style.SetMaxWidth(size.Width());
+  style.SetMinHeight(size.Height());
+  style.SetMinWidth(size.Width());
+  style.SetWidth(size.Width());
+
+  // Set others
+  style.ResetTextCombine();
+  style.SetLetterSpacing(0.0f);
+  style.SetTextAlign(ETextAlign::kCenter);
+  style.SetTextDecoration(TextDecoration::kNone);
+  style.SetTextEmphasisMark(TextEmphasisMark::kNone);
+  style.SetVerticalAlign(EVerticalAlign ::kMiddle);
+  style.SetWordBreak(EWordBreak::kKeepAll);
+  style.SetWritingMode(WritingMode::kHorizontalTb);
+
+  style.ClearAppliedTextDecorations();
+  style.UpdateFontOrientation();
+
+  DCHECK_EQ(style.GetFont().GetFontDescription().Orientation(),
+            FontOrientation::kHorizontal);
+
+  LayoutNGTextCombine::AssertStyleIsValid(style);
 }
 
 static void AdjustStyleForFirstLetter(ComputedStyle& style) {
@@ -619,7 +657,9 @@ void StyleAdjuster::AdjustForForcedColorsMode(ComputedStyle& style) {
 
   style.SetTextShadow(ComputedStyleInitialValues::InitialTextShadow());
   style.SetBoxShadow(ComputedStyleInitialValues::InitialBoxShadow());
-  style.SetAccentColor(ComputedStyleInitialValues::InitialAccentColor());
+  style.SetColorScheme({"light", "dark"});
+  if (style.ShouldForceColor(style.AccentColor()))
+    style.SetAccentColor(ComputedStyleInitialValues::InitialAccentColor());
   if (!style.HasUrlBackgroundImage())
     style.ClearBackgroundImage();
 }
@@ -771,6 +811,25 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     // Columns don't apply to svg text elements.
     if (IsA<SVGTextElement>(*element))
       style.ClearMultiCol();
+
+    // Copy DominantBaseline to CssDominantBaseline without 'no-change',
+    // 'reset-size', and 'use-script'.
+    auto baseline = style.DominantBaseline();
+    if (baseline == EDominantBaseline::kUseScript) {
+      // TODO(fs): The dominant-baseline and the baseline-table components
+      // are set by determining the predominant script of the character data
+      // content.
+      baseline = EDominantBaseline::kAlphabetic;
+    } else {
+      const ContainerNode* parent = element;
+      while (baseline == EDominantBaseline::kNoChange ||
+             baseline == EDominantBaseline::kResetSize) {
+        parent = LayoutTreeBuilderTraversal::Parent(*parent);
+        baseline = parent ? parent->GetComputedStyle()->DominantBaseline()
+                          : EDominantBaseline::kAuto;
+      }
+    }
+    style.SetCssDominantBaseline(baseline);
   } else if (element && element->IsMathMLElement()) {
     if (style.Display() == EDisplay::kContents) {
       // https://drafts.csswg.org/css-display/#unbox-mathml

@@ -550,7 +550,7 @@ TEST_F(HoldingSpaceKeyedServiceTest, SecondaryUserProfile) {
 
   // Just creating a secondary profile shouldn't change the active client/model.
   EXPECT_EQ(HoldingSpaceController::Get()->client(),
-            primary_holding_space_service->client_for_testing());
+            primary_holding_space_service->client());
   EXPECT_EQ(HoldingSpaceController::Get()->model(),
             primary_holding_space_service->model_for_testing());
 
@@ -558,7 +558,7 @@ TEST_F(HoldingSpaceKeyedServiceTest, SecondaryUserProfile) {
   // support).
   ActivateSecondaryProfile();
   EXPECT_EQ(HoldingSpaceController::Get()->client(),
-            secondary_holding_space_service->client_for_testing());
+            secondary_holding_space_service->client());
   EXPECT_EQ(HoldingSpaceController::Get()->model(),
             secondary_holding_space_service->model_for_testing());
 }
@@ -604,7 +604,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, UpdatePersistentStorage) {
     const auto* holding_space_item =
         primary_holding_space_model->items()[0].get();
 
-    persisted_holding_space_items.Remove(0, /*out_value=*/nullptr);
+    persisted_holding_space_items.EraseListIter(
+        persisted_holding_space_items.GetList().begin());
     primary_holding_space_model->RemoveItem(holding_space_item->id());
 
     EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
@@ -694,9 +695,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
   // Update the file path for a finalized item. Because the item is finalized,
   // it should be updated immediately in persistent storage.
   file_path = downloads_mount->CreateArbitraryFile();
-  holding_space_model->UpdateBackingFileForItem(
-      finalized_holding_space_item_ptr->id(), file_path,
-      GetFileSystemUrl(GetProfile(), file_path));
+  holding_space_model->UpdateItem(finalized_holding_space_item_ptr->id())
+      ->SetBackingFile(file_path, GetFileSystemUrl(GetProfile(), file_path));
 
   ASSERT_EQ(persisted_holding_space_items.GetList().size(), 2u);
   persisted_holding_space_items.GetList()[1u] =
@@ -709,9 +709,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
   // Update the file path for the in-progress item. Because the item is still in
   // progress, it should not be added/updated to/in persistent storage.
   file_path = downloads_mount->CreateArbitraryFile();
-  holding_space_model->UpdateBackingFileForItem(
-      in_progress_holding_space_item_ptr->id(), file_path,
-      GetFileSystemUrl(GetProfile(), file_path));
+  holding_space_model->UpdateItem(in_progress_holding_space_item_ptr->id())
+      ->SetBackingFile(file_path, GetFileSystemUrl(GetProfile(), file_path));
 
   EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
                 HoldingSpacePersistenceDelegate::kPersistencePath),
@@ -719,8 +718,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
 
   // Update the progress for the in-progress item. Because the item is still in
   // progress it should not be added/updated to/in persistent storage.
-  holding_space_model->UpdateProgressForItem(
-      in_progress_holding_space_item_ptr->id(), 0.75f);
+  holding_space_model->UpdateItem(in_progress_holding_space_item_ptr->id())
+      ->SetProgress(0.75f);
 
   EXPECT_EQ(*GetProfile()->GetPrefs()->GetList(
                 HoldingSpacePersistenceDelegate::kPersistencePath),
@@ -728,8 +727,8 @@ TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
 
   // Mark the in-progress item as finalized. Because the item is finalized, it
   // should be added to persistent storage at the appropriate index.
-  holding_space_model->UpdateProgressForItem(
-      in_progress_holding_space_item_ptr->id(), 1.f);
+  holding_space_model->UpdateItem(in_progress_holding_space_item_ptr->id())
+      ->SetProgress(1.f);
 
   ASSERT_EQ(persisted_holding_space_items.GetList().size(), 2u);
   persisted_holding_space_items.Insert(

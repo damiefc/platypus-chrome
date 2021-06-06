@@ -671,6 +671,7 @@
 <translation id="1706625117072057435">Yakınlaştırma seviyeleri</translation>
 <translation id="1708338024780164500">(Etkin değil)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (Kimlik: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">Deneysel tarayıcı. Veri kaybına veya gizlilik ya da güvenlik ihlaline neden olabilir. Lütfen sorunları Yardım &gt; "Sorun bildir..." bölümünden bildirin.</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (Yerel)</translation>
 <translation id="1709217939274742847">Kimlik doğrulama için kullanılacak bir bilet seçin <ph name="LINK_BEGIN" />Daha fazla bilgi<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">Paylaşılamıyor</translation>
@@ -1088,6 +1089,7 @@ Cihazınızda Family Link uygulamasını yükleyerek bu hesabın ayarlarını y�
 <translation id="2144557304298909478">Linux Android uygulaması geliştirme</translation>
 <translation id="2146263598007866206">Zamandan tasarruf etmeniz için siteler ilgili dosyaları otomatik olarak indirebilir</translation>
 <translation id="2147151613919729065">Misafir modu geçmişini temizlemek için tüm Misafir pencerelerini kapatın.</translation>
+<translation id="2147218225094845757">Yan paneli gizle</translation>
 <translation id="2148219725039824548">Paylaşım eklenirken hata oluştu. Belirtilen paylaşım ağda bulunamadı.</translation>
 <translation id="2148756636027685713">Biçimlendirme tamamlandı</translation>
 <translation id="2148892889047469596">Sekmeyi yayınla</translation>
@@ -1804,7 +1806,7 @@ Sunucunun mesajı: <ph name="SERVER_MSG" /></translation>
 <translation id="2910318910161511225">Bir ağa bağlanın ve tekrar deneyin</translation>
 <translation id="291056154577034373">OKUNMAYANLAR</translation>
 <translation id="2910718431259223434">Bir hata oluştu. Lütfen tekrar deneyin veya cihaz sahibi ya da yöneticisiyle iletişime geçin. Hata kodu: <ph name="ERROR_CODE" />.</translation>
-<translation id="2911433807131383493">ChromeVox eğiticiyi aç</translation>
+<translation id="2911433807131383493">ChromeVox eğitimini aç</translation>
 <translation id="2913331724188855103">Sitelerin, çerez verilerini kaydetmelerine ve okumalarına izin ver (önerilir)</translation>
 <translation id="2915102088417824677">Etkinlik günlüğünü göster</translation>
 <translation id="2915873080513663243">Otomatik tarama</translation>
@@ -3163,6 +3165,7 @@ Sunucunun mesajı: <ph name="SERVER_MSG" /></translation>
 <translation id="4410545552906060960">Cihazınızın kilidini açmak için şifre yerine bir sayı (PIN) kullanın. PIN'inizi daha sonra ayarlamak için Ayarlar'a gidin.</translation>
 <translation id="4411578466613447185">Kod İmza Sahibi</translation>
 <translation id="4412698727486357573">Yardım merkezi</translation>
+<translation id="4413088271097062326">Hangi uygulamayı kullanmak istiyorsunuz?</translation>
 <translation id="44141919652824029">"<ph name="APP_NAME" />" uygulamasının, takılı USB cihazlarınızın listesini almasına izin verilsin mi?</translation>
 <translation id="4414232939543644979">Yeni &amp;Gizli Pencere</translation>
 <translation id="4414515549596849729">çerezler ve site verileri</translation>
@@ -3935,6 +3938,7 @@ Sunucunun mesajı: <ph name="SERVER_MSG" /></translation>
 <translation id="5269977353971873915">Yazdırma Başarısız</translation>
 <translation id="5275352920323889391">Köpek</translation>
 <translation id="527605982717517565"><ph name="HOST" /> sitesinde JavaScript'e her zaman izin ver</translation>
+<translation id="5277127016695466621">Yan paneli göster</translation>
 <translation id="5278823018825269962">Durum kimliği</translation>
 <translation id="5280064835262749532"><ph name="SHARE_PATH" /> ile ilgili kimlik bilgilerini güncelleyin</translation>
 <translation id="5280243692621919988">Tüm pencereler kapatıldığında çerezleri ve site verilerini temizleme</translation>
@@ -6115,7 +6119,6 @@ Google'ın hangi verileri neden topladığıyla ilgili bilgi almak için <ph nam
 <translation id="7685049629764448582">JavaScript belleği</translation>
 <translation id="7685087414635069102">PIN gerekli</translation>
 <translation id="768549422429443215">Dil ekleyin veya listeyi yeniden sıralayın</translation>
-<translation id="7686424868232681412">Lacros deneysel bir tarayıcıdır. Lütfen sorunları Yardım &gt; "Sorun bildir..." bölümünden bildirin.</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">Yeni şifreyi doğrula</translation>
 <translation id="7690378713476594306">Listeden seç</translation>

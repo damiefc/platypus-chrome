@@ -43,6 +43,8 @@
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/app_history/app_history.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -801,6 +803,12 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
 
 const KURL& DocumentLoader::UrlForHistory() const {
   return UnreachableURL().IsEmpty() ? Url() : UnreachableURL();
+}
+
+void DocumentLoader::DidOpenDocumentInputStream(const KURL& url) {
+  url_ = url;
+  // Let the browser know that we have done a document.open().
+  GetLocalFrameClient().DispatchDidOpenDocumentInputStream(url_);
 }
 
 void DocumentLoader::SetHistoryItemStateForCommit(
@@ -2163,6 +2171,20 @@ void DocumentLoader::CommitNavigation() {
   LocalDOMWindow* previous_window = frame_->DomWindow();
   InitializeWindow(owner_document);
 
+  // Record if we have navigated to a non-secure page served from a IP address
+  // in the private address space.
+  //
+  // Use response_.AddressSpace() instead of frame_->DomWindow()->AddressSpace()
+  // since the latter isn't populated in unit tests.
+  if (frame_->IsMainFrame()) {
+    auto address_space = response_.AddressSpace();
+    if ((address_space == network::mojom::blink::IPAddressSpace::kPrivate ||
+         address_space == network::mojom::blink::IPAddressSpace::kLocal) &&
+        !frame_->DomWindow()->IsSecureContext()) {
+      CountUse(WebFeature::kMainFrameNonSecurePrivateAddressSpace);
+    }
+  }
+
   SecurityContextInit security_init(frame_->DomWindow());
 
   // The document constructed by XSLTProcessor and ScriptController should
@@ -2412,7 +2434,8 @@ void DocumentLoader::CreateParserPostCommit() {
     // Enable Auto Picture-in-Picture feature for the built-in Chrome OS Video
     // Player app.
     const url::Origin origin = window->GetSecurityOrigin()->ToUrlOrigin();
-    if (origin.scheme() == "chrome-extension" &&
+    if (SchemeRegistry::IsExtensionScheme(
+            String(origin.scheme().c_str(), origin.scheme().size())) &&
         origin.DomainIs("jcgeabjmjgoblfofpppfkcoakmfobdko") &&
         origin.port() == 0) {
       window->GetOriginTrialContext()->AddFeature(
@@ -2621,10 +2644,12 @@ bool DocumentLoader::ConsumeTextFragmentToken() {
   return token_value;
 }
 
-void DocumentLoader::NotifyPrerenderingDocumentActivated() {
+void DocumentLoader::NotifyPrerenderingDocumentActivated(
+    base::TimeTicks activation_start) {
   DCHECK(!frame_->GetDocument()->IsPrerendering());
   DCHECK(is_prerendering_);
   is_prerendering_ = false;
+  GetTiming().MarkActivationStart(activation_start);
 }
 
 ContentSecurityPolicy* DocumentLoader::CreateCSP() {
@@ -2648,6 +2673,15 @@ ContentSecurityPolicy* DocumentLoader::CreateCSP() {
           ContentSecurityPolicyResponseHeaders(response_));
   policy_container_->AddContentSecurityPolicies(mojo::Clone(parsed_policies));
   csp->AddPolicies(std::move(parsed_policies));
+
+  // Check if the embedder wants to add any default policies, and add them.
+  WebVector<WebContentSecurityPolicyHeader> embedder_default_csp;
+  Platform::Current()->AppendContentSecurityPolicy(WebURL(Url()),
+                                                   &embedder_default_csp);
+  for (const auto& header : embedder_default_csp) {
+    csp->AddPolicies(ParseContentSecurityPolicies(
+        header.header_value, header.type, header.source, Url()));
+  }
 
   // Retrieve CSP stored in the OriginPolicy and add them to the policy
   // container.

@@ -11,35 +11,32 @@
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
 
-class Profile;
-
 namespace syncer {
-class ProfileSyncService;
+class SyncServiceImpl;
 class SyncSetupInProgressHandle;
 }
 
-// Android wrapper of the ProfileSyncService which provides access from the Java
+// Android wrapper of the SyncServiceImpl which provides access from the Java
 // layer. Note that on Android, there's only a single profile, and therefore
 // a single instance of this wrapper. The name of the Java class is
 // ProfileSyncService.
 // This class should only be accessed from the UI thread.
 class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
  public:
-  ProfileSyncServiceAndroid(JNIEnv* env, jobject java_profile_sync_service);
+  // |sync_service| must not be null.
+  ProfileSyncServiceAndroid(JNIEnv* env,
+                            syncer::SyncServiceImpl* sync_service,
+                            jobject java_profile_sync_service);
   ~ProfileSyncServiceAndroid() override;
 
   ProfileSyncServiceAndroid(const ProfileSyncServiceAndroid&) = delete;
   ProfileSyncServiceAndroid& operator=(const ProfileSyncServiceAndroid&) =
       delete;
 
-  // This method should be called once right after contructing the object.
-  // Returns false if we didn't get a ProfileSyncService.
-  bool Init();
-
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService* sync) override;
 
-  // Pure ProfileSyncService calls.
+  // Pure SyncServiceImpl calls.
   jboolean IsSyncRequested(JNIEnv* env);
   void SetSyncRequested(JNIEnv* env,
                         jboolean requested);
@@ -103,9 +100,11 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
       JNIEnv* env,
       jint trigger);
 
+  jboolean ShouldOfferTrustedVaultOptIn(JNIEnv* env);
+
   // Functionality only available for testing purposes.
 
-  jlong GetProfileSyncServiceForTest(JNIEnv* env);
+  jlong GetSyncServiceImplForTest(JNIEnv* env);
 
   // Returns a timestamp for when a sync was last executed. The return value is
   // the internal value of base::Time.
@@ -117,17 +116,14 @@ class ProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
   void TriggerRefresh(JNIEnv* env);
 
  private:
-  // A reference to the Chrome profile object.
-  Profile* profile_;
-
   // A reference to the sync service for this profile.
-  syncer::ProfileSyncService* sync_service_;
+  syncer::SyncServiceImpl* const native_sync_service_;
+
+  // Java-side ProfileSyncService object.
+  const JavaObjectWeakGlobalRef java_sync_service_;
 
   // Prevents Sync from running until configuration is complete.
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;
-
-  // Java-side ProfileSyncService object.
-  JavaObjectWeakGlobalRef weak_java_profile_sync_service_;
 };
 
 #endif  // CHROME_BROWSER_SYNC_PROFILE_SYNC_SERVICE_ANDROID_H_

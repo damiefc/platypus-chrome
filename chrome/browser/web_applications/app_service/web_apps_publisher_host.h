@@ -13,7 +13,6 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/app_web_contents_data.h"
-#include "chrome/browser/apps/app_service/icon_key_util.h"
 #include "chrome/browser/apps/app_service/media_requests.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/web_applications/app_service/web_app_publisher_helper.h"
@@ -21,14 +20,11 @@
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chromeos/crosapi/mojom/app_service.mojom.h"
-#include "components/content_settings/core/browser/content_settings_observer.h"
-#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-class ContentSettingsPattern;
 class Profile;
 
 namespace content {
@@ -44,11 +40,13 @@ class WebAppRegistrar;
 // This WebAppsPublisherHost observes AppRegistrar on Lacros, and calls
 // WebAppsCrosapi to inform the Ash browser of the current set of web apps.
 class WebAppsPublisherHost : public crosapi::mojom::AppController,
+                             public WebAppPublisherHelper::Delegate,
                              public AppRegistrarObserver,
-                             public content_settings::Observer,
                              public MediaCaptureDevicesDispatcher::Observer,
                              public apps::AppWebContentsData::Client {
  public:
+  using LoadIconCallback = WebAppPublisherHelper::LoadIconCallback;
+
   explicit WebAppsPublisherHost(Profile* profile);
   WebAppsPublisherHost(const WebAppsPublisherHost&) = delete;
   WebAppsPublisherHost& operator=(const WebAppsPublisherHost&) = delete;
@@ -56,10 +54,47 @@ class WebAppsPublisherHost : public crosapi::mojom::AppController,
 
   void Init();
 
+  void Shutdown();
+
   Profile* profile() { return profile_; }
   WebAppRegistrar& registrar() const;
 
+  WebAppPublisherHelper& publisher_helper() { return publisher_helper_; }
+
   void SetPublisherForTesting(crosapi::mojom::AppPublisher* publisher);
+
+  // TODO(crbug.com/1194709): Add these to crosapi::mojom::AppController:
+  void PauseApp(const std::string& app_id);
+  void UnpauseApps(const std::string& app_id);
+  void LoadIcon(const std::string& app_id,
+                apps::mojom::IconKeyPtr icon_key,
+                apps::mojom::IconType icon_type,
+                int32_t size_hint_in_dip,
+                bool allow_placeholder_icon,
+                LoadIconCallback callback);
+  content::WebContents* Launch(const std::string& app_id,
+                               int32_t event_flags,
+                               apps::mojom::LaunchSource launch_source,
+                               apps::mojom::WindowInfoPtr window_info);
+  content::WebContents* LaunchAppWithFiles(
+      const std::string& app_id,
+      apps::mojom::LaunchContainer container,
+      int32_t event_flags,
+      apps::mojom::LaunchSource launch_source,
+      apps::mojom::FilePathsPtr file_paths);
+  content::WebContents* LaunchAppWithIntent(
+      const std::string& app_id,
+      int32_t event_flags,
+      apps::mojom::IntentPtr intent,
+      apps::mojom::LaunchSource launch_source,
+      apps::mojom::WindowInfoPtr window_info);
+
+  void SetPermission(const std::string& app_id,
+                     apps::mojom::PermissionPtr permission);
+  void OpenNativeSettings(const std::string& app_id);
+
+  void SetWindowMode(const std::string& app_id,
+                     apps::mojom::WindowMode window_mode);
 
  private:
   void OnReady();
@@ -69,6 +104,9 @@ class WebAppsPublisherHost : public crosapi::mojom::AppController,
                  apps::mojom::UninstallSource uninstall_source,
                  bool clear_site_data,
                  bool report_abuse) override;
+
+  // WebAppPublisherHelper::Delegate:
+  void PublishWebApp(apps::mojom::AppPtr app) override;
 
   // AppRegistrarObserver:
   void OnWebAppInstalled(const AppId& app_id) override;
@@ -81,11 +119,8 @@ class WebAppsPublisherHost : public crosapi::mojom::AppController,
   void OnWebAppLastLaunchTimeChanged(
       const std::string& app_id,
       const base::Time& last_launch_time) override;
-
-  // content_settings::Observer:
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type) override;
+  void OnWebAppUserDisplayModeChanged(const AppId& app_id,
+                                      DisplayMode user_display_mode) override;
 
   // TODO(crbug.com/1194709): Add more overrides, guided by WebAppsChromeOs.
 
@@ -101,7 +136,6 @@ class WebAppsPublisherHost : public crosapi::mojom::AppController,
   const WebApp* GetWebApp(const AppId& app_id) const;
   apps::mojom::AppPtr Convert(const WebApp* web_app,
                               apps::mojom::Readiness readiness);
-  void Publish(apps::mojom::AppPtr app);
 
   void ModifyCapabilityAccess(const std::string& app_id,
                               absl::optional<bool> accessing_camera,
@@ -112,15 +146,10 @@ class WebAppsPublisherHost : public crosapi::mojom::AppController,
   WebAppPublisherHelper publisher_helper_;
   crosapi::mojom::AppPublisher* remote_publisher_ = nullptr;
 
-  apps_util::IncrementingIconKeyFactory icon_key_factory_;
-
   mojo::Receiver<crosapi::mojom::AppController> receiver_{this};
 
   base::ScopedObservation<AppRegistrar, AppRegistrarObserver>
       registrar_observation_{this};
-
-  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
-      content_settings_observation_{this};
 
   base::ScopedObservation<MediaCaptureDevicesDispatcher,
                           MediaCaptureDevicesDispatcher::Observer>

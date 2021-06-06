@@ -16,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
+#include "base/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -95,25 +96,27 @@ void CheckNotificationReceived(TestObserver* observer,
   EXPECT_EQ(expected_database_size, observer->GetNotificationDatabaseSize());
 }
 
+// Must be destroyed on the sequence that called RegisterClient() most recently.
 class TestQuotaManagerProxy : public QuotaManagerProxy {
  public:
   TestQuotaManagerProxy()
-      : QuotaManagerProxy(nullptr, base::SequencedTaskRunnerHandle::Get()),
-        registered_client_(nullptr) {}
+      : QuotaManagerProxy(
+            /*quota_manager_impl=*/nullptr,
+            base::SequencedTaskRunnerHandle::Get()) {}
 
   void RegisterLegacyClient(
       scoped_refptr<QuotaClient> client,
       QuotaClientType client_type,
       const std::vector<blink::mojom::StorageType>& storage_types) override {
-    EXPECT_FALSE(registered_client_);
-    registered_client_ = client;
+    NOTREACHED();
   }
 
   void RegisterClient(
       mojo::PendingRemote<mojom::QuotaClient> client,
       QuotaClientType client_type,
       const std::vector<blink::mojom::StorageType>& storage_types) override {
-    NOTREACHED();
+    EXPECT_FALSE(registered_client_);
+    registered_client_.Bind(std::move(client));
   }
 
   void NotifyStorageAccessed(const url::Origin& origin,
@@ -152,13 +155,6 @@ class TestQuotaManagerProxy : public QuotaManagerProxy {
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
       UsageAndQuotaCallback callback) override {}
 
-  void SimulateQuotaManagerDestroyed() {
-    if (registered_client_) {
-      registered_client_->OnQuotaManagerDestroyed();
-      registered_client_ = nullptr;
-    }
-  }
-
   bool WasAccessNotified(const url::Origin& origin) {
     return accesses_[origin] != 0;
   }
@@ -168,12 +164,12 @@ class TestQuotaManagerProxy : public QuotaManagerProxy {
            modifications_[origin].second == amount;
   }
 
-  void reset() {
+  void ResetRecordedTestState() {
     accesses_.clear();
     modifications_.clear();
   }
 
-  scoped_refptr<QuotaClient> registered_client_;
+  mojo::Remote<mojom::QuotaClient> registered_client_;
 
   // Map from origin to count of access notifications.
   std::map<url::Origin, int> accesses_;
@@ -182,7 +178,7 @@ class TestQuotaManagerProxy : public QuotaManagerProxy {
   std::map<url::Origin, std::pair<int, int64_t>> modifications_;
 
  protected:
-  ~TestQuotaManagerProxy() override { EXPECT_FALSE(registered_client_); }
+  ~TestQuotaManagerProxy() override = default;
 };
 
 bool EnsureFileOfSize(const base::FilePath& file_path, int64_t length) {
@@ -205,13 +201,12 @@ class DatabaseTracker_TestHelper_Test {
     base::test::TaskEnvironment task_environment;
     base::ScopedTempDir temp_dir;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-    scoped_refptr<MockSpecialStoragePolicy> special_storage_policy =
-        new MockSpecialStoragePolicy;
+    auto special_storage_policy =
+        base::MakeRefCounted<MockSpecialStoragePolicy>();
     special_storage_policy->AddProtected(GURL(kOrigin2Url));
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(
-            temp_dir.GetPath(), incognito_mode, special_storage_policy.get(),
-            nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), incognito_mode, std::move(special_storage_policy),
+        /*quota_manager_proxy=*/nullptr);
 
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
@@ -303,6 +298,8 @@ class DatabaseTracker_TestHelper_Test {
 
           tracker->DatabaseClosed(kOrigin2, kDB3);
           tracker->RemoveObserver(&observer);
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -312,13 +309,12 @@ class DatabaseTracker_TestHelper_Test {
     base::test::TaskEnvironment task_environment;
     base::ScopedTempDir temp_dir;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-    scoped_refptr<MockSpecialStoragePolicy> special_storage_policy =
-        new MockSpecialStoragePolicy;
+    auto special_storage_policy =
+        base::MakeRefCounted<MockSpecialStoragePolicy>();
     special_storage_policy->AddProtected(GURL(kOrigin2Url));
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(
-            temp_dir.GetPath(), incognito_mode, special_storage_policy.get(),
-            nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), incognito_mode, std::move(special_storage_policy),
+        /*quota_manager_proxy=*/nullptr);
 
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
@@ -450,6 +446,8 @@ class DatabaseTracker_TestHelper_Test {
           origin1_info = tracker->GetCachedOriginInfo(kOrigin1);
           EXPECT_TRUE(origin1_info);
           EXPECT_EQ(0, origin1_info->TotalSize());
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -465,12 +463,10 @@ class DatabaseTracker_TestHelper_Test {
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
     // Initialize the tracker with a QuotaManagerProxy
-    scoped_refptr<TestQuotaManagerProxy> test_quota_proxy(
-        new TestQuotaManagerProxy);
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(temp_dir.GetPath(),
-                                              incognito_mode, nullptr,
-                                              test_quota_proxy.get()));
+    auto test_quota_proxy = base::MakeRefCounted<TestQuotaManagerProxy>();
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), incognito_mode,
+        /*special_storage_policy=*/nullptr, test_quota_proxy);
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -486,7 +482,7 @@ class DatabaseTracker_TestHelper_Test {
           tracker->DatabaseOpened(kOriginId, kName, kDescription,
                                   &database_size);
           EXPECT_TRUE(test_quota_proxy->WasAccessNotified(kOrigin));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           base::FilePath db_file(tracker->GetFullDBFilePath(kOriginId, kName));
           EXPECT_FALSE(
@@ -496,12 +492,12 @@ class DatabaseTracker_TestHelper_Test {
           EXPECT_TRUE(base::PathExists(tracker->GetOriginDirectory(kOriginId)));
           tracker->DatabaseModified(kOriginId, kName);
           EXPECT_TRUE(test_quota_proxy->WasModificationNotified(kOrigin, 10));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           EXPECT_TRUE(EnsureFileOfSize(db_file, 100));
           tracker->DatabaseModified(kOriginId, kName);
           EXPECT_TRUE(test_quota_proxy->WasModificationNotified(kOrigin, 90));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           tracker->DatabaseClosed(kOriginId, kName);
           EXPECT_TRUE(test_quota_proxy->WasAccessNotified(kOrigin));
@@ -511,7 +507,7 @@ class DatabaseTracker_TestHelper_Test {
           EXPECT_TRUE(delete_database_callback.have_result());
           EXPECT_EQ(net::OK, delete_database_callback.WaitForResult());
           EXPECT_TRUE(test_quota_proxy->WasModificationNotified(kOrigin, -100));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           EXPECT_FALSE(
               base::PathExists(tracker->GetOriginDirectory(kOriginId)));
@@ -523,7 +519,7 @@ class DatabaseTracker_TestHelper_Test {
           tracker->DatabaseOpened(kOriginId, kName, kDescription,
                                   &database_size);
           EXPECT_TRUE(test_quota_proxy->WasAccessNotified(kOrigin));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           db_file = tracker->GetFullDBFilePath(kOriginId, kName);
           EXPECT_FALSE(
@@ -533,7 +529,7 @@ class DatabaseTracker_TestHelper_Test {
           EXPECT_TRUE(base::PathExists(tracker->GetOriginDirectory(kOriginId)));
           tracker->DatabaseModified(kOriginId, kName);
           EXPECT_TRUE(test_quota_proxy->WasModificationNotified(kOrigin, 100));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           net::TestCompletionCallback delete_database_callback2;
           tracker->DeleteDatabase(kOriginId, kName,
@@ -550,7 +546,7 @@ class DatabaseTracker_TestHelper_Test {
               base::PathExists(tracker->GetOriginDirectory(kOriginId)));
           EXPECT_TRUE(delete_database_callback2.have_result());
           EXPECT_EQ(net::OK, delete_database_callback2.WaitForResult());
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
 
           // Create a database and up the file size without telling
           // the tracker about the modification, than simulate a
@@ -560,7 +556,7 @@ class DatabaseTracker_TestHelper_Test {
           tracker->DatabaseOpened(kOriginId, kName, kDescription,
                                   &database_size);
           EXPECT_TRUE(test_quota_proxy->WasAccessNotified(kOrigin));
-          test_quota_proxy->reset();
+          test_quota_proxy->ResetRecordedTestState();
           db_file = tracker->GetFullDBFilePath(kOriginId, kName);
           EXPECT_FALSE(
               base::PathExists(tracker->GetOriginDirectory(kOriginId)));
@@ -575,7 +571,7 @@ class DatabaseTracker_TestHelper_Test {
 
           // Cleanup.
           crashed_renderer_connections.RemoveAllConnections();
-          test_quota_proxy->SimulateQuotaManagerDestroyed();
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -595,13 +591,12 @@ class DatabaseTracker_TestHelper_Test {
     base::FilePath origin1_db_dir;
     base::FilePath origin2_db_dir;
     {
-      scoped_refptr<MockSpecialStoragePolicy> special_storage_policy =
-          new MockSpecialStoragePolicy;
+      auto special_storage_policy =
+          base::MakeRefCounted<MockSpecialStoragePolicy>();
       special_storage_policy->AddSessionOnly(GURL(kOrigin2Url));
-      scoped_refptr<DatabaseTracker> tracker(
-          base::MakeRefCounted<DatabaseTracker>(temp_dir.GetPath(), false,
-                                                special_storage_policy.get(),
-                                                nullptr));
+      scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+          temp_dir.GetPath(), false, std::move(special_storage_policy),
+          /*quota_manager_proxy=*/nullptr);
       base::RunLoop run_loop;
       tracker->task_runner()->PostTask(
           FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -646,9 +641,9 @@ class DatabaseTracker_TestHelper_Test {
     }
 
     // At this point, the database tracker should be gone. Create a new one.
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(temp_dir.GetPath(), false,
-                                              nullptr, nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), /*is_incognito=*/false,
+        /*special_storage_policy=*/nullptr, /*quota_manager_proxy=*/nullptr);
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -671,6 +666,8 @@ class DatabaseTracker_TestHelper_Test {
           // of kOrigin2 is deleted.
           EXPECT_TRUE(base::PathExists(origin1_db_dir));
           EXPECT_FALSE(base::PathExists(origin2_db_dir));
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -690,13 +687,12 @@ class DatabaseTracker_TestHelper_Test {
     base::FilePath origin1_db_dir;
     base::FilePath origin2_db_dir;
     {
-      scoped_refptr<MockSpecialStoragePolicy> special_storage_policy =
-          new MockSpecialStoragePolicy;
+      auto special_storage_policy =
+          base::MakeRefCounted<MockSpecialStoragePolicy>();
       special_storage_policy->AddSessionOnly(GURL(kOrigin2Url));
-      scoped_refptr<DatabaseTracker> tracker(
-          base::MakeRefCounted<DatabaseTracker>(temp_dir.GetPath(), false,
-                                                special_storage_policy.get(),
-                                                nullptr));
+      scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+          temp_dir.GetPath(), false, std::move(special_storage_policy),
+          /*quota_manager_proxy=*/nullptr);
       base::RunLoop run_loop;
       tracker->task_runner()->PostTask(
           FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -743,9 +739,9 @@ class DatabaseTracker_TestHelper_Test {
     }
 
     // At this point, the database tracker should be gone. Create a new one.
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(temp_dir.GetPath(), false,
-                                              nullptr, nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), false, /*special_storage_policy=*/nullptr,
+        /*quota_manager_proxy=*/nullptr);
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -764,6 +760,8 @@ class DatabaseTracker_TestHelper_Test {
 
           EXPECT_TRUE(base::PathExists(origin1_db_dir));
           EXPECT_TRUE(base::PathExists(origin2_db_dir));
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -780,9 +778,9 @@ class DatabaseTracker_TestHelper_Test {
     base::test::TaskEnvironment task_environment;
     base::ScopedTempDir temp_dir;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(
-            temp_dir.GetPath(), kUseInMemoryTrackerDatabase, nullptr, nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), kUseInMemoryTrackerDatabase,
+        /*special_storage_policy=*/nullptr, /*quota_manager_proxy=*/nullptr);
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -821,6 +819,8 @@ class DatabaseTracker_TestHelper_Test {
           infos.clear();
           EXPECT_TRUE(tracker->GetAllOriginsInfo(&infos));
           EXPECT_TRUE(infos.empty());
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }
@@ -836,9 +836,9 @@ class DatabaseTracker_TestHelper_Test {
     base::test::TaskEnvironment task_environment;
     base::ScopedTempDir temp_dir;
     ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-    scoped_refptr<DatabaseTracker> tracker(
-        base::MakeRefCounted<DatabaseTracker>(
-            temp_dir.GetPath(), kUseInMemoryTrackerDatabase, nullptr, nullptr));
+    scoped_refptr<DatabaseTracker> tracker = DatabaseTracker::Create(
+        temp_dir.GetPath(), kUseInMemoryTrackerDatabase,
+        /*special_storage_policy=*/nullptr, /*quota_manager_proxy=*/nullptr);
     base::RunLoop run_loop;
     tracker->task_runner()->PostTask(
         FROM_HERE, base::BindLambdaForTesting([&]() {
@@ -909,6 +909,8 @@ class DatabaseTracker_TestHelper_Test {
           EXPECT_FALSE(base::PathExists(spoof_db_file2));
 
           tracker->RemoveObserver(&observer);
+
+          tracker->Shutdown();
         }));
     run_loop.Run();
   }

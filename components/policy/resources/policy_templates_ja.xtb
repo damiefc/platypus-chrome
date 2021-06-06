@@ -3560,9 +3560,6 @@
       このポリシーを無効に設定するか未設定のままにした場合、詳細なバッテリー充電モードは無効になります。
 
       ユーザーはこの設定を変更できません。</translation>
-<translation id="5845686745936515940">すべての Cookie を以前の <ph name="ATTRIBUTE_SAMESITE_NAME" /> 動作に戻します。以前の動作に戻すと、<ph name="ATTRIBUTE_SAMESITE_NAME" /> 属性のない Cookie は「<ph name="ATTRIBUTE_VALUE_SAMESITE_NONE" />」が指定されたものとして扱われます。また、「<ph name="ATTRIBUTE_VALUE_SAMESITE_NONE" />」の Cookie に「<ph name="ATTRIBUTE_SECURE_NAME" />」属性は必須ではなくなります。さらに、2 つのサイトが同一サイトかどうかを評価する際に、スキーム比較がスキップされます。詳細については https://www.chromium.org/administrators/policy-list-3/cookie-legacy-samesite-policies をご覧ください。
-
-          このポリシーを設定しない場合、Cookie のデフォルトの <ph name="ATTRIBUTE_SAMESITE_NAME" /> 動作は、<ph name="FEATURE_NAME_SAMESITE_BY_DEFAULT_COOKIES" /> 機能、<ph name="FEATURE_NAME_SAMESITE_NONE_MUST_BE_SECURE" /> 機能、<ph name="FEATURE_NAME_SCHEMEFUL_SAME_SITE" /> 機能に対するユーザーの個人設定（公開テストで、またはそれぞれ <ph name="FLAG_NAME_SAMESITE_BY_DEFAULT_COOKIES" /> フラグ、<ph name="FLAG_NAME_SAMESITE_NONE_MUST_BE_SECURE" /> フラグ、<ph name="FLAG_NAME_SCHEMEFUL_SAME_SITE" /> フラグを有効か無効にすることで設定される）によって決まります。</translation>
 <translation id="5848438019586925019">鍵ペアの生成に使用するアルゴリズムです。</translation>
 <translation id="585270638818921943">信頼できない提供元の Android アプリの使用をユーザーに許可しない</translation>
 <translation id="5859344336338527083">このポリシーを設定することで、どの URL から拡張機能、アプリ、テーマのインストールを許可するかを指定できます。<ph name="PRODUCT_NAME" /> 21 より前では、*.crx ファイルのリンクをクリックすると、いくつかの警告が表示された後、<ph name="PRODUCT_NAME" /> によりファイルのインストールを申し出るメッセージが表示されました。それ以降のバージョンでは、このようなファイルは、ダウンロードしてから <ph name="PRODUCT_NAME" /> の設定ページにドラッグする必要があります。この設定を利用することで、特定の URL に以前の簡単なインストール フローを適用できます。
@@ -3766,6 +3763,10 @@
       それ以外の場合、ローカル IP アドレスは mDNS のホスト名で隠されます。
       管理者がこのポリシーを有効にした場合、ローカル IP の保護が弱まることに注意してください。</translation>
 <translation id="614662973812186053">このポリシーでは Android の使用状況と診断データの収集も管理できます。</translation>
+<translation id="6154509171634387825">警告: 3DES は <ph name="PRODUCT_NAME" /> バージョン 95（2021 年 10 月頃公開）で完全に削除され、それ以後、このポリシーも機能しなくなります。
+
+      このポリシーを true に設定した場合は、TLS の 3DES 暗号スイートが有効になります。false に設定した場合は無効になります。このポリシーを未設定のままにした場合は、デフォルトで 3DES 暗号スイートが無効になります。このポリシーは、古いサーバーとの一時的な互換性の保持に使用できます。これは暫定的な措置であり、サーバーの再設定が必要です。
+      </translation>
 <translation id="6155350825868160236">スペルミスの解決に Google のウェブサービスを使用するかどうかをユーザーが選択できるようにする</translation>
 <translation id="6155936611791017817">ログイン画面での大きいカーソルのデフォルト状態を設定する</translation>
 <translation id="6157537876488211233">プロキシ バイパス ルールのカンマ区切りリスト</translation>
@@ -3786,6 +3787,9 @@
 
       このポリシーを未設定のままにした場合、ユーザーはブラウザのテーマを自由に変更できます。</translation>
 <translation id="6195802366906945965">サーバー証明書の確認に組み込みの証明書確認機能を使用する</translation>
+<translation id="6198947200418556248">このポリシーはサポートが終了しています。Cookie を以前の動作に戻す必要がある場合は、<ph name="LEGACY_SAMESITE_COOKIE_BEHAVIOR_ENABLED_FOR_DOMAIN_LIST_POLICY_NAME" /> ポリシーを使用してください。すべての Cookie を以前の <ph name="ATTRIBUTE_SAMESITE_NAME" /> 動作に戻します。以前の動作に戻すと、<ph name="ATTRIBUTE_SAMESITE_NAME" /> 属性のない Cookie は「<ph name="ATTRIBUTE_VALUE_SAMESITE_NONE" />」が指定されたものとして扱われます。また、「<ph name="ATTRIBUTE_VALUE_SAMESITE_NONE" />」の Cookie に「<ph name="ATTRIBUTE_SECURE_NAME" />」属性は必須ではなくなります。さらに、2 つのサイトが同一サイトかどうかを評価する際に、スキーム比較がスキップされます。詳細については https://www.chromium.org/administrators/policy-list-3/cookie-legacy-samesite-policies をご覧ください。
+
+          このポリシーを設定しない場合、Cookie のデフォルトの <ph name="ATTRIBUTE_SAMESITE_NAME" /> 動作は、<ph name="FEATURE_NAME_SAMESITE_BY_DEFAULT_COOKIES" /> 機能、<ph name="FEATURE_NAME_SAMESITE_NONE_MUST_BE_SECURE" /> 機能、<ph name="FEATURE_NAME_SCHEMEFUL_SAME_SITE" /> 機能に対するユーザーの個人設定（公開テストで、またはそれぞれ <ph name="FLAG_NAME_SAMESITE_BY_DEFAULT_COOKIES" /> フラグ、<ph name="FLAG_NAME_SAMESITE_NONE_MUST_BE_SECURE" /> フラグ、<ph name="FLAG_NAME_SCHEMEFUL_SAME_SITE" /> フラグを有効か無効にすることで設定される）によって決まります。</translation>
 <translation id="6208896993204286313"><ph name="PRODUCT_NAME" /> のポリシー情報に関するレポートを作成</translation>
 <translation id="6210259502936598222">OS と <ph name="PRODUCT_NAME" /> のバージョン情報に関するレポートを作成</translation>
 <translation id="6212868225782276239">ブラックリスト登録されている以外のすべてのプリンタを表示する。</translation>

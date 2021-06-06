@@ -29,3 +29,16 @@ var CrComponentsCustomizeThemesTest =
 TEST_F('CrComponentsCustomizeThemesTest', 'All', function() {
   mocha.run();
 });
+
+// eslint-disable-next-line no-var
+var CrComponentsMostVisitedTest = class extends CrComponentsMojoBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=cr_components/most_visited_test.js';
+  }
+};
+
+// The test is failing on dbg builds: https://crbug.com/1216019
+TEST_F('CrComponentsMostVisitedTest', 'DISABLED_All', function() {
+  mocha.run();
+});

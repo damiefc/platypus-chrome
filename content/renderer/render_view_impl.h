@@ -102,20 +102,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // Returns the RenderViewImpl for the given routing ID.
   static RenderViewImpl* FromRoutingID(int routing_id);
 
-  void set_send_content_state_immediately(bool value) {
-    send_content_state_immediately_ = value;
-  }
-
-  // Passes along the page zoom to the WebView to set it on a newly attached
-  // LocalFrame.
-  void PropagatePageZoomToNewlyAttachedFrame(bool use_zoom_for_dsf,
-                                             float device_scale_factor);
-
-  // Starts a timer to send an UpdateState message on behalf of |frame|, if the
-  // timer isn't already running. This allows multiple state changing events to
-  // be coalesced into one update.
-  void StartNavStateSyncTimerIfNecessary(RenderFrameImpl* frame);
-
   // blink::WebViewClient implementation --------------------------------------
 
   blink::WebView* CreateView(
@@ -128,8 +114,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       const blink::SessionStorageNamespaceId& session_storage_namespace_id,
       bool& consumed_user_gesture,
       const absl::optional<blink::WebImpression>& impression) override;
-  void PrintPage(blink::WebLocalFrame* frame) override;
-  void OnPageFrozenChanged(bool frozen) override;
 
   // RenderView implementation -------------------------------------------------
 
@@ -171,12 +155,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   static WindowOpenDisposition NavigationPolicyToDisposition(
       blink::WebNavigationPolicy policy);
 
-  // Misc private functions ----------------------------------------------------
-
-  // In OOPIF-enabled modes, this tells each RenderFrame with a pending state
-  // update to inform the browser process.
-  void SendFrameStateUpdates();
-
   // ---------------------------------------------------------------------------
   // ADDING NEW FUNCTIONS? Please keep private functions alphabetized and put
   // it in the same order in the .cc file as it was in the header.
@@ -195,21 +173,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   const bool renderer_wide_named_frame_lookup_;
 
   // Settings ------------------------------------------------------------------
-
-  // Whether content state (such as form state, scroll position and page
-  // contents) should be sent to the browser immediately. This is normally
-  // false, but set to true by some tests.
-  bool send_content_state_immediately_ = false;
-
-  // Loading state -------------------------------------------------------------
-
-  // Timer used to delay the updating of nav state (see
-  // StartNavStateSyncTimerIfNecessary).
-  base::OneShotTimer nav_state_sync_timer_;
-
-  // Set of RenderFrame routing IDs for frames that having pending UpdateState
-  // messages to send when the next |nav_state_sync_timer_| fires.
-  std::set<int> frames_with_pending_state_;
 
   // View ----------------------------------------------------------------------
 

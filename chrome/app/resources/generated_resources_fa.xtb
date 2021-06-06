@@ -680,6 +680,7 @@
 <translation id="1706625117072057435">سطوح بزرگ‌نمایی</translation>
 <translation id="1708338024780164500">(غیرفعال)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (شناسه: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">مرورگر آزمایشی! ممکن است داده‌ها ازبین برود یا امنیت یا حریم‌خصوصی به‌خطر بیفتد. لطفاً مشکلات را ازطریق «راهنمایی &gt; گزارش مشکل…» گزارش کنید.</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> × <ph name="HEIGHT" /> (اصلی)</translation>
 <translation id="1709217939274742847">بلیتی انتخاب کنید تا برای اصالت‌سنجی از آن استفاده کنید. <ph name="LINK_BEGIN" />بیشتر بدانید<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">هم‌رسانی نشد</translation>
@@ -1097,6 +1098,7 @@
 <translation id="2144557304298909478">‏تولید برنامه Android در Linux</translation>
 <translation id="2146263598007866206">سایت‌ها شاید به‌طور خودکار فایل‌های مرتبط را با هم بارگیری کنند تا در زمان صرفه‌جویی شود</translation>
 <translation id="2147151613919729065">برای پاک کردن سابقه «حالت مهمان»، همه پنحره‌های «مهمان» را ببندید.</translation>
+<translation id="2147218225094845757">پنهان کردن پانل کناری</translation>
 <translation id="2148219725039824548">هنگام نشاندن دستگاه ذخیره‌سازی متصل به شبکه خطایی روی داد. دستگاه ذخیره‌سازی مشخص‌شده در شبکه پیدا نشد.</translation>
 <translation id="2148756636027685713">قالب‌بندی تمام شد</translation>
 <translation id="2148892889047469596">برگه فرستادن</translation>
@@ -3176,6 +3178,7 @@
 <translation id="4410545552906060960">برای باز کردن قفل دستگاه، به‌جای گذرواژه از شماره (پین) استفاده کنید. برای تنظیم پین در فرصتی دیگر، به «تنظیمات» بروید.</translation>
 <translation id="4411578466613447185">امضا کننده کد</translation>
 <translation id="4412698727486357573">مرکز راهنمایی</translation>
+<translation id="4413088271097062326">می‌خواهید از کدام برنامه استفاده کنید؟</translation>
 <translation id="44141919652824029">‏به <ph name="APP_NAME" /> اجازه داده شود تا فهرست دستگاه‌های USB متصل را دریافت کند؟</translation>
 <translation id="4414232939543644979">پنجرهٔ جدید حالت &amp;ناشناس</translation>
 <translation id="4414515549596849729">کوکی‌ها و داده‌های سایت</translation>
@@ -3949,6 +3952,7 @@
 <translation id="5269977353971873915">چاپ نشد</translation>
 <translation id="5275352920323889391">سگ</translation>
 <translation id="527605982717517565">همیشه جاوا اسکریپت در <ph name="HOST" /> مجاز باشد</translation>
+<translation id="5277127016695466621">نمایش پانل کناری</translation>
 <translation id="5278823018825269962">شناسه وضعیت</translation>
 <translation id="5280064835262749532">به‌روزرسانی اطلاعات کاربری <ph name="SHARE_PATH" /></translation>
 <translation id="5280243692621919988">وقتی همه پنجره‌ها را می‌بندید، کوکی‌ها و داده‌های سایت پاک شود</translation>
@@ -6129,7 +6133,6 @@
 <translation id="7685049629764448582">حافطه جاوا اسکریپت</translation>
 <translation id="7685087414635069102">پین موردنیاز است</translation>
 <translation id="768549422429443215">افزودن زبان یا مرتب‌سازی مجدد فهرست.</translation>
-<translation id="7686424868232681412">‏Lacros مرورگری آزمایشی است. لطفاً مشکلات را ازطریق «راهنمایی &gt; گزارش مشکل…» گزارش کنید.</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> <ph name="DEVICE_PATH" /></translation>
 <translation id="7690294790491645610">تأیید گذرواژه جدید</translation>
 <translation id="7690378713476594306">انتخاب از فهرست</translation>

@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
+#include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -46,6 +47,7 @@ WebAppBrowserController::WebAppBrowserController(Browser* browser)
       provider_(*WebAppProvider::Get(browser->profile())) {
   registrar_observation_.Observe(&provider_.registrar());
   PerformDigitalAssetLinkVerification(browser);
+  DCHECK(HasAppId());
 }
 
 WebAppBrowserController::~WebAppBrowserController() = default;
@@ -72,13 +74,15 @@ bool WebAppBrowserController::AppUsesWindowControlsOverlay() const {
 }
 
 bool WebAppBrowserController::IsWindowControlsOverlayEnabled() const {
-  // TODO(crbug.com/937121): Remove special casing for Mac once toggle is
-  // supported for BrowserNonClientFrameViewMac.
-#if defined(OS_MAC)
-  return AppUsesWindowControlsOverlay();
-#else
-  return AppUsesWindowControlsOverlay() && window_controls_overlay_enabled_;
-#endif
+  return AppUsesWindowControlsOverlay() &&
+         registrar().GetWindowControlsOverlayEnabled(GetAppId());
+}
+
+void WebAppBrowserController::ToggleWindowControlsOverlayEnabled() {
+  DCHECK(AppUsesWindowControlsOverlay());
+
+  provider_.registry_controller().SetAppWindowControlsOverlayEnabled(
+      GetAppId(), !registrar().GetWindowControlsOverlayEnabled(GetAppId()));
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -52,6 +52,11 @@ namespace {
 
 AppListClientImpl* g_app_list_client_instance = nullptr;
 
+// Parameters used by the time duration metrics.
+constexpr base::TimeDelta kTimeMetricsMin = base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kTimeMetricsMax = base::TimeDelta::FromDays(7);
+constexpr int kTimeMetricsBucketCount = 100;
+
 bool IsTabletMode() {
   return ash::TabletMode::Get() && ash::TabletMode::Get()->InTabletMode();
 }
@@ -73,7 +78,21 @@ AppListClientImpl::AppListClientImpl()
 AppListClientImpl::~AppListClientImpl() {
   SetProfile(nullptr);
 
-  user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
+  auto* user_manager = user_manager::UserManager::Get();
+  user_manager->RemoveSessionStateObserver(this);
+
+  // We assume that the current user is new if `state_for_new_user_` has value.
+  if (state_for_new_user_.has_value() &&
+      !state_for_new_user_->showing_recorded) {
+    DCHECK(user_manager->IsCurrentUserNew());
+
+    // Prefer the function to the macro because the usage data is recorded no
+    // more than once per second.
+    base::UmaHistogramEnumeration(
+        "Apps.AppListUsageByNewUsers",
+        AppListUsageStateByNewUsers::kNotUsedBeforeDestruction);
+  }
+
   session_manager::SessionManager::Get()->RemoveObserver(this);
 
   DCHECK_EQ(this, g_app_list_client_instance);
@@ -157,6 +176,8 @@ void AppListClientImpl::OpenSearchResult(
   if (launched_from == ash::AppListLaunchedFrom::kLaunchedFromSearchBox)
     RecordOpenedResultFromSearchBox(result_type);
 
+  MaybeRecordLauncherAction(launched_from);
+
   // OpenResult may cause |result| to be deleted.
   search_controller_->OpenResult(result, event_flags);
 }
@@ -235,6 +256,7 @@ void AppListClientImpl::ActivateItem(int profile_id,
     search_controller_->Train(std::move(launch_data));
   }
 
+  MaybeRecordLauncherAction(ash::AppListLaunchedFrom::kLaunchedFromGrid);
   requested_model_updater->ActivateChromeItem(id, event_flags);
 }
 
@@ -331,6 +353,13 @@ void AppListClientImpl::ActiveUserChanged(user_manager::User* active_user) {
     // be both new. It should not happen in the real world.
     state_for_new_user_ = StateForNewUser();
   } else if (state_for_new_user_) {
+    if (!state_for_new_user_->showing_recorded) {
+      // We assume that the previous user before switching was new if
+      // `state_for_new_user_` is not null.
+      base::UmaHistogramEnumeration(
+          "Apps.AppListUsageByNewUsers",
+          AppListUsageStateByNewUsers::kNotUsedBeforeSwitchingAccounts);
+    }
     state_for_new_user_.reset();
   }
 
@@ -420,7 +449,7 @@ AppListModelUpdater* AppListClientImpl::GetModelUpdaterForTest() {
 }
 
 void AppListClientImpl::InitializeAsIfNewUserLoginForTest() {
-  new_user_session_activation_time_ = base::TimeTicks::Now();
+  new_user_session_activation_time_ = base::Time::Now();
   state_for_new_user_ = StateForNewUser();
 }
 
@@ -432,7 +461,7 @@ void AppListClientImpl::OnSessionStateChanged() {
     return;
   }
 
-  new_user_session_activation_time_ = base::TimeTicks::Now();
+  new_user_session_activation_time_ = base::Time::Now();
 }
 
 void AppListClientImpl::OnTemplateURLServiceChanged() {
@@ -553,13 +582,18 @@ void AppListClientImpl::MaybeRecordViewShown() {
   state_for_new_user_->showing_recorded = true;
 
   DCHECK(new_user_session_activation_time_.has_value());
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-      /*name=*/
-      "Apps.TimeDurationBetweenNewUserSessionActivationAndFirstLauncherOpening",
-      /*sample=*/base::TimeTicks::Now() - *new_user_session_activation_time_,
-      /*min=*/base::TimeDelta::FromSeconds(1),
-      /*max=*/base::TimeDelta::FromDays(7),
-      /*bucket_count=*/100);
+  const base::TimeDelta opening_duration =
+      base::Time::Now() - *new_user_session_activation_time_;
+  if (opening_duration >= base::TimeDelta()) {
+    // `base::Time` may skew. Therefore only record when the time duration is
+    // non-negative.
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        /*name=*/
+        "Apps."
+        "TimeDurationBetweenNewUserSessionActivationAndFirstLauncherOpening",
+        /*sample=*/opening_duration, kTimeMetricsMin, kTimeMetricsMax,
+        kTimeMetricsBucketCount);
+  }
 }
 
 void AppListClientImpl::RecordOpenedResultFromSearchBox(
@@ -589,4 +623,42 @@ void AppListClientImpl::RecordOpenedResultFromSearchBox(
         "NonAppBrowserWindowsEitherClosedOrMinimized",
         result_type);
   }
+}
+
+void AppListClientImpl::MaybeRecordLauncherAction(
+    ash::AppListLaunchedFrom launched_from) {
+  DCHECK(launched_from == ash::AppListLaunchedFrom::kLaunchedFromGrid ||
+         launched_from ==
+             ash::AppListLaunchedFrom::kLaunchedFromSuggestionChip ||
+         launched_from == ash::AppListLaunchedFrom::kLaunchedFromSearchBox);
+
+  // Return early if the current user is not new.
+  if (!user_manager::UserManager::Get()->IsCurrentUserNew()) {
+    DCHECK(!state_for_new_user_);
+    return;
+  }
+
+  // The launcher action has been recorded so return early.
+  if (state_for_new_user_->action_recorded)
+    return;
+
+  state_for_new_user_->action_recorded = true;
+  base::UmaHistogramEnumeration("Apps.FirstLauncherActionByNewUsers",
+                                launched_from);
+
+  DCHECK(new_user_session_activation_time_.has_value());
+  const base::TimeDelta launcher_action_duration =
+      base::Time::Now() - *new_user_session_activation_time_;
+  if (launcher_action_duration >= base::TimeDelta()) {
+    // `base::Time` may skew. Therefore only record when the time duration is
+    // non-negative.
+    UMA_HISTOGRAM_CUSTOM_TIMES(
+        /*name=*/
+        "Apps.TimeBetweenNewUserSessionActivationAndFirstLauncherAction",
+        /*sample=*/launcher_action_duration, kTimeMetricsMin, kTimeMetricsMax,
+        kTimeMetricsBucketCount);
+  }
+
+  base::UmaHistogramEnumeration("Apps.AppListUsageByNewUsers",
+                                AppListUsageStateByNewUsers::kUsed);
 }

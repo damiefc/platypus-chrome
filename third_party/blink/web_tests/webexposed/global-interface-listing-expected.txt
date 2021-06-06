@@ -5341,6 +5341,8 @@ interface MediaSession
     getter playbackState
     method constructor
     method setActionHandler
+    method setCameraActive
+    method setMicrophoneActive
     method setPositionState
     setter metadata
     setter playbackState
@@ -6890,7 +6892,7 @@ interface ReadableStreamDefaultReader
     method constructor
     method read
     method releaseLock
-interface ReceiveStream
+interface ReceiveStream : ReadableStream
     attribute @@toStringTag
     getter readable
     getter readingAborted

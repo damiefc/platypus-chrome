@@ -235,7 +235,7 @@ TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
   proto->mutable_sources()->set_sync(true);
   proto->mutable_sources()->set_default_(false);
 
-  if (IsChromeOs()) {
+  if (IsChromeOsDataMandatory()) {
     proto->mutable_chromeos_data()->set_show_in_launcher(false);
     proto->mutable_chromeos_data()->set_show_in_search(false);
     proto->mutable_chromeos_data()->set_show_in_management(false);
@@ -258,7 +258,7 @@ TEST_F(WebAppDatabaseTest, BackwardCompatibility_WebAppWithOnlyRequiredFields) {
   EXPECT_TRUE(app->IsSynced());
   EXPECT_FALSE(app->IsPreinstalledApp());
 
-  if (IsChromeOs()) {
+  if (IsChromeOsDataMandatory()) {
     EXPECT_FALSE(app->chromeos_data()->show_in_launcher);
     EXPECT_FALSE(app->chromeos_data()->show_in_search);
     EXPECT_FALSE(app->chromeos_data()->show_in_management);
@@ -284,7 +284,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   app->SetUserDisplayMode(user_display_mode);
   app->SetIsLocallyInstalled(false);
   // chromeos_data should always be set on ChromeOS.
-  if (IsChromeOs())
+  if (IsChromeOsDataMandatory())
     app->SetWebAppChromeOsData(absl::make_optional<WebAppChromeOsData>());
 
   EXPECT_FALSE(app->HasAnySources());
@@ -323,6 +323,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_EQ(app->run_on_os_login_mode(), RunOnOsLoginMode::kNotRun);
   EXPECT_TRUE(app->manifest_url().is_empty());
   EXPECT_FALSE(app->manifest_id().has_value());
+  EXPECT_FALSE(app->IsStorageIsolated());
   controller().RegisterApp(std::move(app));
 
   Registry registry = database_factory().ReadRegistry();
@@ -338,7 +339,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_FALSE(app_copy->is_locally_installed());
 
   auto& chromeos_data = app_copy->chromeos_data();
-  if (IsChromeOs()) {
+  if (IsChromeOsDataMandatory()) {
     EXPECT_TRUE(chromeos_data->show_in_launcher);
     EXPECT_TRUE(chromeos_data->show_in_search);
     EXPECT_TRUE(chromeos_data->show_in_management);
@@ -383,14 +384,11 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_EQ(app_copy->run_on_os_login_mode(), RunOnOsLoginMode::kNotRun);
   EXPECT_TRUE(app_copy->manifest_url().is_empty());
   EXPECT_FALSE(app_copy->manifest_id().has_value());
+  EXPECT_FALSE(app_copy->IsStorageIsolated());
 }
 
 TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   controller().Init();
-
-  const int min_purpose_type = static_cast<int>(IconPurpose::kMinValue);
-  const int max_purpose_type = static_cast<int>(IconPurpose::kMaxValue);
-  const int num_icon_purpose_types = max_purpose_type - min_purpose_type + 1;
 
   const GURL base_url("https://example.com/path");
   // A number of icons of each IconPurpose.
@@ -401,12 +399,8 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
 
   std::vector<WebApplicationIconInfo> icons;
 
-  std::vector<SquareSizePx> sizes[num_icon_purpose_types];
-
-  // Iterates over each icon purpose.
-  for (int p = min_purpose_type; p <= max_purpose_type; ++p) {
-    auto purpose = static_cast<IconPurpose>(p);
-
+  for (IconPurpose purpose : kIconPurposes) {
+    std::vector<SquareSizePx> sizes;
     for (int i = 1; i <= num_icons; ++i) {
       WebApplicationIconInfo icon;
       icon.url = base_url.Resolve("icon" + base::NumberToString(num_icons));
@@ -414,11 +408,11 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
       icon.square_size_px = i * i;
 
       icon.purpose = purpose;
-      sizes[p].push_back(*icon.square_size_px);
+      sizes.push_back(*icon.square_size_px);
       icons.push_back(std::move(icon));
     }
 
-    app->SetDownloadedIconSizes(purpose, std::move(sizes[p]));
+    app->SetDownloadedIconSizes(purpose, std::move(sizes));
   }
 
   app->SetIconInfos(std::move(icons));
@@ -430,7 +424,7 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   EXPECT_EQ(1UL, registry.size());
 
   std::unique_ptr<WebApp>& app_copy = registry.at(app_id);
-  EXPECT_EQ(static_cast<unsigned>(num_icons * num_icon_purpose_types),
+  EXPECT_EQ(static_cast<unsigned>(num_icons * kIconPurposes.size()),
             app_copy->icon_infos().size());
   for (int i = 1; i <= num_icons; ++i) {
     const int icon_size_in_px = i * i;

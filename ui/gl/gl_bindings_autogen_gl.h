@@ -1965,8 +1965,8 @@ struct ExtensionsGL {
   bool b_GL_ANGLE_robust_resource_initialization;
   bool b_GL_ANGLE_semaphore_fuchsia;
   bool b_GL_ANGLE_texture_external_update;
-  bool b_GL_ANGLE_texture_rectangle;
   bool b_GL_ANGLE_translated_shader_source;
+  bool b_GL_ANGLE_webgl_compatibility;
   bool b_GL_APPLE_fence;
   bool b_GL_APPLE_sync;
   bool b_GL_APPLE_vertex_array_object;

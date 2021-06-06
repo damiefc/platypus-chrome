@@ -26,7 +26,7 @@
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/signin/signin_util.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -51,6 +51,7 @@
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/unified_consent/unified_consent_metrics.h"
 #include "content/public/browser/render_view_host.h"
@@ -341,7 +342,7 @@ void PeopleHandler::OnJavascriptAllowed() {
   // This is intentionally not using GetSyncService(), to go around the
   // Profile::IsSyncAllowed() check.
   syncer::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
+      SyncServiceFactory::GetForProfile(profile_);
   if (sync_service)
     sync_service_observation_.Observe(sync_service);
 }
@@ -412,8 +413,8 @@ void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
 }
 
 syncer::SyncService* PeopleHandler::GetSyncService() const {
-  return ProfileSyncServiceFactory::IsSyncAllowed(profile_)
-             ? ProfileSyncServiceFactory::GetForProfile(profile_)
+  return SyncServiceFactory::IsSyncAllowed(profile_)
+             ? SyncServiceFactory::GetForProfile(profile_)
              : nullptr;
 }
 
@@ -489,11 +490,10 @@ base::Value PeopleHandler::GetStoredAccountsList() {
   // Chrome OS), then show only the primary account, whether or not that account
   // has consented to sync.
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
-  absl::optional<AccountInfo> primary_account_info =
-      identity_manager->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager->GetPrimaryAccountInfo(ConsentLevel::kSignin));
-  if (primary_account_info.has_value())
-    accounts.Append(GetAccountValue(primary_account_info.value()));
+  AccountInfo primary_account_info = identity_manager->FindExtendedAccountInfo(
+      identity_manager->GetPrimaryAccountInfo(ConsentLevel::kSignin));
+  if (!primary_account_info.IsEmpty())
+    accounts.Append(GetAccountValue(primary_account_info));
   return accounts;
 }
 
@@ -508,14 +508,12 @@ void PeopleHandler::HandleStartSyncingWithEmail(const base::ListValue* args) {
   Browser* browser =
       chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
 
-  absl::optional<AccountInfo> maybe_account =
+  AccountInfo maybe_account =
       IdentityManagerFactory::GetForProfile(profile_)
-          ->FindExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-              email->GetString());
+          ->FindExtendedAccountInfoByEmailAddress(email->GetString());
 
   signin_ui_util::EnableSyncFromMultiAccountPromo(
-      browser,
-      maybe_account.has_value() ? maybe_account.value() : AccountInfo(),
+      browser, maybe_account,
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS,
       is_default_promo_account->GetBool());
 #else
@@ -744,8 +742,9 @@ void PeopleHandler::HandleSyncPrefsDispatch(const base::ListValue* args) {
 void PeopleHandler::HandleOfferTrustedVaultOptInDispatch(
     const base::ListValue* args) {
   AllowJavascript();
-  FireWebUIListener(kOfferTrustedVaultOptInChangedEvent,
-                    base::Value(ShouldOfferTrustedVaultOptIn()));
+  FireWebUIListener(
+      kOfferTrustedVaultOptInChangedEvent,
+      base::Value(syncer::ShouldOfferTrustedVaultOptIn(GetSyncService())));
 }
 
 void PeopleHandler::CloseSyncSetup() {
@@ -823,39 +822,6 @@ void PeopleHandler::InitializeSyncBlocker() {
   }
 }
 
-bool PeopleHandler::ShouldOfferTrustedVaultOptIn() const {
-  syncer::SyncService* sync_service = GetSyncService();
-  if (!sync_service) {
-    return false;
-  }
-
-  if (sync_service->GetTransportState() !=
-      syncer::SyncService::TransportState::ACTIVE) {
-    // Transport state must be active so SyncUserSettings::GetPassphraseType()
-    // changes once the opt-in completes, and the UI is notified.
-    return false;
-  }
-
-  switch (sync_service->GetUserSettings()->GetPassphraseType()) {
-    case syncer::PassphraseType::kImplicitPassphrase:
-    case syncer::PassphraseType::kFrozenImplicitPassphrase:
-    case syncer::PassphraseType::kCustomPassphrase:
-    case syncer::PassphraseType::kTrustedVaultPassphrase:
-      // Either trusted vault is already set or a transition from this
-      // passphrase type to trusted vault is disallowed.
-      return false;
-    case syncer::PassphraseType::kKeystorePassphrase:
-      if (sync_service->GetUserSettings()->IsPassphraseRequired()) {
-        // This should be extremely rare.
-        return false;
-      }
-      return base::FeatureList::IsEnabled(
-                 switches::kSyncSupportTrustedVaultPassphraseRecovery) &&
-             base::FeatureList::IsEnabled(
-                 switches::kSyncOfferTrustedVaultOptIn);
-  }
-}
-
 void PeopleHandler::FocusUI() {
   WebContents* web_contents = web_ui()->GetWebContents();
   web_contents->GetDelegate()->ActivateContents(web_contents);
@@ -883,15 +849,15 @@ void PeopleHandler::OnPrimaryAccountChanged(
   }
 }
 
-void PeopleHandler::OnStateChanged(syncer::SyncService* sync) {
+void PeopleHandler::OnStateChanged(syncer::SyncService* sync_service) {
   UpdateSyncStatus();
   // TODO(crbug.com/1106764): Re-evaluate marking sync as configuring here,
-  // since this gets called whenever ProfileSyncService changes state. Inline
+  // since this gets called whenever SyncService changes state. Inline
   // MaybeMarkSyncConfiguring() then.
   MaybeMarkSyncConfiguring();
   PushSyncPrefs();
   FireWebUIListener(kOfferTrustedVaultOptInChangedEvent,
-                    base::Value(ShouldOfferTrustedVaultOptIn()));
+                    base::Value(ShouldOfferTrustedVaultOptIn(sync_service)));
 }
 
 void PeopleHandler::BeforeUnloadDialogCancelled() {
@@ -936,8 +902,7 @@ std::unique_ptr<base::DictionaryValue> PeopleHandler::GetSyncStatusDictionary()
   // This is intentionally not using GetSyncService(), in order to access more
   // nuanced information, since GetSyncService() returns nullptr if anything
   // makes Profile::IsSyncAllowed() false.
-  syncer::SyncService* service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
+  syncer::SyncService* service = SyncServiceFactory::GetForProfile(profile_);
   bool disallowed_by_policy =
       service && service->HasDisableReason(
                      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);

@@ -165,14 +165,14 @@ def xcode_enum(version):
 xcode = struct(
     # in use by webrtc mac builders
     x11c29 = xcode_enum("11c29"),
-    # in use by ios-webkit-tot
-    x11e608cwk = xcode_enum("11e608cwk"),
     # (current default for other projects) xc12.0 gm seed
     x12a7209 = xcode_enum("12a7209"),
     # (current default for iOS) xc12.4 gm seed
     x12d4e = xcode_enum("12d4e"),
     # Xcode 12.5. Requires Mac11+ OS.
     x12e262 = xcode_enum("12e262"),
+    # in use by ios-webkit-tot
+    x12e262wk = xcode_enum("12e262wk"),
 )
 
 ################################################################################
@@ -385,7 +385,7 @@ def builder(
     attribute with a `lucicfg.var` for all of the fields defined here as well as
     all of the parameters of `luci.builder` that support module-level defaults.
 
-    See https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/main/lucicfg/doc/README.md#luci.builder
+    See https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/master/lucicfg/doc/README.md#luci.builder
     for more information.
 
     Arguments:
@@ -593,10 +593,8 @@ def builder(
 
     # TODO(crbug.com/1143122): remove this.
     experiments = experiments or {}
-    if os and os.category == os_category.MAC:
+    if os and os.category in (os_category.MAC, os_category.WINDOWS):
         experiments["chromium.chromium_tests.use_rbe_cas"] = 100
-    elif os and os.category == os_category.WINDOWS:
-        experiments["chromium.chromium_tests.use_rbe_cas"] = 50
     kwargs["experiments"] = experiments
 
     configure_kitchen = defaults.get_value("configure_kitchen", configure_kitchen)

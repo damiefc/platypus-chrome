@@ -216,14 +216,19 @@ ax::mojom::blink::Role AXLayoutObject::RoleFromLayoutObjectOrNode() const {
   // the screen reader determine what to do for CSS tables. If this line
   // is reached, then it is not an HTML table, and therefore will only be
   // considered a data table if ARIA markup indicates it is a table.
-  if (layout_object_->IsTable() && node)
-    return ax::mojom::blink::Role::kLayoutTable;
-  if (layout_object_->IsTableSection())
-    return DetermineTableSectionRole();
-  if (layout_object_->IsTableRow() && node)
-    return DetermineTableRowRole();
-  if (layout_object_->IsTableCell() && node)
-    return DetermineTableCellRole();
+  // Additionally, as pseudo elements don't have any structure it doesn't make
+  // sense to report their table-related layout roles that could be set via the
+  // display property.
+  if (node && !node->IsPseudoElement()) {
+    if (layout_object_->IsTable())
+      return ax::mojom::blink::Role::kLayoutTable;
+    if (layout_object_->IsTableSection())
+      return DetermineTableSectionRole();
+    if (layout_object_->IsTableRow())
+      return DetermineTableRowRole();
+    if (layout_object_->IsTableCell())
+      return DetermineTableCellRole();
+  }
 
   if (IsImageOrAltText(layout_object_, node)) {
     if (IsA<HTMLInputElement>(node))
@@ -1019,12 +1024,13 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
 // Properties of interactive elements.
 //
 
-String AXLayoutObject::TextAlternative(bool recursive,
-                                       bool in_aria_labelled_by_traversal,
-                                       AXObjectSet& visited,
-                                       ax::mojom::blink::NameFrom& name_from,
-                                       AXRelatedObjectVector* related_objects,
-                                       NameSources* name_sources) const {
+String AXLayoutObject::TextAlternative(
+    bool recursive,
+    const AXObject* aria_label_or_description_root,
+    AXObjectSet& visited,
+    ax::mojom::blink::NameFrom& name_from,
+    AXRelatedObjectVector* related_objects,
+    NameSources* name_sources) const {
   if (layout_object_) {
     absl::optional<String> text_alternative = GetCSSAltText(GetNode());
     bool found_text_alternative = false;
@@ -1082,9 +1088,9 @@ String AXLayoutObject::TextAlternative(bool recursive,
     }
   }
 
-  return AXNodeObject::TextAlternative(recursive, in_aria_labelled_by_traversal,
-                                       visited, name_from, related_objects,
-                                       name_sources);
+  return AXNodeObject::TextAlternative(
+      recursive, aria_label_or_description_root, visited, name_from,
+      related_objects, name_sources);
 }
 
 //

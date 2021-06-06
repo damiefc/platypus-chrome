@@ -683,6 +683,7 @@
 <translation id="1706625117072057435">জুম লেভেল</translation>
 <translation id="1708338024780164500">(নিষ্ক্রিয়)</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (আইডি: <ph name="ID_PH" />)</translation>
+<translation id="1708860176443612387">পরীক্ষামূলক ব্রাউজার! আপনার ডেটা মুছে যেতে পারে অথবা গোপনীয়তা বা নিরাপত্তা লঙ্ঘন হতে পারে। ব্রাউজার সম্পর্কিত যেকোনও অভিযোগ জানাতে এখানে যান: সহায়তা &gt; "কোনও সমস্যার ব্যাপারে অভিযোগ জানান..."।</translation>
 <translation id="1709106626015023981"><ph name="WIDTH" /> x <ph name="HEIGHT" /> (নির্ধারিত)</translation>
 <translation id="1709217939274742847">যাচাইকরণের জন্য ব্যবহার করতে একটি টিকিট বেছে নিন। <ph name="LINK_BEGIN" />আরও জানুন<ph name="LINK_END" /></translation>
 <translation id="1709972045049031556">শেয়ার করা যাচ্ছে না</translation>
@@ -1101,6 +1102,7 @@
 <translation id="2144557304298909478">Linux Android অ্যাপ উন্নত করা</translation>
 <translation id="2146263598007866206">আপনার সময় বাঁচাতে, সাইট এই সম্পর্কিত ফাইলগুলি অটোমেটিক ডাউনলোড করতে পারে</translation>
 <translation id="2147151613919729065">গেস্ট মোডের ইতিহাস মুছে ফেলতে, সব গেস্ট উইন্ডো বন্ধ করুন।</translation>
+<translation id="2147218225094845757">সাইড প্যানেল লুকান</translation>
 <translation id="2148219725039824548">মাউন্টিং শেয়ারে সমস্যা। নেটওয়ার্কে নির্দিষ্ট শেয়ারটি পাওয়া যায়নি।</translation>
 <translation id="2148756636027685713">বিন্যাসন সম্পূর্ণ</translation>
 <translation id="2148892889047469596">ট্যাব কাস্ট করুন</translation>
@@ -2582,6 +2584,7 @@
 <translation id="3742666961763734085">এই নামের কোনও প্রতিষ্ঠানের ইউনিট খুঁজে পাওয়া যাচ্ছে না। অনুগ্রহ করে আবার চেষ্টা করুন।</translation>
 <translation id="3744111561329211289">পটভূমি সিঙ্ক</translation>
 <translation id="3747077776423672805">অ্যাপগুলি সরাতে, সেটিংস &gt; Google Play স্টোর &gt; Android অভিরুচি ম্যানেজ করুন &gt; অ্যাপ বা অ্যাপ্লিকেশন ম্যানেজার বিকল্পে যান। এরপর যে অ্যাপটিকে আনইনস্টল করতে চান তাতে ট্যাপ করুন (অ্যাপটি খোঁজার জন্য আপনাকে ডানদিক বা বাঁদিকে সোয়াইপ করতে হতে পারে)। এরপর আনইনস্টল করুন বা বন্ধ করুন বিকল্পে ট্যাপ করুন।</translation>
+<translation id="3747220812138541072">টাইপ করার সাথে সাথে প্রদর্শিত হবে এমন ইনলাইন লেখার সাজেশন দেখানো হবে</translation>
 <translation id="3748706263662799310">একটি বাগ রিপোর্ট করুন</translation>
 <translation id="3752582316358263300">ঠিক আছে...</translation>
 <translation id="3753033997400164841">একবার সেভ করুন। সব জায়গায় ব্যবহার করুন</translation>
@@ -3177,6 +3180,7 @@
 <translation id="4410545552906060960">আপনার ডিভাইস আনলক করতে পাসওয়ার্ডের পরিবর্তে একটি নম্বর (পিন) ব্যবহার করুন। আপনার পিনটি পরে সেট করতে সেটিংসে যান।</translation>
 <translation id="4411578466613447185">কোড চিহ্নপ্রদানকারী</translation>
 <translation id="4412698727486357573">সহায়তা কেন্দ্র</translation>
+<translation id="4413088271097062326">আপনি কোন অ্যাপ্লিকেশন ব্যবহার করতে চান?</translation>
 <translation id="44141919652824029">"<ph name="APP_NAME" />" অ্যাপকে কানেক্ট করা ইউএসবি ডিভাইসগুলির তালিকা নিয়ে আসতে দেবেন?</translation>
 <translation id="4414232939543644979">নতুন &amp;ছদ্মবেশী উইন্ডো</translation>
 <translation id="4414515549596849729">কুকি ও সাইট ডেটা</translation>
@@ -3270,6 +3274,7 @@
 <translation id="4510614391273086606">Linux ফাইল ও অ্যাপগুলিকে, ব্যাক-আপ করার সমকালীন অবস্থায় ফিরিয়ে নিয়ে যাওয়া হচ্ছে।</translation>
 <translation id="451102079304155829">কার্ট</translation>
 <translation id="4513275008300099962">'উইন্ডো কন্ট্রোলস ওভারলে' বন্ধ করুন</translation>
+<translation id="4513872120116766993">লেখার সাজেশন</translation>
 <translation id="4513946894732546136">প্রতিক্রিয়া</translation>
 <translation id="451407183922382411"><ph name="COMPANY_NAME" /> এর দ্বারা চালিত</translation>
 <translation id="4514610446763173167">ভিডিও চালাতে বা থামানোর জন্য টগল করুন</translation>
@@ -3279,7 +3284,7 @@
 <translation id="4519935350946509010">কানেকশনে সমস্যা।</translation>
 <translation id="4520385623207007473">কুকিগুলি ব্যবহার করা হচ্ছে</translation>
 <translation id="452039078290142656"><ph name="VENDOR_NAME" /> থেকে অজানা ডিভাইসগুলি</translation>
-<translation id="4522570452068850558">বিশদ বিবরণ</translation>
+<translation id="4522570452068850558">বিবরণগুলি</translation>
 <translation id="4522600456902129422">সাইটটিকে ক্লিপবোর্ড দেখার অনুমতি চালু রাখুন</translation>
 <translation id="4522890784888918985">বাচ্চার অ্যাকাউন্ট কাজ করে না</translation>
 <translation id="4524832533047962394">অপারেটিং সিস্টেমের এই ভার্সনটি প্রদত্ত নথিভুক্তকরণের মোড সমর্থন করে না। আপনি সর্বাধুনিক ভার্সনটি চালাচ্ছেন কিনা দেখুন।</translation>
@@ -3949,6 +3954,7 @@
 <translation id="5269977353971873915">প্রিন্ট করা যায়নি</translation>
 <translation id="5275352920323889391">কুকুর</translation>
 <translation id="527605982717517565">সর্বদা <ph name="HOST" />-এ জাভাস্ক্রিপ্ট মঞ্জুর করুন</translation>
+<translation id="5277127016695466621">সাইড প্যানেল দেখুন</translation>
 <translation id="5278823018825269962">স্ট্যাটাস আইডি</translation>
 <translation id="5280064835262749532"><ph name="SHARE_PATH" />-এর ক্রেডেনশিয়াল আপডেট করুন</translation>
 <translation id="5280243692621919988">আপনি উইন্ডো বন্ধ করে দিলে কুকি এবং সাইটের ডেটা মুছে দেয়</translation>
@@ -4434,6 +4440,7 @@
 <translation id="5826395379250998812"><ph name="DEVICE_TYPE" />-কে আপনার ফোনের সাথে কানেক্ট করুন। <ph name="LINK_BEGIN" />আরও জানুন<ph name="LINK_END" /></translation>
 <translation id="5826993284769733527">অর্ধ-স্বচ্ছ</translation>
 <translation id="5827266244928330802">Safari</translation>
+<translation id="5827733057563115968">পরবর্তী শব্দ সনাক্তকরণ</translation>
 <translation id="5828545842856466741">প্রোফাইল যোগ করুন...</translation>
 <translation id="5828633471261496623">মুদ্রন হচ্ছে...</translation>
 <translation id="5830720307094128296">&amp;পৃষ্ঠা সেভ করুন...</translation>
@@ -6129,7 +6136,6 @@
 <translation id="7685049629764448582">জাভাস্ক্রিপ্ট মেমরি</translation>
 <translation id="7685087414635069102">পিন প্রয়োজন</translation>
 <translation id="768549422429443215">ভাষা যোগ করুন বা তালিকাটি আবার সাজান।</translation>
-<translation id="7686424868232681412">Lacros একটি পরীক্ষামূলক ব্রাউজার। এই ব্রাউজার সম্পর্কিত যেকোনও অভিযোগ জানাতে এখানে যান: সহায়তা &gt; "কোনও একটি সমস্যার বিষয়ে অভিযোগ জানান..."।</translation>
 <translation id="7686938547853266130"><ph name="FRIENDLY_NAME" /> (<ph name="DEVICE_PATH" />)</translation>
 <translation id="7690294790491645610">নতুন পাসওয়ার্ড নিশ্চিত করুন</translation>
 <translation id="7690378713476594306">তালিকা থেকে বেছে নিন</translation>
@@ -6303,6 +6309,7 @@
 <translation id="78526636422538552">আরও Google অ্যাকাউন্ট যোগ করার সুবিধা এখন উপলভ্য নেই</translation>
 <translation id="7853747251428735">আরও সর&amp;ঞ্জাম</translation>
 <translation id="7855678561139483478">ট্যাবটি নতুন উইন্ডোতে খুলুন</translation>
+<translation id="7857093393627376423">টেক্সট সংক্রান্ত সাজেশন</translation>
 <translation id="7857117644404132472">ব্যতিক্রম যোগ করুন</translation>
 <translation id="7857949311770343000">আপনি কি এই পৃষ্ঠাটিকে নতুন ট্যাব পৃষ্ঠা হিসাবে আশা করছিলেন?</translation>
 <translation id="7858328180167661092"><ph name="APP_NAME" /> (Windows)</translation>

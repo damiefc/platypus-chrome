@@ -43,6 +43,27 @@ class AppListClientImpl
       public session_manager::SessionManagerObserver,
       public TemplateURLServiceObserver {
  public:
+  // Indicates the launcher usage state during the session started by a new user
+  // (i.e. the session completing the OOBE flow) but before any account
+  // switching. These are used in histograms, do not remove/renumber entries. If
+  // you're adding to this enum with the intention that it will be logged,
+  // update the AppListUsageStateByNewUsers enum listing in
+  // tools/metrics/histograms/enums.xml.
+  enum class AppListUsageStateByNewUsers {
+    // Launcher is used during the session started by a new user.
+    kUsed = 0,
+
+    // Launcher is not used before destruction. The destruction can be triggered
+    // in the following scenarios: logging out all account, shutting down the
+    // device and system crashes.
+    kNotUsedBeforeDestruction = 1,
+
+    // Launcher is not used before switching accounts.
+    kNotUsedBeforeSwitchingAccounts = 2,
+
+    kMaxValue = kNotUsedBeforeSwitchingAccounts,
+  };
+
   AppListClientImpl();
   AppListClientImpl(const AppListClientImpl&) = delete;
   AppListClientImpl& operator=(const AppListClientImpl&) = delete;
@@ -139,11 +160,12 @@ class AppListClientImpl
  private:
   FRIEND_TEST_ALL_PREFIXES(AppListClientWithProfileTest, CheckDataRace);
 
-  // TODO(https://crbug.com/1211359): Add a boolean value here to indicate
-  // whether the first launcher action has been recorded.
   struct StateForNewUser {
     // Indicates whether showing the app list has been recorded.
     bool showing_recorded = false;
+
+    // Indicates whether any launcher action has been recorded.
+    bool action_recorded = false;
   };
 
   // session_manager::SessionManagerObserver:
@@ -165,6 +187,11 @@ class AppListClientImpl
   // the result is opened from the search box.
   void RecordOpenedResultFromSearchBox(
       ash::AppListSearchResultType result_type);
+
+  // Maybe records the launcher action. Launcher actions include activating an
+  // app and opening a search result from either a suggestion chip or the search
+  // box. `launched_from` indicates where the launcher action comes from.
+  void MaybeRecordLauncherAction(ash::AppListLaunchedFrom launched_from);
 
   // The current display id showing the app list.
   int64_t display_id_ = display::kInvalidDisplayId;
@@ -205,7 +232,7 @@ class AppListClientImpl
 
   // Indicates when the session of a new user becomes active. If there is no new
   // users logged in, `new_user_session_activation_time_` is null.
-  absl::optional<base::TimeTicks> new_user_session_activation_time_;
+  absl::optional<base::Time> new_user_session_activation_time_;
 
   bool app_list_target_visibility_ = false;
   bool app_list_visible_ = false;
