@@ -207,9 +207,6 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsSubApps;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kDesktopPWAsTabStrip;
-
-COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsTabStripLinkCapturing;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -670,6 +667,9 @@ extern const base::Feature kVrBrowsingExperimentalRendering;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kWebAppManifestIconUpdating;
 #endif  // !defined(OS_ANDROID)
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kWebAppManifestPolicyAppIdentityUpdate;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 COMPONENT_EXPORT(CHROME_FEATURES)

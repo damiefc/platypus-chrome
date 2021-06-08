@@ -91,6 +91,8 @@
   if (_mode == mode)
     return;
   _mode = mode;
+  // Reset selected tabs count when mode changes.
+  self.selectedTabsCount = 0;
   [self updateLayout];
 }
 
@@ -131,12 +133,6 @@
   _closeAllOrUndoButton.enabled = enabled;
 }
 
-- (void)setSelectionModeButtonsEnabled:(BOOL)enabled {
-  _addToButton.enabled = enabled;
-  _closeTabsButton.enabled = enabled;
-  _shareButton.enabled = enabled;
-}
-
 - (void)useUndoCloseAll:(BOOL)useUndo {
   _closeAllOrUndoButton.enabled = YES;
   if (useUndo) {
@@ -170,6 +166,17 @@
 - (void)show {
   _smallNewTabButton.alpha = 1.0;
   _largeNewTabButton.alpha = 1.0;
+}
+
+#pragma mark Close Tabs
+
+- (void)setCloseTabsButtonTarget:(id)target action:(SEL)action {
+  _closeTabsButton.target = target;
+  _closeTabsButton.action = action;
+}
+
+- (void)setCloseTabsButtonEnabled:(BOOL)enabled {
+  _closeTabsButton.enabled = enabled;
 }
 
 #pragma mark - Private

@@ -52,6 +52,7 @@ CONTENT_EXPORT extern const base::Feature kCrashReporting;
 CONTENT_EXPORT extern const base::Feature kCriticalClientHint;
 CONTENT_EXPORT extern const base::Feature kDataSaverHoldback;
 CONTENT_EXPORT extern const base::Feature kDesktopCaptureChangeSource;
+CONTENT_EXPORT extern const base::Feature kDesktopPWAsTabStrip;
 CONTENT_EXPORT extern const base::Feature kDocumentPolicy;
 CONTENT_EXPORT extern const base::Feature kDocumentPolicyNegotiation;
 CONTENT_EXPORT extern const base::Feature kEarlyHintsPreloadForNavigation;
@@ -146,6 +147,7 @@ CONTENT_EXPORT extern const base::Feature
     kRunVideoCaptureServiceInBrowserProcess;
 CONTENT_EXPORT extern const base::Feature kSavePageAsWebBundle;
 CONTENT_EXPORT extern const base::Feature kSecurePaymentConfirmation;
+CONTENT_EXPORT extern const base::Feature kSecurePaymentConfirmationAPIV2;
 CONTENT_EXPORT extern const base::Feature kSecurePaymentConfirmationDebug;
 CONTENT_EXPORT extern const base::Feature
     kSendBeaconThrowForBlobWithNonSimpleType;

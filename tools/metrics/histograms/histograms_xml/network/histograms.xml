@@ -396,6 +396,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Network.Cellular.PSim.OtaActivationResult"
+    enum="NetworkCellularPSimActivationResult" expires_after="2021-11-01">
+  <owner>azeemarshad@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>hsuregan@chromium.org</owner>
+  <summary>
+    Tracks the result of attempting to activate a physical SIM card via an Over
+    the Air (OTA) activation. Emitted once the operation completes.
+  </summary>
+</histogram>
+
 <histogram name="Network.Cellular.PSim.ServiceAtLogin.Count" units="units"
     expires_after="2022-03-01">
   <owner>azeemarshad@chromium.org</owner>
@@ -568,6 +579,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <token key="SimType">
     <variant name="ESim"/>
     <variant name="PSim"/>
+  </token>
+</histogram>
+
+<histogram name="Network.DnsProxy.{ProcessType}.Event"
+    enum="DnsProxy.ProcessEvent" expires_after="2021-12-01">
+  <owner>garrick@chromium.org</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    Diagnostic metric for Chrome OS DNS proxy tracking critical process events,
+    which are emitted when conditions arise that cause fatal or disruptive
+    conditions to the service. This metric is used to monitor the stability of
+    the service and provide detailed insight into failures.
+  </summary>
+  <token key="ProcessType">
+    <variant name="ARCProxy"/>
+    <variant name="Controller"/>
+    <variant name="DefaultProxy"/>
+    <variant name="SystemProxy"/>
   </token>
 </histogram>
 

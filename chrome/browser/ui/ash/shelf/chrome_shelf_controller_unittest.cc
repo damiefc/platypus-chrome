@@ -109,10 +109,10 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
-#include "components/arc/arc_util.h"
 #include "components/arc/metrics/arc_metrics_constants.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "components/arc/mojom/compatibility_mode.mojom.h"
+#include "components/arc/test/arc_util_test_support.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -4788,8 +4788,7 @@ TEST_F(ChromeShelfControllerTest, UnpinnableComponentApps) {
   InitShelfController();
 
   const char* kPinnableApp = file_manager::kFileManagerAppId;
-  const char* kNoPinApps[] = {file_manager::kGalleryAppId,
-                              extension_misc::kFeedbackExtensionId};
+  const char* kNoPinApps[] = {extension_misc::kFeedbackExtensionId};
 
   EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
             GetPinnableForAppID(kPinnableApp, profile()));

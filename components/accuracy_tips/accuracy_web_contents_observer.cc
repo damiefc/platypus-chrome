@@ -4,6 +4,8 @@
 
 #include "components/accuracy_tips/accuracy_web_contents_observer.h"
 
+#include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/accuracy_tips/accuracy_service.h"
 #include "components/accuracy_tips/accuracy_tip_status.h"
 #include "components/accuracy_tips/features.h"
@@ -58,6 +60,8 @@ void AccuracyWebContentsObserver::DidFinishNavigation(
 void AccuracyWebContentsObserver::OnAccuracyStatusObtained(
     const GURL& url,
     AccuracyTipStatus result) {
+  UMA_HISTOGRAM_ENUMERATION("Privacy.AccuracyTip.PageStatus", result);
+
   if (result == AccuracyTipStatus::kNone)
     return;
 

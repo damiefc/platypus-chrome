@@ -302,11 +302,6 @@ const base::Feature kDesktopPWAsSharedStoreService{
 const base::Feature kDesktopPWAsSubApps{"DesktopPWAsSubApps",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Adds a tab strip to PWA windows, used for UI experimentation.
-// TODO(crbug.com/897314): Enable this feature.
-const base::Feature kDesktopPWAsTabStrip{"DesktopPWAsTabStrip",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Makes user navigations via links within web app scopes get captured tab
 // tabbed app windows.
 // TODO(crbug.com/897314): Enable this feature.
@@ -980,6 +975,9 @@ const base::Feature kUserActivityEventLogging{"UserActivityEventLogging",
 const base::Feature kWebAppManifestIconUpdating{
     "WebAppManifestIconUpdating", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
+
+const base::Feature kWebAppManifestPolicyAppIdentityUpdate{
+    "WebAppManifestPolicyAppIdentityUpdate", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // When enabled, the Ash browser only manages system web apps, and non-system

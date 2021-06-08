@@ -7,9 +7,12 @@
 
 #include "base/scoped_native_library.h"
 #include "chromeos/services/ime/ime_decoder.h"
-#include "chromeos/services/ime/input_engine.h"
 #include "chromeos/services/ime/public/cpp/shared_lib/interfaces.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace chromeos {
@@ -42,11 +45,10 @@ class DecoderEngine : public mojom::InputChannel {
       const std::string& text,
       uint32_t offset,
       mojom::SelectionRangePtr selection_range) override {}
-  void OnCompositionCanceled() override {}
+  void OnCompositionCanceledBySystem() override {}
   void ProcessKeypressForRulebased(
       mojom::PhysicalKeyEventPtr event,
       ProcessKeypressForRulebasedCallback callback) override {}
-  void ResetForRulebased() override {}
   void CommitText(const std::string& text,
                   mojom::CommitTextCursorBehavior cursor_behavior) override {}
   void SetComposition(const std::string& text) override {}

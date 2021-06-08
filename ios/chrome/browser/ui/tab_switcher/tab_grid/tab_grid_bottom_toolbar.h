@@ -46,14 +46,17 @@
 - (void)setDoneButtonTarget:(id)target action:(SEL)action;
 // Set |enabled| on the new tab button.
 - (void)setNewTabButtonEnabled:(BOOL)enabled;
-// Set |enabled| on the selection mode buttons.
-- (void)setSelectionModeButtonsEnabled:(BOOL)enabled;
 // Set |enabled| on the done button.
 - (void)setDoneButtonEnabled:(BOOL)enabled;
 // Set |enabled| on the closeAll button.
 - (void)setCloseAllButtonEnabled:(BOOL)enabled;
 // use undo or closeAll text on the close all button based on |useUndo| value.
 - (void)useUndoCloseAll:(BOOL)useUndo;
+
+// Sets target/action for tapping event on close tabs button.
+- (void)setCloseTabsButtonTarget:(id)target action:(SEL)action;
+// Set |enabled| on the close tabs button.
+- (void)setCloseTabsButtonEnabled:(BOOL)enabled;
 
 // Hides components and uses a black background color for tab grid transition
 // animation.
