@@ -216,10 +216,9 @@ std::string ConstructDataFrameForVersion(base::StringPiece body,
   if (!version.HasIetfQuicFrames()) {
     return std::string(body);
   }
-  std::unique_ptr<char[]> buffer;
-  auto header_length =
-      quic::HttpEncoder::SerializeDataFrameHeader(body.size(), &buffer);
-  return base::StrCat({base::StringPiece(buffer.get(), header_length), body});
+  quic::QuicBuffer buffer = quic::HttpEncoder::SerializeDataFrameHeader(
+      body.size(), quic::SimpleBufferAllocator::Get());
+  return base::StrCat({base::StringPiece(buffer.data(), buffer.size()), body});
 }
 
 }  // namespace
@@ -942,11 +941,11 @@ class QuicNetworkTransactionTest
         GetNthClientInitiatedBidirectionalStreamId(n);
     EXPECT_LT(cancelled_stream_id, 63u);
 
-    const unsigned char opcode = 0x40;
+    const char opcode = 0x40;
     if (create_stream) {
-      return {0x03, opcode | static_cast<unsigned char>(cancelled_stream_id)};
+      return {0x03, static_cast<char>(opcode | cancelled_stream_id)};
     } else {
-      return {opcode | static_cast<unsigned char>(cancelled_stream_id)};
+      return {static_cast<char>(opcode | cancelled_stream_id)};
     }
   }
 

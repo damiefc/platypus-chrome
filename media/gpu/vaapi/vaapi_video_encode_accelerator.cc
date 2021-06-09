@@ -40,9 +40,9 @@
 #include "media/gpu/vaapi/vaapi_common.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
-#include "media/gpu/vaapi/vp8_encoder.h"
-#include "media/gpu/vaapi/vp9_encoder.h"
+#include "media/gpu/vaapi/vp8_vaapi_video_encoder_delegate.h"
 #include "media/gpu/vaapi/vp9_temporal_layers.h"
+#include "media/gpu/vaapi/vp9_vaapi_video_encoder_delegate.h"
 #include "media/gpu/vp8_reference_frame_vector.h"
 #include "media/gpu/vp9_reference_frame_vector.h"
 
@@ -289,14 +289,16 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
       break;
     case kCodecVP8:
       if (!IsConfiguredForTesting())
-        encoder_ = std::make_unique<VP8Encoder>(vaapi_wrapper_, error_cb);
+        encoder_ = std::make_unique<VP8VaapiVideoEncoderDelegate>(
+            vaapi_wrapper_, error_cb);
 
       DCHECK_EQ(ave_config.bitrate_control,
                 VaapiVideoEncoderDelegate::BitrateControl::kConstantBitrate);
       break;
     case kCodecVP9:
       if (!IsConfiguredForTesting())
-        encoder_ = std::make_unique<VP9Encoder>(vaapi_wrapper_, error_cb);
+        encoder_ = std::make_unique<VP9VaapiVideoEncoderDelegate>(
+            vaapi_wrapper_, error_cb);
 
       ave_config.bitrate_control = VaapiVideoEncoderDelegate::BitrateControl::
           kConstantQuantizationParameter;

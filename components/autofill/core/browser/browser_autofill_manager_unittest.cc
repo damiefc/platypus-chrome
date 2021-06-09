@@ -581,7 +581,8 @@ class BrowserAutofillManagerTest : public testing::Test {
   }
 
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
-                       const std::string& real_pan) {
+                       const std::string& real_pan,
+                       bool is_virtual_card = false) {
     payments::FullCardRequest* full_card_request =
         browser_autofill_manager_->credit_card_access_manager_
             ->cvc_authenticator_->full_card_request_.get();
@@ -594,6 +595,8 @@ class BrowserAutofillManagerTest : public testing::Test {
 
     // Mock payments response.
     payments::PaymentsClient::UnmaskResponseDetails response;
+    response.card_type = is_virtual_card ? AutofillClient::VIRTUAL_CARD
+                                         : AutofillClient::SERVER_CARD;
     full_card_request->OnDidGetRealPan(result,
                                        response.with_real_pan(real_pan));
   }
@@ -8383,9 +8386,8 @@ TEST_P(BrowserAutofillManagerStructuredProfileTest,
        GetCreditCardSuggestions_VirtualCard) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {features::kAutofillSuggestVirtualCardsOnlyOnFullFormDetection,
-       features::kAutofillEnableMerchantBoundVirtualCards},
-      {});
+      {features::kAutofillEnableMerchantBoundVirtualCards},
+      {features::kAutofillSuggestVirtualCardsOnIncompleteForm});
 
   personal_data_.ClearCreditCards();
   CreditCard masked_server_card(CreditCard::MASKED_SERVER_CARD,

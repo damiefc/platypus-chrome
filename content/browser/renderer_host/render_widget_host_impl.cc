@@ -909,6 +909,8 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   auto& current_screen_info = visual_properties.screen_infos.mutable_current();
 
   visual_properties.is_fullscreen_granted = delegate_->IsFullscreen();
+  visual_properties.window_controls_overlay_rect =
+      delegate_->GetWindowsControlsOverlayRect();
 
   if (is_frame_widget)
     visual_properties.display_mode = delegate_->GetDisplayMode();
@@ -2497,7 +2499,10 @@ void RenderWidgetHostImpl::RequestClosePopup() {
 
 void RenderWidgetHostImpl::SetPopupBounds(const gfx::Rect& bounds,
                                           SetPopupBoundsCallback callback) {
-  if (view_)
+  // If the browser changes bounds, do not allow renderer changing bounds at the
+  // same time until it acked the changes. Otherwise, if they simultaneously
+  // change bounds, browser's bounds can be clobbered.
+  if (view_ && !waiting_for_screen_rects_ack_)
     view_->SetBounds(bounds);
   std::move(callback).Run();
 }
@@ -2671,7 +2676,9 @@ bool RenderWidgetHostImpl::StoredVisualPropertiesNeedsUpdate(
          old_visual_properties->is_pinch_gesture_active !=
              new_visual_properties.is_pinch_gesture_active ||
          old_visual_properties->root_widget_window_segments !=
-             new_visual_properties.root_widget_window_segments;
+             new_visual_properties.root_widget_window_segments ||
+         old_visual_properties->window_controls_overlay_rect !=
+             new_visual_properties.window_controls_overlay_rect;
 }
 
 void RenderWidgetHostImpl::AutoscrollStart(const gfx::PointF& position) {

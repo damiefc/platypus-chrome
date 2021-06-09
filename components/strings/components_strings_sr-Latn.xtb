@@ -401,6 +401,7 @@ To inače blokiraju podešavanja privatnosti. To omogućava da sadržaj sa koji
 <translation id="2359629602545592467">Više</translation>
 <translation id="2359808026110333948">Nastavite</translation>
 <translation id="2359961752320758691">Broj virtuelne kartice je primenjen.</translation>
+<translation id="236340516568226369">Meni za promenu veličine</translation>
 <translation id="2367567093518048410">Nivo</translation>
 <translation id="2372464001869762664">Kada budete potvrdili, podaci o kartici sa Google naloga će se deliti sa ovim sajtom. Pronađite CVC u detaljima o Plex nalogu.</translation>
 <translation id="2380886658946992094">Legal</translation>
@@ -767,6 +768,7 @@ To inače blokiraju podešavanja privatnosti. To omogućava da sadržaj sa koji
 <translation id="3754210790023674521">Izađi iz režima slike u slici</translation>
 <translation id="3759461132968374835">Nemate nijedno nedavno prijavljeno otkazivanje. Otkazivanja koja su se desila dok je prijavljivanje otkazivanja bilo onemogućeno neće se ovde prikazati.</translation>
 <translation id="3760561303380396507">Želite li da koristite Windows Hello umesto CVC-a?</translation>
+<translation id="3761171036307311438">Ime i prezime na kartici:</translation>
 <translation id="3761718714832595332">Sakrij status</translation>
 <translation id="3765032636089507299">Radovi na stranici Bezbedno pregledanje su u toku.</translation>
 <translation id="3765588406864124894">9. poštansko sanduče</translation>
@@ -1712,6 +1714,7 @@ Dodatni detalji:
 <translation id="734600844861828519">11x15</translation>
 <translation id="7346048084945669753">Povezan je:</translation>
 <translation id="7349430561505560861">A4-Extra</translation>
+<translation id="7352651011704765696">Nešto nije u redu</translation>
 <translation id="7353601530677266744">Komandna linija</translation>
 <translation id="7359588939039777303">Oglasi su blokirani.</translation>
 <translation id="7363096869660964304">Međutim, niste nevidljivi. Prelaskom u režim bez arhiviranja nećete sakriti pregledanje od poslodavca, internet provajdera ili veb-sajtova koje posećujete.</translation>

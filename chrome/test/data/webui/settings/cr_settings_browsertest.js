@@ -374,7 +374,7 @@ var CrSettingsPasswordsCheckV3Test = class extends CrSettingsV3BrowserTest {
 };
 
 // Flaky on Mac builds https://crbug.com/1143801
-GEN('#if defined(OS_MAC)');
+GEN('#if (defined(OS_MAC)) || (defined(OS_LINUX))');
 GEN('#define MAYBE_All DISABLED_All');
 GEN('#else');
 GEN('#define MAYBE_All All');
@@ -508,6 +508,10 @@ TEST_F(
     'CrSettingsPrivacyPageV3Test', 'PrivacySandboxSettingsEnabled', function() {
       runMochaSuite('PrivacySandboxSettingsEnabled');
     });
+
+TEST_F('CrSettingsPrivacyPageV3Test', 'PrivacyReviewEnabled', function() {
+  runMochaSuite('PrivacyReviewEnabled');
+});
 
 // TODO(crbug.com/1043665): flaky crash on Linux Tests (dbg).
 TEST_F(

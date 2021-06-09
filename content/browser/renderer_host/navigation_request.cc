@@ -1456,7 +1456,7 @@ NavigationRequest::~NavigationRequest() {
 
     // Abandon the prerender host reserved for activation if it exists.
     if (IsPrerenderedPageActivation()) {
-      GetPrerenderHostRegistry().AbandonReservedHost(
+      GetPrerenderHostRegistry().OnActivationFinished(
           prerender_frame_tree_node_id_.value());
     }
 
@@ -3045,7 +3045,7 @@ void NavigationRequest::OnRequestFailedInternal(
     if (net_error_ == net::Error::ERR_BLOCKED_BY_CSP) {
       final_status = PrerenderHost::FinalStatus::kNavigationRequestBlockedByCsp;
     }
-    GetPrerenderHostRegistry().AbandonHost(GetFrameTreeNodeId(), final_status);
+    GetPrerenderHostRegistry().CancelHost(GetFrameTreeNodeId(), final_status);
     return;
   }
 
@@ -4791,6 +4791,11 @@ void NavigationRequest::CancelDeferredNavigation(
 
 void NavigationRequest::RegisterThrottleForTesting(
     std::unique_ptr<NavigationThrottle> navigation_throttle) {
+  // Throttles will already have run the first time the page was navigated, we
+  // won't run them again on activation. See instead CommitDeferringCondition.
+  DCHECK(!IsPageActivation())
+      << "Attempted to register a NavigationThrottle for an activating "
+         "navigation which will not work.";
   throttle_runner_->AddThrottle(std::move(navigation_throttle));
 }
 bool NavigationRequest::IsDeferredForTesting() {
@@ -4868,7 +4873,11 @@ void NavigationRequest::WillStartRequest() {
     return;
   }
 
-  throttle_runner_->RegisterNavigationThrottles();
+  // Throttles will already have run the first time the page was navigated, we
+  // won't run them again on activation.
+  if (!IsPageActivation())
+    throttle_runner_->RegisterNavigationThrottles();
+
   commit_deferrer_->RegisterDeferringConditions(*this);
 
   // If the content/ embedder did not pass the NavigationUIData at the beginning

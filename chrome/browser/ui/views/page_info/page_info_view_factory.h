@@ -18,6 +18,27 @@ class PageInfoViewFactory {
                       ChromePageInfoUiDelegate* ui_delegate,
                       PageInfoNavigationHandler* navigation_handler);
 
+  // TODO(olesiamarukhno): Update icons to be all the same size (16).
+  static constexpr int kVectorIconSize = 18;
+  // Bubble width constraints.
+  static constexpr int kMinBubbleWidth = 320;
+  static constexpr int kMaxBubbleWidth = 1000;
+
+  enum PageInfoViewID {
+    VIEW_ID_NONE = 0,
+    VIEW_ID_PAGE_INFO_BUTTON_CHANGE_PASSWORD,
+    VIEW_ID_PAGE_INFO_BUTTON_ALLOWLIST_PASSWORD_REUSE,
+    VIEW_ID_PAGE_INFO_LABEL_EV_CERTIFICATE_DETAILS,
+    VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG,
+    VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SITE_SETTINGS,
+    VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_CERTIFICATE_VIEWER,
+    VIEW_ID_PAGE_INFO_BUTTON_END_VR,
+    VIEW_ID_PAGE_INFO_HOVER_BUTTON_VR_PRESENTATION,
+    VIEW_ID_PAGE_INFO_BUTTON_LEAVE_SITE,
+    VIEW_ID_PAGE_INFO_BUTTON_IGNORE_WARNING,
+    VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_SECURITY_INFORMATION,
+  };
+
   // Creates a separator view with padding on top and bottom. Use with flex
   // layout only.
   static std::unique_ptr<views::View> CreateSeparator() WARN_UNUSED_RESULT;

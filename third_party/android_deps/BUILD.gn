@@ -138,7 +138,7 @@ java_prebuilt("com_android_tools_common_java") {
   # This target does not come with most of its dependencies and is
   # only meant to be used by the resources shrinker. If you wish to use
   # this for other purposes, change buildCompileNoDeps in build.gradle.
-  visibility = [ "//build/android/unused_resources:*" ]
+  visibility = [ "//build/android/gyp/resources_shrinker:*" ]
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -150,7 +150,7 @@ java_prebuilt("com_android_tools_layoutlib_layoutlib_api_java") {
   # This target does not come with most of its dependencies and is
   # only meant to be used by the resources shrinker. If you wish to use
   # this for other purposes, change buildCompileNoDeps in build.gradle.
-  visibility = [ "//build/android/unused_resources:*" ]
+  visibility = [ "//build/android/gyp/resources_shrinker:*" ]
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -162,7 +162,7 @@ java_prebuilt("com_android_tools_sdk_common_java") {
   # This target does not come with most of its dependencies and is
   # only meant to be used by the resources shrinker. If you wish to use
   # this for other purposes, change buildCompileNoDeps in build.gradle.
-  visibility = [ "//build/android/unused_resources:*" ]
+  visibility = [ "//build/android/gyp/resources_shrinker:*" ]
 }
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
@@ -392,7 +392,7 @@ java_prebuilt("org_checkerframework_checker_compat_qual_java") {
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
 java_prebuilt("org_jetbrains_kotlin_kotlin_stdlib_java") {
-  jar_path = "libs/org_jetbrains_kotlin_kotlin_stdlib/kotlin-stdlib-1.4.32.jar"
+  jar_path = "libs/org_jetbrains_kotlin_kotlin_stdlib/kotlin-stdlib-1.5.10.jar"
   output_name = "org_jetbrains_kotlin_kotlin_stdlib"
   supports_android = true
   deps = [
@@ -680,7 +680,7 @@ java_prebuilt("org_jetbrains_annotations_java") {
 
 # This is generated, do not edit. Update BuildConfigGenerator.groovy instead.
 java_prebuilt("org_jetbrains_kotlin_kotlin_stdlib_common_java") {
-  jar_path = "libs/org_jetbrains_kotlin_kotlin_stdlib_common/kotlin-stdlib-common-1.4.32.jar"
+  jar_path = "libs/org_jetbrains_kotlin_kotlin_stdlib_common/kotlin-stdlib-common-1.5.10.jar"
   output_name = "org_jetbrains_kotlin_kotlin_stdlib_common"
   supports_android = true
 

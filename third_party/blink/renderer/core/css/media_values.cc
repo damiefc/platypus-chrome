@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/css/media_values.h"
 #include "third_party/blink/renderer/core/css/media_values_cached.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -27,6 +28,20 @@
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 
 namespace blink {
+
+namespace {
+static ForcedColors CSSValueIDToForcedColors(CSSValueID id) {
+  switch (id) {
+    case CSSValueID::kActive:
+      return ForcedColors::kActive;
+    case CSSValueID::kNone:
+      return ForcedColors::kNone;
+    default:
+      NOTREACHED();
+      return ForcedColors::kNone;
+  }
+}
+}  // namespace
 
 mojom::blink::PreferredColorScheme CSSValueIDToPreferredColorScheme(
     CSSValueID id) {
@@ -241,7 +256,14 @@ bool MediaValues::CalculatePrefersReducedData(LocalFrame* frame) {
           !frame->GetSettings()->GetDataSaverHoldbackWebApi());
 }
 
-ForcedColors MediaValues::CalculateForcedColors() {
+ForcedColors MediaValues::CalculateForcedColors(LocalFrame* frame) {
+  DCHECK(frame);
+  DCHECK(frame->GetSettings());
+  if (const auto* overrides = frame->GetPage()->GetMediaFeatureOverrides()) {
+    MediaQueryExpValue value = overrides->GetOverride("forced-colors");
+    if (value.IsValid())
+      return CSSValueIDToForcedColors(value.id);
+  }
   if (Platform::Current() && Platform::Current()->ThemeEngine())
     return Platform::Current()->ThemeEngine()->GetForcedColors();
   else

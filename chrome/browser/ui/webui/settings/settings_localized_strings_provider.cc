@@ -1273,6 +1273,7 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   html_source->AddBoolean("isAccountManagerEnabled",
                           IsAccountManagerAvailable(profile));
+  html_source->AddBoolean("isMainProfile", profile->IsMainProfile());
 #endif
 
   AddSignOutDialogStrings(html_source, profile);
@@ -1539,6 +1540,17 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
   }
 }
 
+void AddPrivacyReviewStrings(content::WebUIDataSource* html_source) {
+  // Strings used outside the privacy review. The i18n preprocessor might
+  // replace those before the corresponding flag value is checked, which is why
+  // they are included independently of the flag value.
+  static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"privacyReviewLabel", IDS_SETTINGS_PRIVACY_REVIEW_LABEL},
+      {"privacyReviewSublabel", IDS_SETTINGS_PRIVACY_REVIEW_SUBLABEL},
+  };
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+}
+
 void AddSafetyCheckStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"safetyCheckSectionTitle", IDS_SETTINGS_SAFETY_CHECK_SECTION_TITLE},
@@ -1622,6 +1634,7 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SEARCH_ENGINES_EDIT_SEARCH_ENGINE},
       {"searchEngines", IDS_SETTINGS_SEARCH_ENGINES},
       {"searchEnginesDefault", IDS_SETTINGS_SEARCH_ENGINES_DEFAULT_ENGINES},
+      {"searchEnginesActive", IDS_SETTINGS_SEARCH_ENGINES_YOUR_ENGINES},
       {"searchEnginesOther", IDS_SETTINGS_SEARCH_ENGINES_OTHER_ENGINES},
       {"searchEnginesNoOtherEngines",
        IDS_SETTINGS_SEARCH_ENGINES_NO_OTHER_ENGINES},
@@ -1651,6 +1664,9 @@ void AddSearchEnginesStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showKeywordTriggerSetting",
       base::FeatureList::IsEnabled(omnibox::kKeywordSpaceTriggeringSetting));
+  html_source->AddBoolean(
+      "showActiveSearchEngines",
+      base::FeatureList::IsEnabled(omnibox::kActiveSearchEngines));
 }
 
 void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
@@ -2658,6 +2674,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddOnStartupStrings(html_source);
   AddPeopleStrings(html_source, profile);
   AddPrivacySandboxStrings(html_source, profile);
+  AddPrivacyReviewStrings(html_source);
   AddPrivacyStrings(html_source, profile);
   AddSafetyCheckStrings(html_source);
   AddResetStrings(html_source, profile);

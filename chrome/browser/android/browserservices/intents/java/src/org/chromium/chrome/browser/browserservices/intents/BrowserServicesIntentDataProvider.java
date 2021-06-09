@@ -455,25 +455,4 @@ public abstract class BrowserServicesIntentDataProvider {
     public boolean shouldHideOmniboxSuggestionsForCctVisits() {
         return false;
     }
-
-    /**
-     * Returns true if visits from cct should be hidden.
-     */
-    public boolean shouldHideCctVisits() {
-        return false;
-    }
-
-    /**
-     * Returns true if 'open in chrome' should be shown in the tab context menu.
-     */
-    public boolean shouldShowOpenInChromeMenuItemInContextMenu() {
-        return true;
-    }
-
-    /**
-     * Returns true if 'open in chrome' should be shown in the app menu.
-     */
-    public boolean shouldShowOpenInChromeMenuItem() {
-        return true;
-    }
 }

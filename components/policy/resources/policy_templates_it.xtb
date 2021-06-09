@@ -113,6 +113,7 @@
             * digest
             * ntlm
             Se questa opzione non viene impostata, potranno essere usati tutti i tre schemi.</translation>
+<translation id="1153306961094113710">Consenti debug remoto</translation>
 <translation id="1158844608156732189">La configurazione Kerberos (una riga per elemento array); visita la pagina https://web.mit.edu/kerberos/krb5-1.12/doc/admin/conf_files/krb5_conf.html.</translation>
 <translation id="1160479894929412407">Consenti protocollo QUIC</translation>
 <translation id="1160939557934457296">Disattiva procedendo dalla pagina di avviso Navigazione sicura</translation>
@@ -391,6 +392,7 @@ Se disattivi questo criterio, lo scorrimento della pagina web ai frammenti di te
 <translation id="1515230621229117540">Attiva il menu Accessibilità mobile</translation>
 <translation id="1515824657887788963">Consenti a una pagina di fare richieste XHR sincrone durante l'uscita dalla pagina</translation>
 <translation id="1516486219683984217">Non consentire l'uso delle notifiche di sistema</translation>
+<translation id="152078218786467087">L'ora in cui dovrebbe essere eseguito il riavvio, nel fuso orario locale del dispositivo.</translation>
 <translation id="1522425503138261032">Consenti ai siti di monitorare la posizione fisica degli utenti</translation>
 <translation id="1523774894176285446">Browser alternativo da aprire per i siti web configurati.</translation>
 <translation id="1524243669991877602">Se il criterio viene impostato su Attivato, è possibile unire i criteri associati a un account <ph name="GOOGLE_WORKSPACE_PRODUCT_NAME" /> ai criteri a livello di macchina.
@@ -478,9 +480,6 @@ Se disattivi questo criterio, lo scorrimento della pagina web ai frammenti di te
       Se il valore <ph name="IDLE_ACTION_FIELD_NAME" /> non viene impostato, viene usato il valore <ph name="IDLE_ACTION_ENUM_SUSPEND" />.
 
       Nota: esistono impostazioni separate per l'alimentazione CA e la batteria.</translation>
-<translation id="1606917441621112087">Se il criterio viene impostato su true, il visualizzatore di PDF interno viene disattivato in <ph name="PRODUCT_NAME" />, i file PDF vengono considerati come file scaricati e gli utenti possono aprire i PDF con l'applicazione predefinita.
-
-      Se il criterio viene impostato su false o se non viene configurato, i file PDF vengono aperti, a meno che gli utenti disattivino il plug-in di PDF.</translation>
 <translation id="1608755754295374538">URL a cui verrà concesso l'accesso ai dispositivi di acquisizione audio senza richieste</translation>
 <translation id="1611394564825535541">Consente di controllare se gli utenti possono accedere alle stampanti non aziendali.
 
@@ -2085,6 +2084,7 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
 
       Se il criterio non viene configurato, viene usata l'opzione <ph name="PRINTERS_ALLOW_ALL" />.</translation>
 <translation id="3695706037816556327">Azione alla rimozione del token di sicurezza (ad esempio smart card) per <ph name="PRODUCT_OS_NAME" /></translation>
+<translation id="3700193037252896716">La frequenza del riavvio.</translation>
 <translation id="3700318587977845664">La frequenza del controllo della disponibilità di aggiornamenti.</translation>
 <translation id="3701121231485832347">Consente di gestire le impostazioni specifiche dei dispositivi <ph name="PRODUCT_OS_NAME" /> gestiti da <ph name="MS_AD_NAME" />.</translation>
 <translation id="3702518095257671450">Attestazione da remoto</translation>
@@ -2308,6 +2308,11 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
           Se imposti questo criterio, gli utenti non potranno modificarlo o ignorarlo.
 
           Se questo criterio non viene impostato, inizialmente i tasti permanenti sono disattivati nella schermata di accesso, ma l'utente può attivarli in qualsiasi momento.</translation>
+<translation id="3932553013632130433">
+      Consente di specificare se è possibile usare SharedArrayBuffers in un contesto senza isolamento multiorigine. Chrome richiede l'isolamento multiorigine se SharedArrayBuffers viene usato con Chrome 91 o versioni successive (dal 25/05/2021) per motivi di compatibilità web. Ulteriori dettagli sono disponibili all'indirizzo:
+      https://developer.chrome.com/blog/enabling-shared-array-buffer/.
+      Se questo criterio viene impostato su Vero, i siti possono usare SharedArrayBuffer senza limitazioni.
+      Se viene impostato su Falso o se non viene configurato, i siti possono usare SharedArrayBuffers soltanto con isolamento multiorigine.</translation>
 <translation id="3942041691320538491">Se il criterio è impostato su 0 (valore predefinito), è possibile accedere agli strumenti per sviluppatori e alla console JavaScript, ma non se ci sono estensioni installate in base alle norme aziendali. Se il criterio è impostato su 1, è possibile accedere agli strumenti per sviluppatori e alla console JavaScript in ogni caso, anche se ci sono estensioni installate in base alle norme aziendali. Se il criterio è impostato su 2, non è possibile accedere agli strumenti per sviluppatori, né esaminare gli elementi del sito web.
 
       Questa impostazione disattiva anche le scorciatoie da tastiera e le voci dei menu o dei menu contestuali per aprire gli strumenti per sviluppatori o la console JavaScript.</translation>
@@ -3038,6 +3043,7 @@ Se il criterio viene disattivato, <ph name="PRODUCT_OS_NAME" /> disattiva il Blu
       * Se hanno ambito o livello diversi: verrà applicato il criterio con la priorità massima.
 
       Se un criterio è nell'elenco, nel caso ci sia conflitto tra le origini, l'ambito o il livello, verrà applicato il criterio con la priorità massima.</translation>
+<translation id="5055474681190962362">Il giorno del mese [1-31] in cui dovrebbe essere eseguito il riavvio, nel fuso orario locale del dispositivo. Questo criterio viene usato soltanto se il valore del criterio "frequency" è "MONTHLY". Se questo numero supera il numero di giorni massimo presente in un mese specifico, verrà scelto l'ultimo giorno del mese.</translation>
 <translation id="5056708224511062314">Ingrandimento dello schermo disattivato</translation>
 <translation id="5058573563327660283">Seleziona la strategia da utilizzare per liberare spazio su disco durante la pulizia automatica (obsoleta)</translation>
 <translation id="5059201920681374653">Gli account gestiti devono trovarsi un su dispositivo gestito affiliato</translation>
@@ -3241,6 +3247,7 @@ Se questo criterio viene impostato su Falso, <ph name="PRODUCT_NAME" /> non util
           Se questa norma viene impostata su False, gli utenti non potranno trasmettere contenuti al proprio dispositivo. Se questa norma viene impostata su True, gli utenti potranno trasmettere contenuti. Se questa norma non viene impostata, gli utenti non potranno trasmettere contenuti a dispositivi Chrome OS registrati, ma potranno trasmetterli a dispositivi non registrati.</translation>
 <translation id="5323200200131319468">Attiva la funzione di lettura vocale nella schermata di accesso</translation>
 <translation id="532848608876725157">Attiva DNS over HTTPS con fallback non sicuro</translation>
+<translation id="5328965694451556034">Segnala accesso/uscita</translation>
 <translation id="5329007337159326804">Attenzione: la norma Versione TLS massima verrà interamente rimossa da <ph name="PRODUCT_NAME" /> con la versione 75 (orientativamente giugno 2019).
 
       Se questa norma non viene configurata, <ph name="PRODUCT_NAME" /> utilizza la versione massima predefinita.
@@ -3563,6 +3570,11 @@ Se il criterio viene configurato, gli utenti non possono apportare modifiche. Gl
 
           Il valore del criterio viene applicato solo se il criterio <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> viene attivato e non è applicabile in caso contrario.</translation>
 <translation id="5697306356229823047">Segnala utenti dispositivo</translation>
+<translation id="5699770471852263667">Se il criterio viene impostato su Attivato, il visualizzatore di PDF interno viene disattivato in <ph name="PRODUCT_NAME" />, i file PDF vengono considerati come file scaricati e gli utenti possono aprire i PDF con l'applicazione predefinita.
+
+      Se il criterio viene impostato su Disattivato, i file PDF vengono aperti con il plug-in di PDF, se non viene disattivato dagli utenti.
+
+      Se il criterio viene impostato, gli utenti non possono modificarlo in <ph name="PRODUCT_NAME" />. Se non viene impostato, gli utenti possono scegliere se aprire o meno i file PDF esternamente.</translation>
 <translation id="570062449808736508">Se per questa norma viene impostata una stringa, WebView legge le limitazioni relative agli URL del fornitore di contenuti con il nome dell'autorità indicato.</translation>
 <translation id="5708969689202733975">Configura le modalità di sblocco rapido consentite</translation>
 <translation id="5715617256528927547">La configurazione del criterio consente di specificare la durata in ore della cache dell'Oggetto Criteri di gruppo (GPO): tempo massimo in cui i GPO possono essere riutilizzati prima di essere scaricati nuovamente. Invece di scaricarli di nuovo a ogni recupero del criterio, il sistema riutilizza i GPO memorizzati nella cache finché la loro versione non viene modificata.
@@ -3844,12 +3856,6 @@ Per ulteriori informazioni sui contesti sicuri, visita il sito https://www.w3.or
 <translation id="6111936128861357925">Attiva il gioco del dinosauro</translation>
 <translation id="6123052603197028610">Non consentire query ai server Google per recuperare i timestamp</translation>
 <translation id="6132506775968708399">Blocca cookie di terze parti</translation>
-<translation id="6132739217670763962">
-      Consente di specificare se il criterio SharedArrayBuffers può essere utilizzato in un contesto
-      isolato da tutte le origini. Chrome richiede l'isolamento da tutte le origini se il criterio
-      SharedArrayBuffers viene utilizzato con Chrome 91 e versioni successive (dal 25-05-2021) per motivi di compatibilità
-      web. Ulteriori dettagli sono disponibili all'indirizzo:
-      https://developer.chrome.com/blog/enabling-shared-array-buffer/.</translation>
 <translation id="6133088669883929098">Consenti a tutti i siti di utilizzare la generazione di chiavi</translation>
 <translation id="6135398260575578389">Navigazione sicura è attiva in modalità potenziata. Questa modalità fornisce maggior sicurezza, ma non richiede la condivisione di ulteriori dati di navigazione con Google.</translation>
 <translation id="6138636318340561140">Controlla lo stato degli URL in tempo reale con Navigazione sicura</translation>
@@ -4668,6 +4674,7 @@ Per ulteriori informazioni sui contesti sicuri, visita il sito https://www.w3.or
 
       Se il criterio non viene impostato, la barra delle app verrà posizionata per impostazione predefinita nella parte inferiore dello schermo, ma l'utente potrà cambiare la posizione.</translation>
 <translation id="7040229947030068419">Valore di esempio:</translation>
+<translation id="7041170641363384736">Consente di impostare una programmazione personalizzata per il riavvio dei dispositivi. Attualmente il criterio viene applicato soltanto ai dispositivi per cui è stato attivato l'avvio automatico dell'app nella sessione Kiosk. Se viene impostato su Vero, il dispositivo verrà riavviato in base alla programmazione. Il criterio deve essere rimosso per annullare ulteriori riavvii programmati.</translation>
 <translation id="7044883996351280650">Controlla il servizio backup e ripristino di Android</translation>
 <translation id="7060497964524144376">Se il criterio viene impostato su Attivato, Navigazione sicura considera attendibili i domini indicati. Non esegue alcun controllo su questi domini per risorse pericolose come phishing, malware o software indesiderato. Il servizio di protezione dei download di Navigazione sicura non esegue alcun controllo sui download ospitati su questi domini. Il servizio di protezione tramite password di Navigazione sicura non esegue alcun controllo per il riutilizzo delle password.
 
@@ -5164,6 +5171,7 @@ Nota. Attualmente i riavvii automatici vengono attivati soltanto durante la visu
 <translation id="7709470712369261710">Non usare i servizi Google per fornire le descrizioni immagini automatiche</translation>
 <translation id="7712109699186360774">Chiedi ogni volta che un sito vuole accedere alla fotocamera e/o al microfono</translation>
 <translation id="7713608076604149344">Limitazioni dei download</translation>
+<translation id="7713845740295404764">Segnala eventi di accesso/uscita</translation>
 <translation id="7715711044277116530">Percentuale di regolazione del ritardo di oscuramento dello schermo in modalità di presentazione</translation>
 <translation id="7716020145539921591">Questo criterio è deprecato. Usa il criterio <ph name="PROXY_SETTINGS_POLICY_NAME" />.
 
@@ -5396,6 +5404,7 @@ Se attivi questa impostazione o non imposti un valore, la funzione Compilazione 
       Se il criterio viene impostato su Disattivato o se non viene configurato, i dispositivi registrati non segnalano statistiche relative all'archiviazione.</translation>
 <translation id="8044493735196713914">Indicazione modalità di avvio dispositivo</translation>
 <translation id="80453040817068401">Rendi disponibile il browser <ph name="LACROS_NAME" /></translation>
+<translation id="804619600634661088">Consenti l'uso del debug remoto</translation>
 <translation id="8049769137921877885">Questo criterio consente di stabilire se segnalare o meno i dati del criterio e data e ora del relativo recupero.
 
       Se il criterio <ph name="CLOUD_REPORTING_ENABLED_POLICY_NAME" /> non viene configurato o viene disattivato, viene ignorato.
@@ -5484,6 +5493,7 @@ Se questo criterio non viene impostato, la Schermata sulla privacy viene inizial
           Se imposti questo criterio, gli utenti non potranno modificarlo o ignorarlo.
 
           Se questo criterio non viene impostato, inizialmente l'evidenziazione del cursore è disattivata, ma l'utente può attivarla in qualsiasi momento.</translation>
+<translation id="8161536598508377155">Imposta una programmazione personalizzata per il riavvio dei dispositivi kiosk</translation>
 <translation id="8164144100557223371">Disattiva il punto di ingresso nella barra degli strumenti delle funzionalità sperimentali del browser</translation>
 <translation id="8164687848393015214">Se il criterio viene impostato su Attivato, i pacchetti di rete di monitoraggio (<ph name="HEARTBEATS_TERM" />) vengono inviati al server di gestione per monitorare lo stato online e consentire al server di rilevare se il dispositivo è offline.
 
@@ -5697,6 +5707,7 @@ Se questa norma non viene impostata, le pagine saranno sottoposte a scansione pe
       Se questo criterio viene impostato, le istantanee meno recenti vengono eliminate in base a quanto necessario per rispettare il limite. Se il criterio viene impostato su 0, non vengono acquisite istantanee.</translation>
 <translation id="8451988835943702790">Usa la pagina Nuova scheda come Pagina iniziale</translation>
 <translation id="8455529558077979314">Impostazioni Schermata sulla privacy</translation>
+<translation id="8455551509936646199">Il giorno della settimana in cui dovrebbe essere eseguito il riavvio, nel fuso orario locale del dispositivo. Questo criterio viene usato soltanto se il valore del criterio "frequency" è "WEEKLY".</translation>
 <translation id="8461914792118322307">Proxy</translation>
 <translation id="8465065632133292531">Parametri per l'URL istantaneo che utilizza POST</translation>
 <translation id="847472800012384958">Non consentire la visualizzazione di popup nei siti</translation>
@@ -5981,6 +5992,11 @@ Se la norma non viene impostata o viene impostata su false, la posizione non vie
 <translation id="8860342862142842017">Disattiva l'applicazione di Certificate Transparency per un elenco di hash subjectPublicKeyInfo</translation>
 <translation id="8864975621965365890">Consente di eliminare il messaggio di richiesta di turndown che compare quando un sito viene visualizzato da <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="886645881209114007">Consenti agli utenti di usare un <ph name="PLUGIN_VM_NAME" /> su <ph name="PRODUCT_OS_NAME" /></translation>
+<translation id="8867894831390233044">Consente di stabilire se gli utenti possono o meno usare il debug remoto.
+
+      Se questo criterio è impostato su Attivato o non viene configurato, gli utenti possono usare il debug remoto specificando le opzioni di riga di comando --remote-debugging-port e --remote-debugging-pipe.
+
+      Se è impostato su Disattivato, gli utenti non possono usare il debug remoto.</translation>
 <translation id="8871974300055371298">Impostazioni contenuti</translation>
 <translation id="8872402969096027761">Consente di attivare la funzione di accessibilità di clic automatico nella schermata di accesso.
 
@@ -6166,6 +6182,10 @@ Se la norma non viene impostata o viene impostata su false, la posizione non vie
       Se il criterio viene impostato su Disattivato, i dispositivi registrati non registrano e non segnalano i tempi di attività.</translation>
 <translation id="9077227880520270584">Timer accesso automatico all'account locale del dispositivo</translation>
 <translation id="9084985621503260744">Specifica se l'attività video incide sulla gestione dell'alimentazione</translation>
+<translation id="9087434639296483430">Consente di segnalare eventi di accesso/uscita degli utenti su dispositivi registrati, inclusi gli accessi non riusciti.
+
+      Se il criterio viene impostato su falso o se non viene configurato, le informazioni non vengono segnalate.
+      Se viene impostato su vero, gli eventi di accesso/uscita del dispositivo vengono segnalati.</translation>
 <translation id="9088191250434406767">Se il criterio non viene configurato o se viene impostato su Attivato, gli utenti possono effettuare ricerche con le proprie fotocamere usando <ph name="GOOGLE_LENS_PRODUCT_NAME" />. Se viene impostato su Disattivato, gli utenti non possono vedere il pulsante <ph name="GOOGLE_LENS_PRODUCT_NAME" /> nella casella di ricerca quando la ricerca tramite fotocamera con <ph name="GOOGLE_LENS_PRODUCT_NAME" /> è supportata.</translation>
 <translation id="9088433379343318874">Abilita il provider di contenuti dell'utente supervisionato</translation>
 <translation id="9088444059179765143">Configura il metodo di rilevamento automatico del fuso orario</translation>
@@ -6262,6 +6282,7 @@ Se la norma non viene impostata o viene impostata su false, la posizione non vie
 <translation id="9197740283131855199">Percentuale di regolazione del ritardo di oscuramento dello schermo se l'utente diventa attivo dopo l'oscuramento</translation>
 <translation id="9200828125069750521">Parametri per l'URL dell'immagine che utilizza POST</translation>
 <translation id="9204863016826119209">Le chiavi aziendali possono essere utilizzate dalle app per Android installate ed elencate in questo criterio.</translation>
+<translation id="9207596996305971030">Gli eventi di accesso/uscita non vengono segnalati</translation>
 <translation id="9213751049772256263">Disattiva tutte le varianti</translation>
 <translation id="9217154963008402249">Frequenza dei pacchetti di rete di monitoraggio</translation>
 <translation id="922540222991413931">Configura fonti di installazione di estensioni, applicazioni e script utente</translation>
@@ -6295,6 +6316,7 @@ Se la norma non viene impostata o viene impostata su false, la posizione non vie
       Nota: il blocco degli URL chrome://* interni può generare errori imprevisti.</translation>
 <translation id="957778406002650056">L'URL da cui è possibile scaricare l'immagine <ph name="PLUGIN_VM_NAME" />.</translation>
 <translation id="974349541138387272">Specifica il modello URI del resolver DNS over HTTPS desiderato</translation>
+<translation id="979467274961593903">Non consentire l'uso del debug remoto</translation>
 <translation id="980218166381006412">Se il criterio viene impostato su Attivato, la modalità in background viene abilitata. Nella modalità in background, all'accesso al sistema operativo viene avviato un processo <ph name="PRODUCT_NAME" /> che rimane in esecuzione quando viene chiusa l'ultima finestra del browser, consentendo alle app in background e alla sessione di navigazione di rimanere attive. Nella barra delle applicazioni viene visualizzata un'icona per il processo in background che consente di chiuderlo in qualsiasi momento.
 
       Se il criterio viene impostato su Disattivato, la modalità in background viene disabilitata.

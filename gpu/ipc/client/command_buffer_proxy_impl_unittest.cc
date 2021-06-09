@@ -4,6 +4,9 @@
 
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 
+#include <utility>
+#include <vector>
+
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
@@ -64,8 +67,8 @@ class MockGpuControlClient : public GpuControlClient {
   MOCK_METHOD0(OnGpuControlLostContext, void());
   MOCK_METHOD0(OnGpuControlLostContextMaybeReentrant, void());
   MOCK_METHOD2(OnGpuControlErrorMessage, void(const char*, int32_t));
-  MOCK_METHOD1(OnGpuControlSwapBuffersCompleted,
-               void(const SwapBuffersCompleteParams&));
+  MOCK_METHOD2(OnGpuControlSwapBuffersCompleted,
+               void(const SwapBuffersCompleteParams&, gfx::GpuFenceHandle));
   MOCK_METHOD1(OnGpuSwitched, void(gl::GpuPreference));
   MOCK_METHOD2(OnSwapBufferPresented,
                void(uint64_t, const gfx::PresentationFeedback&));
@@ -108,6 +111,7 @@ class CommandBufferProxyImplTest : public testing::Test {
               // endpoint, which will send them to `mock_command_buffer` if
               // provided by the test.
               receiver.EnableUnassociatedUsage();
+              clients_.push_back(std::move(client));
               if (mock_command_buffer)
                 mock_command_buffer->Bind(std::move(receiver));
               *result = ContextResult::kSuccess;
@@ -143,6 +147,8 @@ class CommandBufferProxyImplTest : public testing::Test {
   IPC::TestSink sink_;
   MockGpuChannel mock_gpu_channel_;
   scoped_refptr<TestGpuChannelHost> channel_;
+  std::vector<mojo::PendingAssociatedRemote<mojom::CommandBufferClient>>
+      clients_;
 };
 
 TEST_F(CommandBufferProxyImplTest, OrderingBarriersAreCoalescedWithFlush) {

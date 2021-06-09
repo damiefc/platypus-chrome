@@ -237,6 +237,7 @@
 <translation id="1243436884219965846">Kontrolovať heslá</translation>
 <translation id="1244265436519979884">Prebieha obnovenie systému Linux</translation>
 <translation id="1244303850296295656">Chyba rozšírenia</translation>
+<translation id="1246863218384630739"><ph name="VM_NAME" /> nebolo možné nainštalovať: webová adresa obrázka vrátila kód chyby <ph name="HTTP_ERROR" />. Kontaktujte správcu.</translation>
 <translation id="1246905108078336582">Chcete odstrániť návrh zo schránky?</translation>
 <translation id="1251366534849411931">Očakávaná úvodná zložená zátvorka: <ph name="ERROR_LINE" /></translation>
 <translation id="1251480783646955802">Týmto vymažete <ph name="TOTAL_USAGE" /> dát uložených webmi a nainštalovanými aplikáciami.</translation>
@@ -1524,6 +1525,7 @@ Ak chcete spravovať nastavenia tohto účtu, nainštalujte si do zariadenia apl
 <translation id="2610260699262139870">S&amp;kutočná veľkosť</translation>
 <translation id="2610780100389066815">Podpisovanie zoznamu dôveryhodných inštitúcií spoločnosti Microsoft</translation>
 <translation id="2612676031748830579">Číslo karty</translation>
+<translation id="2613535083491958306"><ph name="ORIGIN" /> bude môcť upraviť súbor <ph name="FILENAME" /></translation>
 <translation id="2616366145935564096">Čítať a meniť údaje pre <ph name="WEBSITE_1" /></translation>
 <translation id="2617342710774726426">SIM karta je uzamknutá</translation>
 <translation id="2618797463720777311">Nastavenie Zdieľania nablízku</translation>
@@ -1662,6 +1664,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="2755349111255270002">Resetovanie tohto zariadenia <ph name="DEVICE_TYPE" /></translation>
 <translation id="2755367719610958252">Spravovať funkcie dostupnosti</translation>
 <translation id="275662540872599901">obrazovka je vypnutá</translation>
+<translation id="2757161511365746634">Zobraziť tlačiareň</translation>
 <translation id="2757338480560142065">Ukladané heslo sa musí zhodovať s tým, ktoré používate pre web <ph name="WEBSITE" />.</translation>
 <translation id="2762441749940182211">Kamera je zablokovaná</translation>
 <translation id="2764786626780673772">Podrobnosti o sieti VPN</translation>
@@ -1704,6 +1707,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="2799223571221894425">Znova spustiť</translation>
 <translation id="2800760947029405028">Nahrať obrázok</translation>
 <translation id="2801954693771979815">Veľkosť obrazovky</translation>
+<translation id="2802557211515765772">K dispozícii nie sú žiadne spravované tlačiarne.</translation>
 <translation id="2803313416453193357">Otvoriť priečinok</translation>
 <translation id="2803375539583399270">Zadajte kód PIN</translation>
 <translation id="2804043232879091219">Alternatívny prehliadač sa nepodarilo otvoriť</translation>
@@ -2282,6 +2286,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="3441653493275994384">Obrazovka</translation>
 <translation id="3441663102605358937">Prihláste sa znova do účtu <ph name="ACCOUNT" />, čím ho overíte</translation>
 <translation id="3444641828375597683">Inzerenti a vlastníci môžu používať technológiu FLoC opísanú nižšie na tejto stránke.</translation>
+<translation id="3444726579402183581"><ph name="ORIGIN" /> bude môcť čítať súbor <ph name="FILENAME" /></translation>
 <translation id="3445047461171030979">Rýchle odpovede Asistenta Google</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min</translation>
 <translation id="3445925074670675829">Zariadenie USB-C</translation>
@@ -3779,6 +3784,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="5086874064903147617">Obnoviť predvolenú domovskú stránku?</translation>
 <translation id="5087249366037322692">Pridané treťou stranou</translation>
 <translation id="5087580092889165836">Pridať kartu</translation>
+<translation id="5087748406101774740"><ph name="APP_NAME" /> (<ph name="PROFILE_NAME" />)</translation>
 <translation id="5088534251099454936">Štandard PKCS #1 SHA-512 so šifrovaním RSA</translation>
 <translation id="5090637338841444533">Nemôže sledovať pozíciu vašej kamery</translation>
 <translation id="5094721898978802975">Komunikovať so spolupracujúcimi natívnymi aplikáciami</translation>
@@ -3813,7 +3819,6 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="512903556749061217">pripojené</translation>
 <translation id="5130675701626084557">Profil sa nedal stiahnuť. Skúste to neskôr alebo požiadajte o pomoc operátora.</translation>
 <translation id="5131591206283983824">Presun klepnutím na touchpade</translation>
-<translation id="5133483819862530305">Od západu do východu slnka</translation>
 <translation id="5135085122826131075">Aktivujte svojho Asistenta vyslovením výrazu „OK Google“.</translation>
 <translation id="5135533361271311778">Nepodarilo sa vytvoriť položku záložiek</translation>
 <translation id="5136343472380336530">Obe zariadenia musia byť odomknuté, blízko seba a mať zapnuté rozhranie Bluetooth. <ph name="LINK_BEGIN" />Ďalšie informácie<ph name="LINK_END" /></translation>
@@ -3850,6 +3855,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="5170568018924773124">Zobraziť v priečinku</translation>
 <translation id="5171045022955879922">Vyhľadajte alebo zadajte webovú adresu</translation>
 <translation id="5171343362375269016">Swapovaná pamäť</translation>
+<translation id="5172855596271336236">K dispozícii je jedna spravovaná tlačiareň.</translation>
 <translation id="5173668317844998239">Pridať a odstrániť odtlačky prstov uložené v bezpečnostnom kľúči</translation>
 <translation id="5175379009094579629">Názov zariadenia je neplatný. Skúste to znova zadaním platného názvu zariadenia.</translation>
 <translation id="5177479852722101802">Aj naďalej blokovať prístup ku kamere a mikrofónu</translation>
@@ -4559,6 +4565,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="5964113968897211042">{COUNT,plural, =0{Otvoriť všetky v novom okne}=1{Otvoriť v novom okne}few{Otvoriť všetky ({COUNT}) v novom okne}many{Otvoriť všetky ({COUNT}) v novom okne}other{Otvoriť všetky ({COUNT}) v novom okne}}</translation>
 <translation id="5965661248935608907">Tiež určuje, ktorá stránka sa zobrazí po kliknutí na tlačidlo Domovská stránka alebo pri vyhľadávaní pomocou všeobecného poľa.</translation>
 <translation id="5969419185858894314">Web <ph name="ORIGIN" /> môže zobrazovať súbory v priečinku <ph name="FOLDERNAME" /></translation>
+<translation id="5969728632630673489">Upozornenie na klávesové skratky bolo zavreté</translation>
 <translation id="5971037678316050792">Ovládanie stavu a párovania adaptéra Bluetooth</translation>
 <translation id="597235323114979258">Zobraziť ďalšie cieľové tlačiarne</translation>
 <translation id="5972666587303800813">Neprevádzkovaná služba</translation>
@@ -6111,6 +6118,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="7674542105240814168">Prístup k polohe bol odmietnutý</translation>
 <translation id="7676119992609591770">Bola nájdená <ph name="NUM" /> karta pre dopyt <ph name="SEARCH_TEXT" /></translation>
 <translation id="7676867886086876795">Odošlite svoj hlas do Googlu a umožnite tak diktovanie do všetkých textových polí.</translation>
+<translation id="7679171213002716280">Počet spravovaných tlačiarní: <ph name="PRINTER_COUNT" />.</translation>
 <translation id="7680416688940118410">Kalibrácia dotykovej obrazovky</translation>
 <translation id="7681095912841365527">Web môže používať Bluetooth</translation>
 <translation id="7681597159868843240">Weby zvyčajne používajú senzory pohybu zariadenia, aby mohli poskytovať funkcie, ako je virtuálna realita alebo sledovanie kondície</translation>
@@ -6194,6 +6202,7 @@ stlačením klávesov Ctrl + Alt + zníženie jasu zobrazenie oddialite.</tr
 <translation id="7766807826975222231">Spustiť prehliadku</translation>
 <translation id="7766838926148951335">Prijať povolenia</translation>
 <translation id="7768507955883790804">Weby sa automaticky riadia týmto nastavením, keď ich navštívite</translation>
+<translation id="7768526219335215384"><ph name="ORIGIN" /> bude môcť čítať súbory v priečinku <ph name="FOLDERNAME" />.</translation>
 <translation id="7768770796815395237">Zmeniť</translation>
 <translation id="7768784765476638775">Vyslovenie položky po vybratí</translation>
 <translation id="7770612696274572992">Obrázok bol skopírovaný z iného zariadenia</translation>
@@ -6497,6 +6506,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8063235345342641131">Predvolený zelený avatar</translation>
 <translation id="8063535366119089408">Zobraziť súbor</translation>
 <translation id="8064279191081105977">Skupina <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
+<translation id="8066444921260601116">Dialógové okno pripojenia</translation>
 <translation id="8068253693380742035">Dotykom sa prihlásite</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Vytlačiť ako obrázok</translation>
@@ -7528,6 +7538,7 @@ Existujúce pridelenie odstránite stlačením prideleného prepínača.</transl
 <translation id="9186963452600581158">Prihlásiť sa účtom Google dieťaťa</translation>
 <translation id="9188732951356337132">Odosielať údaje o využití a diagnostiky. Toto zariadenie momentálne automaticky odosiela Googlu diagnostiky a údaje o používaní zariadenia a aplikácií. Nebudú slúžiť na zistenie totožnosti vášho dieťaťa. Pomôžu zvýšiť stabilitu systému a aplikácií a poskytovať ďalšie vylepšenia. Niektoré súhrnné údaje tiež pomôžu aplikáciám Google a partnerom, ako napríklad vývojárom Androidu. Ak pre dieťa aktivujete nastavenie dodatočnej aktivity na internete a v aplikáciách, tieto údaje sa môžu uložiť do jeho účtu Google. <ph name="BEGIN_LINK2" />Ďalšie informácie<ph name="END_LINK2" /></translation>
 <translation id="9198090666959937775">Používanie telefónu s Androidom ako bezpečnostného kľúča</translation>
+<translation id="9200339982498053969"><ph name="ORIGIN" /> bude môcť upraviť súbory v priečinku <ph name="FOLDERNAME" /></translation>
 <translation id="920045321358709304">Hľadať vyhľadávačom <ph name="SEARCH_ENGINE" /></translation>
 <translation id="9201023452444595544">Všetky offline dáta budú vymazané</translation>
 <translation id="9201220332032049474">Možnosti zámky obrazovky</translation>
@@ -7588,6 +7599,7 @@ Existujúce pridelenie odstránite stlačením prideleného prepínača.</transl
 <translation id="965211523698323809">Odosielajte a prijímajte textové správy zo svojho zariadenia <ph name="DEVICE_TYPE" />. <ph name="LINK_BEGIN" />Ďalšie informácie<ph name="LINK_END" /></translation>
 <translation id="967398046773905967">Zakázať všetkým webom prístup k zariadeniam HID</translation>
 <translation id="967624055006145463">Uložené dáta</translation>
+<translation id="96774243435178359">Spravované tlačiarne</translation>
 <translation id="968000525894980488">Zapnite Služby Google Play</translation>
 <translation id="968037381421390582">Prilepiť a vyhľadať dopyt <ph name="SEARCH_TERMS" /></translation>
 <translation id="968174221497644223">Vyrovnávacia pamäť aplikácie</translation>

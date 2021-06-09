@@ -57,8 +57,8 @@
 #include "chrome/browser/chromeos/policy/networking/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/status_collector/device_status_collector.h"
 #include "chrome/browser/chromeos/policy/status_collector/status_collector.h"
-#include "chrome/browser/chromeos/policy/status_uploader.h"
-#include "chrome/browser/chromeos/policy/system_log_uploader.h"
+#include "chrome/browser/chromeos/policy/uploading/status_uploader.h"
+#include "chrome/browser/chromeos/policy/uploading/system_log_uploader.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/ui/webui/management/management_ui_handler_chromeos.h"
 #include "chrome/browser/ui/webui/webui_util.h"
@@ -174,6 +174,7 @@ const char kManagementReportExtensions[] = "managementReportExtensions";
 const char kManagementReportAndroidApplications[] =
     "managementReportAndroidApplications";
 const char kManagementReportPrintJobs[] = "managementReportPrintJobs";
+const char kManagementReportLoginLogout[] = "managementReportLoginLogout";
 const char kManagementReportDlpEvents[] = "managementReportDlpEvents";
 const char kManagementPrinting[] = "managementPrinting";
 const char kManagementCrostini[] = "managementCrostini";
@@ -223,7 +224,8 @@ enum class DeviceReportingType {
   kUsername,
   kExtensions,
   kAndroidApplication,
-  kDlpEvents
+  kDlpEvents,
+  kLoginLogout
 };
 
 // Corresponds to DeviceReportingType in management_browser_proxy.js
@@ -257,6 +259,8 @@ std::string ToJSDeviceReportingType(const DeviceReportingType& type) {
       return "android application";
     case DeviceReportingType::kDlpEvents:
       return "dlp events";
+    case DeviceReportingType::kLoginLogout:
+      return "login-logout";
     default:
       NOTREACHED() << "Unknown device reporting type";
       return "device";
@@ -625,6 +629,14 @@ void ManagementUIHandler::AddDeviceReportingInfo(
     AddDeviceReportingElement(report_sources,
                               kManagementReportAndroidApplications,
                               DeviceReportingType::kAndroidApplication);
+  }
+
+  bool report_login_logout = false;
+  chromeos::CrosSettings::Get()->GetBoolean(chromeos::kReportDeviceLoginLogout,
+                                            &report_login_logout);
+  if (report_login_logout) {
+    AddDeviceReportingElement(report_sources, kManagementReportLoginLogout,
+                              DeviceReportingType::kLoginLogout);
   }
 }
 

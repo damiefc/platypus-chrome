@@ -401,6 +401,7 @@ To će u suprotnom biti onemogućeno na temelju vaših postavki privatnosti. To 
 <translation id="2359629602545592467">Veći broj</translation>
 <translation id="2359808026110333948">Nastavi</translation>
 <translation id="2359961752320758691">Primijenjen je broj virtualne kartice.</translation>
+<translation id="236340516568226369">Izbornik prekidača za promjenu veličine</translation>
 <translation id="2367567093518048410">Razina</translation>
 <translation id="2372464001869762664">Nakon što ih potvrdite, podaci o kartici s Google računa podijelit će se s ovom web-lokacijom. CVC možete pronaći u podacima o Plex računu.</translation>
 <translation id="2380886658946992094">Legal</translation>
@@ -766,6 +767,7 @@ To će u suprotnom biti onemogućeno na temelju vaših postavki privatnosti. To 
 <translation id="3754210790023674521">Zatvori sliku u slici</translation>
 <translation id="3759461132968374835">Nemate nedavnih izvješća o padu. Ovdje se neće prikazati padovi do kojih je došlo kada je izvješćivanje o padovima onemogućeno.</translation>
 <translation id="3760561303380396507">Želite li koristiti Windows Hello umjesto CVC-a?</translation>
+<translation id="3761171036307311438">Ime na kartici:</translation>
 <translation id="3761718714832595332">Sakrij status</translation>
 <translation id="3765032636089507299">Stranica Sigurno pregledavanje trenutačno je u izradi.</translation>
 <translation id="3765588406864124894">Izlazni spremnik s odjeljcima 9</translation>
@@ -1713,6 +1715,7 @@ Dodatne pojedinosti:
 <translation id="734600844861828519">11x15</translation>
 <translation id="7346048084945669753">Korisnik je povezan:</translation>
 <translation id="7349430561505560861">A4-Extra</translation>
+<translation id="7352651011704765696">Nešto nije u redu</translation>
 <translation id="7353601530677266744">Naredbeni redak</translation>
 <translation id="7359588939039777303">Oglasi su blokirani.</translation>
 <translation id="7363096869660964304">No, niste nevidljivi. Anonimni način ne sakriva vaše pregledavanje od poslodavca, davatelja internetskih usluga ni od posjećenih web-lokacija.</translation>

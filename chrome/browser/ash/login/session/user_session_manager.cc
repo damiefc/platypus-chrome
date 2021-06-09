@@ -1343,14 +1343,12 @@ void UserSessionManager::InitProfilePreferences(
         IdentityManagerFactory::GetForProfile(profile);
     std::string gaia_id = user_context.GetGaiaID();
     if (gaia_id.empty()) {
-      absl::optional<AccountInfo> maybe_account_info =
-          identity_manager
-              ->FindExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
-                  user_context.GetAccountId().GetUserEmail());
+      const AccountInfo account_info =
+          identity_manager->FindExtendedAccountInfoByEmailAddress(
+              user_context.GetAccountId().GetUserEmail());
 
-      DCHECK(maybe_account_info.has_value() || IsRunningTest());
-      if (maybe_account_info.has_value())
-        gaia_id = maybe_account_info.value().gaia;
+      DCHECK(!account_info.IsEmpty() || IsRunningTest());
+      gaia_id = account_info.gaia;
 
       // Use a fake gaia id for tests that do not have it.
       if (IsRunningTest() && gaia_id.empty())
@@ -1480,23 +1478,6 @@ void UserSessionManager::InitProfilePreferences(
     if (is_child &&
         base::FeatureList::IsEnabled(::features::kDMServerOAuthForChildUser)) {
       child_policy_observer_ = std::make_unique<ChildPolicyObserver>(profile);
-    }
-    std::string tmp_gaia_id;
-    bool gaia_id_found = user_manager::known_user::FindGaiaID(
-        user_context.GetAccountId(), &tmp_gaia_id);
-    version_info::Channel channel = chrome::GetChannel();
-    if (channel == version_info::Channel::DEV ||
-        channel == version_info::Channel::BETA) {
-      if (!user_manager->IsUserNonCryptohomeDataEphemeral(
-              user_context.GetAccountId())) {
-        CHECK_EQ(tmp_gaia_id, gaia_id)
-            << "Gaia ID not found for account ID in non-ephemeral session.";
-      }
-    }
-    // Backfill GAIA ID in user prefs stored in Local State.
-    if (!gaia_id_found && !gaia_id.empty()) {
-      user_manager::known_user::UpdateGaiaID(user_context.GetAccountId(),
-                                             gaia_id);
     }
   } else {
     // Active Directory (non-supervised, non-GAIA) accounts take this path.

@@ -107,13 +107,14 @@ const int kZoomLabelHorizontalPadding = 2;
 
 // Returns true if |command_id| identifies a bookmark menu item.
 bool IsBookmarkCommand(int command_id) {
-  return command_id >= IDC_FIRST_BOOKMARK_MENU;
+  return command_id >= IDC_FIRST_UNBOUNDED_MENU &&
+         (command_id % AppMenuModel::kNumUnboundedMenuTypes == 0);
 }
 
 // Returns true if |command_id| identifies a recent tabs menu item.
 bool IsRecentTabsCommand(int command_id) {
-  return command_id >= AppMenuModel::kMinRecentTabsCommandId &&
-         command_id <= AppMenuModel::kMaxRecentTabsCommandId;
+  return command_id >= IDC_FIRST_UNBOUNDED_MENU &&
+         (command_id % AppMenuModel::kNumUnboundedMenuTypes == 1);
 }
 
 // Combination border/background for the buttons contained in the menu. The
@@ -426,7 +427,9 @@ class AppMenu::CutCopyPasteView : public AppMenuView {
   gfx::Size CalculatePreferredSize() const override {
     // Returned height doesn't matter as MenuItemView forces everything to the
     // height of the menuitemview.
-    return {GetMaxChildViewPreferredWidth() * int{children().size()}, 0};
+    return {
+        GetMaxChildViewPreferredWidth() * static_cast<int>(children().size()),
+        0};
   }
 
   void Layout() override {
@@ -1096,7 +1099,9 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
   for (int i = 0, max = model->GetItemCount(); i < max; ++i) {
     // Add the menu item at the end.
     int menu_index =
-        parent->HasSubmenu() ? int{parent->GetSubmenu()->children().size()} : 0;
+        parent->HasSubmenu()
+            ? static_cast<int>(parent->GetSubmenu()->children().size())
+            : 0;
     MenuItemView* item =
         AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
 
@@ -1179,7 +1184,6 @@ MenuItemView* AppMenu::AddMenuItem(MenuItemView* parent,
   DCHECK(command_id > -1 ||
          (command_id == -1 &&
           model->GetTypeAt(model_index) == MenuModel::TYPE_SEPARATOR));
-  DCHECK_LT(command_id, IDC_FIRST_BOOKMARK_MENU);
 
   if (command_id > -1) {  // Don't add separators to |command_id_to_entry_|.
     // All command ID's should be unique except for IDC_SHOW_HISTORY which is

@@ -25,8 +25,7 @@ declare_args() {
   # builds. Requires debug info.
   enable_resource_allowlist_generation =
       is_official_build &&
-      # Don't enable for Android-on-Chrome OS so that they can build with
-      # symbol_level=0 without this failing (crbug.com/891164).
+      # Don't enable for Android-on-Chrome OS.
       (target_os == "android" || target_os == "win")
 }
 
@@ -38,8 +37,6 @@ if ((is_linux || is_chromeos) && target_os == "android") {
 
 # Ensure enable_resource_allowlist_generation is enabled only when it will work.
 if (enable_resource_allowlist_generation) {
-  assert(symbol_level >= 1,
-         "enable_resource_allowlist_generation=true requires symbol_level >= 1")
   assert(
       !strip_debug_info,
       "enable_resource_allowlist_generation=true requires strip_debug_info=false")
@@ -190,7 +187,9 @@ template("gcc_toolchain") {
     # wrapper will have picked up gomacc via cmd-line arg. So need to prepend
     # gomacc in that case.
     goma_path = "$goma_dir/gomacc"
-    if (toolchain_uses_rbe) {
+    if (toolchain_uses_rbe &&
+        (!defined(invoker_toolchain_args.needs_gomacc_path_arg) ||
+         !invoker_toolchain_args.needs_gomacc_path_arg)) {
       if (defined(toolchain_args.rbe_cc_cfg_file)) {
         toolchain_rbe_cc_cfg_file = toolchain_args.rbe_cc_cfg_file
       } else {

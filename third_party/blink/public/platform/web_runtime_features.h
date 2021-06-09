@@ -108,7 +108,6 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static void EnableDecodeLossyWebPImagesToYUV(bool);
   BLINK_PLATFORM_EXPORT static void EnableRemoveMobileViewportDoubleTap(
       bool enable);
-  BLINK_PLATFORM_EXPORT static void EnableDisallowDocumentAccess(bool);
   BLINK_PLATFORM_EXPORT static void EnableDisplayCutoutAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicy(bool);
   BLINK_PLATFORM_EXPORT static void EnableDocumentPolicyNegotiation(bool);
@@ -143,6 +142,7 @@ class WebRuntimeFeatures {
   BLINK_PLATFORM_EXPORT static bool IsPortalsEnabled();
   BLINK_PLATFORM_EXPORT static void EnablePreciseMemoryInfo(bool);
   BLINK_PLATFORM_EXPORT static void EnablePrerender2(bool);
+  BLINK_PLATFORM_EXPORT static bool IsPrerender2Enabled();
   BLINK_PLATFORM_EXPORT static void EnablePresentationAPI(bool);
   BLINK_PLATFORM_EXPORT static void EnablePushMessaging(bool);
   BLINK_PLATFORM_EXPORT static void EnablePushSubscriptionChangeEvent(bool);

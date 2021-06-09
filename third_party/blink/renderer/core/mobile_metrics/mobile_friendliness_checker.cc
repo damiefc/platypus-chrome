@@ -322,9 +322,10 @@ void MobileFriendlinessChecker::ComputeBadTapTargetsRatio() {
   }
 }
 
-void MobileFriendlinessChecker::NotifyDocumentUnload() {
+void MobileFriendlinessChecker::EvaluateNow() {
   // If detached, there's no need to calculate any metrics.
-  if (!frame_view_->GetChromeClient())
+  // Or if this is before FCP, there's nothing to evaluate.
+  if (!frame_view_->GetChromeClient() || !fcp_detected_)
     return;
 
   if (tap_target_check_enabled_)
@@ -340,8 +341,7 @@ void MobileFriendlinessChecker::NotifyDocumentUnload() {
   mobile_friendliness_.text_content_outside_viewport_percentage = std::max(
       0, mobile_friendliness_.text_content_outside_viewport_percentage);
 
-  if (fcp_detected_)
-    frame_view_->DidChangeMobileFriendliness(mobile_friendliness_);
+  frame_view_->DidChangeMobileFriendliness(mobile_friendliness_);
 }
 
 void MobileFriendlinessChecker::NotifyViewportUpdated(
@@ -362,6 +362,9 @@ void MobileFriendlinessChecker::NotifyViewportUpdated(
       if (viewport.max_width.IsFixed()) {
         mobile_friendliness_.viewport_hardcoded_width =
             viewport.max_width.GetFloatValue();
+        // Convert value from Blink space to device-independent pixels.
+        if (viewport_scalar_ != 0)
+          mobile_friendliness_.viewport_hardcoded_width /= viewport_scalar_;
       }
       if (viewport.zoom_is_explicit) {
         mobile_friendliness_.viewport_initial_scale_x10 =
@@ -431,9 +434,6 @@ bool CheckParentHasOverflowXHidden(const LayoutObject* obj) {
 
 void MobileFriendlinessChecker::ComputeTextContentOutsideViewport(
     const LayoutObject& object) {
-  if (!frame_view_->GetFrame().IsMainFrame())
-    return;
-
   int frame_width = frame_view_->GetPage()->GetVisualViewport().Size().Width();
   if (frame_width == 0) {
     return;

@@ -388,6 +388,10 @@ void WebRuntimeFeatures::EnablePrerender2(bool enable) {
   RuntimeEnabledFeatures::SetPrerender2Enabled(enable);
 }
 
+bool WebRuntimeFeatures::IsPrerender2Enabled() {
+  return RuntimeEnabledFeatures::Prerender2EnabledByRuntimeFlag();
+}
+
 void WebRuntimeFeatures::EnableV8IdleTasks(bool enable) {
   RuntimeEnabledFeatures::SetV8IdleTasksEnabled(enable);
 }
@@ -552,10 +556,6 @@ void WebRuntimeFeatures::EnableMediaEngagementBypassAutoplayPolicies(
 
 void WebRuntimeFeatures::EnableAutomationControlled(bool enable) {
   RuntimeEnabledFeatures::SetAutomationControlledEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableDisallowDocumentAccess(bool enable) {
-  RuntimeEnabledFeatures::SetDisallowDocumentAccessEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableDisplayCutoutAPI(bool enable) {

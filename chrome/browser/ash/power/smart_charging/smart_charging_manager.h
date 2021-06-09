@@ -25,7 +25,7 @@
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/base/user_activity/user_activity_observer.h"
 
-namespace chromeos {
+namespace ash {
 namespace power {
 namespace ml {
 class RecentEventsCounter;
@@ -186,6 +186,13 @@ class SmartChargingManager : public ui::UserActivityObserver,
   base::WeakPtrFactory<SmartChargingManager> weak_ptr_factory_{this};
 };
 
+}  // namespace power
+}  // namespace ash
+
+// TODO(https://crbug.com/1164001): remove when ChromeOS code migration is done.
+namespace chromeos {
+namespace power {
+using ::ash::power::SmartChargingManager;
 }  // namespace power
 }  // namespace chromeos
 

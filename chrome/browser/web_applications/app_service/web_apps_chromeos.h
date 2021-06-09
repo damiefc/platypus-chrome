@@ -78,7 +78,7 @@ class WebAppsChromeOs : public WebAppsBase,
                  bool clear_site_data,
                  bool report_abuse) override;
   void PauseApp(const std::string& app_id) override;
-  void UnpauseApps(const std::string& app_id) override;
+  void UnpauseApp(const std::string& app_id) override;
   void GetMenuModel(const std::string& app_id,
                     apps::mojom::MenuType menu_type,
                     int64_t display_id,
@@ -101,8 +101,6 @@ class WebAppsChromeOs : public WebAppsBase,
   void OnWebAppDisabledStateChanged(const AppId& app_id,
                                     bool is_disabled) override;
   void OnWebAppsDisabledModeChanged() override;
-  void OnWebAppUserDisplayModeChanged(const AppId& app_id,
-                                      DisplayMode user_display_mode) override;
 
   // Updates app visibility.
   void UpdateAppDisabledMode(apps::mojom::AppPtr& app);

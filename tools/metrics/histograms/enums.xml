@@ -32890,6 +32890,9 @@ Called by update_use_counter_feature_enum.py.-->
   <int value="3929" label="CSSSelectorPseudoHas"/>
   <int value="3930" label="HTMLMediaElementControlsListNoPlaybackRate"/>
   <int value="3931" label="DocumentTransition"/>
+  <int value="3932" label="SpeculationRules"/>
+  <int value="3933" label="V8AbortSignal_Abort_Method"/>
+  <int value="3934" label="SelectionBackgroundColorInversion"/>
 </enum>
 
 <enum name="FeaturePolicyAllowlistType">
@@ -33007,8 +33010,8 @@ Called by update_permissions_policy_enum.py.-->
 
 <enum name="FeatureUsageEvent">
   <int value="0"
-      label="Device is eligible for this feature. Recorded once per day."/>
-  <int value="1" label="Feature is enabled by user. Recorded once per day."/>
+      label="Device is eligible for this feature. Recorded periodically."/>
+  <int value="1" label="Feature is enabled by user. Recorded periodically."/>
   <int value="2"
       label="Successful attempt to use the feature. Recorded on each event."/>
   <int value="3"
@@ -44312,6 +44315,23 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="33" label="33"/>
 </enum>
 
+<enum name="LinuxDistroMintVersion">
+  <int value="17" label="17"/>
+  <int value="18" label="18"/>
+  <int value="19" label="19"/>
+  <int value="20" label="20"/>
+  <int value="17001" label="17.1"/>
+  <int value="17002" label="17.2"/>
+  <int value="17003" label="17.3"/>
+  <int value="18001" label="18.1"/>
+  <int value="18002" label="18.2"/>
+  <int value="18003" label="18.3"/>
+  <int value="19001" label="19.1"/>
+  <int value="19002" label="19.2"/>
+  <int value="19003" label="19.3"/>
+  <int value="20001" label="20.1"/>
+</enum>
+
 <enum name="LinuxDistroOpenSuseLeapVersion">
   <int value="15000" label="15.0"/>
   <int value="15001" label="15.1"/>
@@ -45300,6 +45320,7 @@ from previous Chrome versions.
   <int value="-1847776781"
       label="enable-loading-ipc-optimization-for-small-resources"/>
   <int value="-1846680525" label="WebUIA11yEnhancements:enabled"/>
+  <int value="-1846613349" label="OmniboxActiveSearchEngines:disabled"/>
   <int value="-1846471618"
       label="enable-experimental-accessibility-switch-access-text"/>
   <int value="-1844754731" label="Mash:disabled"/>
@@ -46513,8 +46534,6 @@ from previous Chrome versions.
   <int value="-853594220" label="disable-new-avatar-menu"/>
   <int value="-853455968"
       label="OmniboxDefaultTypedNavigationsToHttps:disabled"/>
-  <int value="-852828854"
-      label="AutofillSuggestVirtualCardsOnlyOnFullFormDetection:enabled"/>
   <int value="-850821337" label="WebContentsForceDark:enabled"/>
   <int value="-848691867" label="DesktopPWAWindowing:enabled"/>
   <int value="-847735582" label="NotificationsViaHelperApp:enabled"/>
@@ -46649,6 +46668,8 @@ from previous Chrome versions.
   <int value="-728461030" label="AutofillPruneSuggestions:disabled"/>
   <int value="-727860269" label="WebAuthenticationBle:disabled"/>
   <int value="-726892130" label="AndroidMessagesIntegration:disabled"/>
+  <int value="-726844226"
+      label="AutofillSuggestVirtualCardsOnIncompleteForm:enabled"/>
   <int value="-726567328" label="disable-virtual-keyboard"/>
   <int value="-725264428" label="CompositingBasedThrottling:enabled"/>
   <int value="-723224470" label="enable-password-force-saving:enabled"/>
@@ -46831,6 +46852,7 @@ from previous Chrome versions.
   <int value="-572012175" label="AssistantEnableStereoAudioInput:disabled"/>
   <int value="-571236436" label="AppManagement:disabled"/>
   <int value="-570889908" label="CCTModuleDexLoading:enabled"/>
+  <int value="-570572517" label="OmniboxActiveSearchEngines:enabled"/>
   <int value="-568448085" label="SharedClipboardReceiver:disabled"/>
   <int value="-567920515" label="disable-experimental-hotwording"/>
   <int value="-567743697" label="EnableInputNoiseCancellationUi:enabled"/>
@@ -47228,6 +47250,7 @@ from previous Chrome versions.
   <int value="-202007318" label="AndroidAIAFetching:enabled"/>
   <int value="-201633741" label="DisplayAlignAssist:enabled"/>
   <int value="-200805659" label="ContextualSuggestionsButton:enabled"/>
+  <int value="-200792853" label="UnifiedPasswordManagerAndroid:disabled"/>
   <int value="-200160012" label="RelatedSearchesUi:disabled"/>
   <int value="-199690952" label="PageInfoV2:enabled"/>
   <int value="-198002129" label="MetricsSettingsAndroid:disabled"/>
@@ -47830,6 +47853,7 @@ from previous Chrome versions.
   <int value="331770879" label="CrostiniAppSearch:disabled"/>
   <int value="332391072" label="cs-contextual-cards-bar-integration"/>
   <int value="332960119" label="PdfXfaSupport:disabled"/>
+  <int value="333019109" label="PrivacyReview:enabled"/>
   <int value="334802038" label="OfflinePreviews:disabled"/>
   <int value="335976733" label="NotificationStackingBarRedesign:enabled"/>
   <int value="336429189" label="DisallowUnsafeHttpDownloads:disabled"/>
@@ -48061,8 +48085,6 @@ from previous Chrome versions.
   <int value="517429103" label="AutofillImportDynamicForms:enabled"/>
   <int value="517568645" label="AnimatedAppMenuIcon:disabled"/>
   <int value="518419320" label="RemoteCopyProgressNotification:disabled"/>
-  <int value="519028964"
-      label="AutofillSuggestVirtualCardsOnlyOnFullFormDetection:disabled"/>
   <int value="519140642" label="SendWebUIJavaScriptErrorReports:enabled"/>
   <int value="520738365" label="OmniboxPedalsBatch2NonEnglish:enabled"/>
   <int value="520982116" label="BuiltInModuleAll:enabled"/>
@@ -48385,6 +48407,7 @@ from previous Chrome versions.
   <int value="779703052" label="ChromeOSAmbientMode:enabled"/>
   <int value="779849093" label="OfflinePagesCTSuppressNotifications:disabled"/>
   <int value="780743733" label="QueryTilesLocalOrdering:disabled"/>
+  <int value="781573553" label="UnifiedPasswordManagerAndroid:enabled"/>
   <int value="781785788" label="ClipboardSuggestionContentHidden:disabled"/>
   <int value="782167080" label="enable-new-qp-input-view"/>
   <int value="783270752" label="AndroidHistoryManager:enabled"/>
@@ -49480,6 +49503,8 @@ from previous Chrome versions.
   <int value="1739782037" label="LinkDoctorDeprecationAndroid:enabled"/>
   <int value="1741855651"
       label="OmniboxTabSwitchSuggestionsDedicatedRow:disabled"/>
+  <int value="1741958365"
+      label="AutofillSuggestVirtualCardsOnIncompleteForm:disabled"/>
   <int value="1742398600"
       label="OmniboxUIExperimentBoldUserTextOnSearchSuggestions:enabled"/>
   <int value="1745053254" label="ClickToCallOpenDialerDirectly:enabled"/>
@@ -49858,6 +49883,7 @@ from previous Chrome versions.
   <int value="2051403297" label="ShowBluetoothDeviceBattery:disabled"/>
   <int value="2051886966" label="PwaInstallUseBottomSheet:enabled"/>
   <int value="2052194225" label="ChromeOSSharingHub:disabled"/>
+  <int value="2055386526" label="PrivacyReview:disabled"/>
   <int value="2056572020" label="EnableUsernameCorrection:disabled"/>
   <int value="2058148069" label="UseMessagesStagingUrl:enabled"/>
   <int value="2058283872" label="CCTModuleCache:disabled"/>
@@ -64223,6 +64249,7 @@ Called by update_net_trust_anchors.py.-->
   <int value="13" label="kRendererProcessCrashed"/>
   <int value="14" label="kRendererProcessKilled"/>
   <int value="15" label="kDownload"/>
+  <int value="16" label="kTriggerDestroyed"/>
 </enum>
 
 <enum name="PrerenderHoverEvent">
@@ -72775,6 +72802,8 @@ https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_2.7.1.pdf
   <int value="13" label="Too Many STAs"/>
   <int value="14" label="Bad Passphrase"/>
   <int value="15" label="Bad Wep Key"/>
+  <int value="16" label="Sim Locked"/>
+  <int value="17" label="Not registered"/>
 </enum>
 
 <enum name="ShillSuspendTerminationDarkResumeActionResult">
@@ -80948,6 +80977,9 @@ Full version information for the fingerprint enum values:
   <int value="12" label="Not connected"/>
   <int value="13" label="Activate Failed"/>
   <int value="14" label="Enabled or disabled when not available"/>
+  <int value="15" label="Cellular device busy"/>
+  <int value="16" label="Error Connect Timeout"/>
+  <int value="17" label="Cellular waiting for connectable timeout"/>
 </enum>
 
 <enum name="UserInitiatedEvent">

@@ -239,7 +239,6 @@
 /tflite/src
 /tint/src
 /tsan/
-/turbine/src
 /turbine/*.jar
 /ub-uiautomator/lib
 /ukey2/src
@@ -250,6 +249,7 @@
 /vulkan-deps
 /vulkan_memory_allocator
 /wayland/src
+/wayland-protocols/kde
 /wayland-protocols/src
 /webdriver/pylib
 /webdriver/python/selenium

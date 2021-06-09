@@ -169,29 +169,37 @@ void UpdateServiceImpl::RegisterApp(
     const RegistrationRequest& request,
     base::OnceCallback<void(const RegistrationResponse&)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  main_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback),
+                                RegistrationResponse(DoRegistration(request))));
+}
 
-  persisted_data_->RegisterApp(request);
-  if (!base::Contains(persisted_data_->GetAppIds(), kUpdaterAppId)) {
-    RegistrationRequest updater_request;
-    updater_request.app_id = kUpdaterAppId;
-    updater_request.version = base::Version(kUpdaterVersion);
-    persisted_data_->RegisterApp(updater_request);
-    update_client_->SendRegistrationPing(
-        updater_request.app_id, updater_request.version, base::DoNothing());
+int UpdateServiceImpl::DoRegistration(const RegistrationRequest& request) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  base::Version current_version =
+      persisted_data_->GetProductVersion(request.app_id);
+  if (current_version.IsValid() &&
+      current_version.CompareTo(request.version) == 1) {
+    return kRegistrationAlreadyRegistered;
   }
-
+  persisted_data_->RegisterApp(request);
   update_client_->SendRegistrationPing(request.app_id, request.version,
                                        base::DoNothing());
-
-  // Result of registration. Currently there's no error handling in
-  // PersistedData, so we assume success every time, which is why we respond
-  // with 0.
-  main_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), RegistrationResponse(0)));
+  return kRegistrationSuccess;
 }
 
 void UpdateServiceImpl::RunPeriodicTasks(base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // The installer should make an updater registration, but in case it halts
+  // before it does, synthesize a registration if necessary here.
+  if (!base::Contains(persisted_data_->GetAppIds(), kUpdaterAppId)) {
+    RegistrationRequest updater_request;
+    updater_request.app_id = kUpdaterAppId;
+    updater_request.version = base::Version(kUpdaterVersion);
+    RegisterApp(updater_request, base::DoNothing());
+  }
+
   tasks_.push(base::MakeRefCounted<CheckForUpdatesTask>(
       config_,
       base::BindOnce(&UpdateServiceImpl::UpdateAll, this, base::DoNothing()),
@@ -219,9 +227,7 @@ void UpdateServiceImpl::UpdateAll(StateChangeCallback state_update,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const auto app_ids = persisted_data_->GetAppIds();
-  // TODO(crbug.com/1216598): Fix updater server crashing if RunPeriodicTasks
-  // happened without an updater registration
-  // DCHECK(base::Contains(app_ids, kUpdaterAppId));
+  DCHECK(base::Contains(app_ids, kUpdaterAppId));
 
   update_client_->Update(
       app_ids, base::BindOnce(&GetComponents, persisted_data_),

@@ -33,7 +33,7 @@ unsigned CodePointLength(StringView string) {
 }
 
 std::tuple<Vector<const NGFragmentItem*>, const NGFragmentItems*>
-FragmentItemsInLogicalOrder(const LayoutObject& query_root) {
+FragmentItemsInVisualOrder(const LayoutObject& query_root) {
   Vector<const NGFragmentItem*> item_list;
   const NGFragmentItems* items = nullptr;
   if (query_root.IsNGSVGText()) {
@@ -58,12 +58,36 @@ FragmentItemsInLogicalOrder(const LayoutObject& query_root) {
         item_list.push_back(&item);
     }
   }
+  return std::tie(item_list, items);
+}
+
+std::tuple<Vector<const NGFragmentItem*>, const NGFragmentItems*>
+FragmentItemsInLogicalOrder(const LayoutObject& query_root) {
+  auto items_tuple = FragmentItemsInVisualOrder(query_root);
+  auto& item_list = std::get<0>(items_tuple);
   // Sort |item_list| in the logical order.
   std::sort(item_list.begin(), item_list.end(),
             [](const NGFragmentItem* a, const NGFragmentItem* b) {
               return a->StartOffset() < b->StartOffset();
             });
-  return std::tie(item_list, items);
+  return items_tuple;
+}
+
+const NGFragmentItem* FindFragmentItemForAddressableCharacterIndex(
+    const LayoutObject& query_root,
+    unsigned index) {
+  Vector<const NGFragmentItem*> item_list;
+  const NGFragmentItems* items;
+  std::tie(item_list, items) = FragmentItemsInLogicalOrder(query_root);
+
+  unsigned character_index = 0;
+  for (const auto* item : item_list) {
+    unsigned item_length = CodePointLength(item->Text(*items));
+    if (character_index <= index && index < character_index + item_length)
+      return item;
+    character_index += item_length;
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -101,6 +125,106 @@ float NGSvgTextQuery::SubStringLength(unsigned start_index,
     character_index += CodePointLength(item->Text(*items));
   }
   return total_length;
+}
+
+FloatPoint NGSvgTextQuery::StartPositionOfCharacter(unsigned index) const {
+  const NGFragmentItem* item =
+      FindFragmentItemForAddressableCharacterIndex(query_root_, index);
+  DCHECK(item);
+  DCHECK_EQ(item->Type(), NGFragmentItem::kSvgText);
+  if (item->IsHiddenForPaint())
+    return FloatPoint();
+  const auto& inline_text = *To<LayoutSVGInlineText>(item->GetLayoutObject());
+  const float ascent =
+      inline_text.ScaledFont().PrimaryFont()->GetFontMetrics().FloatAscent(
+          item->Style().GetFontBaseline());
+  const auto& item_rect = item->SvgFragmentData()->rect;
+  const bool is_ltr = item->Style().IsLeftToRightDirection();
+  FloatPoint point;
+  if (item->IsHorizontal()) {
+    point = is_ltr ? item_rect.Location() : item_rect.MaxXMinYCorner();
+    point.Move(0.0f, ascent);
+  } else {
+    point = is_ltr ? item_rect.MaxXMinYCorner() : item_rect.MaxXMaxYCorner();
+    point.Move(-ascent, 0.0f);
+  }
+  if (item->HasSvgTransformForBoundingBox())
+    point = item->BuildSvgTransformForBoundingBox().MapPoint(point);
+  const float scaling_factor = inline_text.ScalingFactor();
+  point.Scale(1 / scaling_factor, 1 / scaling_factor);
+  return point;
+}
+
+FloatPoint NGSvgTextQuery::EndPositionOfCharacter(unsigned index) const {
+  const NGFragmentItem* item =
+      FindFragmentItemForAddressableCharacterIndex(query_root_, index);
+  DCHECK(item);
+  DCHECK_EQ(item->Type(), NGFragmentItem::kSvgText);
+  if (item->IsHiddenForPaint())
+    return FloatPoint();
+  const auto& inline_text = *To<LayoutSVGInlineText>(item->GetLayoutObject());
+  const float ascent =
+      inline_text.ScaledFont().PrimaryFont()->GetFontMetrics().FloatAscent(
+          item->Style().GetFontBaseline());
+  const auto& item_rect = item->SvgFragmentData()->rect;
+  const bool is_ltr = item->Style().IsLeftToRightDirection();
+  FloatPoint point;
+  if (item->IsHorizontal()) {
+    point = is_ltr ? item_rect.MaxXMinYCorner() : item_rect.Location();
+    point.Move(0.0f, ascent);
+  } else {
+    point = is_ltr ? item_rect.MaxXMaxYCorner() : item_rect.MaxXMinYCorner();
+    point.Move(-ascent, 0.0f);
+  }
+  if (item->HasSvgTransformForBoundingBox())
+    point = item->BuildSvgTransformForBoundingBox().MapPoint(point);
+  const float scaling_factor = inline_text.ScalingFactor();
+  point.Scale(1 / scaling_factor, 1 / scaling_factor);
+  return point;
+}
+
+FloatRect NGSvgTextQuery::ExtentOfCharacter(unsigned index) const {
+  const NGFragmentItem* item =
+      FindFragmentItemForAddressableCharacterIndex(query_root_, index);
+  DCHECK(item);
+  DCHECK_EQ(item->Type(), NGFragmentItem::kSvgText);
+  if (item->IsHiddenForPaint())
+    return FloatRect();
+  return item->ObjectBoundingBox();
+}
+
+// https://svgwg.org/svg2-draft/text.html#__svg__SVGTextContentElement__getCharNumAtPosition
+int NGSvgTextQuery::CharacterNumberAtPosition(
+    const FloatPoint& position) const {
+  // The specification says we should do hit-testing in logical order.
+  // However, this does it in visual order in order to match to the legacy SVG
+  // <text> behavior.
+  Vector<const NGFragmentItem*> item_list;
+  const NGFragmentItems* items;
+  std::tie(item_list, items) = FragmentItemsInVisualOrder(query_root_);
+
+  const NGFragmentItem* hit_item = nullptr;
+  for (const auto* item : item_list) {
+    if (!item->IsHiddenForPaint() && item->Contains(position)) {
+      hit_item = item;
+      break;
+    }
+  }
+  if (!hit_item)
+    return -1;
+
+  // Count code points before |hit_item|.
+  std::sort(item_list.begin(), item_list.end(),
+            [](const NGFragmentItem* a, const NGFragmentItem* b) {
+              return a->StartOffset() < b->StartOffset();
+            });
+  unsigned addressable_character_count = 0;
+  for (const auto* item : item_list) {
+    if (item == hit_item)
+      break;
+    addressable_character_count += CodePointLength(item->Text(*items));
+  }
+  return addressable_character_count;
 }
 
 }  // namespace blink

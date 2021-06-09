@@ -43,7 +43,6 @@ import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -158,27 +157,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      */
     public static final String EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT =
             "androidx.browser.customtabs.extra.HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT";
-
-    /**
-     * Extra that determines whether the 'open in chrome' menu item should be shown in the context
-     * menu. The value is a boolean. Default value is false, meaning the item is shown.
-     */
-    public static final String EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU =
-            "androidx.browser.customtabs.extra.HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU";
-
-    /**
-     * Extra that determines whether the 'open in chrome' menu item should be shown in the menu. The
-     * value is a boolean. Default value is false, meaning the item is shown.
-     */
-    public static final String EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM =
-            "androidx.browser.customtabs.extra.HIDE_OPEN_IN_CHROME_MENU_ITEM";
-
-    /**
-     * Extra that, if set, results in marking visits from cct as hidden. The value is
-     * a boolean, and is only considered if the feature kCCTHideVisits is enabled.
-     */
-    public static final String EXTRA_HIDE_VISITS_FROM_CCT =
-            "androidx.browser.customtabs.extra.HIDE_VISITS_FROM_CCT";
 
     private static final String EXTRA_TWA_DISCLOSURE_UI =
             "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
@@ -816,39 +794,5 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Override
     public boolean shouldHideOmniboxSuggestionsForCctVisits() {
         return shouldHideOmniboxSuggestionsForCctVisits(mIntent);
-    }
-
-    @Override
-    public boolean shouldHideCctVisits() {
-        if (!ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.HIDE_FROM_API_3_TRANSITIONS_FROM_HISTORY)) {
-            return false;
-        }
-
-        // Only 1p apps are allowed to hide visits.
-        String clientPackageName =
-                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
-        if (!GSAState.isGsaPackageName(clientPackageName)) return false;
-        return IntentUtils.safeGetBooleanExtra(mIntent, EXTRA_HIDE_VISITS_FROM_CCT, false);
-    }
-
-    @Override
-    public boolean shouldShowOpenInChromeMenuItemInContextMenu() {
-        // Only 1p apps are allowed to hide visits.
-        String clientPackageName =
-                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
-        if (!GSAState.isGsaPackageName(clientPackageName)) return true;
-        return !IntentUtils.safeGetBooleanExtra(
-                mIntent, EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU, false);
-    }
-
-    @Override
-    public boolean shouldShowOpenInChromeMenuItem() {
-        // Only 1p apps are allowed to hide visits.
-        String clientPackageName =
-                CustomTabsConnection.getInstance().getClientPackageNameForSession(getSession());
-        if (!GSAState.isGsaPackageName(clientPackageName)) return true;
-        return !IntentUtils.safeGetBooleanExtra(
-                mIntent, EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM, false);
     }
 }

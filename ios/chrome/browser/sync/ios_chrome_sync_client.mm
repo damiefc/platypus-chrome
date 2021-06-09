@@ -103,7 +103,7 @@ IOSChromeSyncClient::IOSChromeSyncClient(ChromeBrowserState* browser_state)
 
   component_factory_ =
       std::make_unique<browser_sync::ProfileSyncComponentsFactoryImpl>(
-          this, ::GetChannel(), prefs::kSavingBrowserHistoryDisabled,
+          this, ::GetChannel(),
           base::CreateSingleThreadTaskRunner({web::WebThread::UI}), db_thread_,
           profile_web_data_service_, account_web_data_service_, password_store_,
           /*account_password_store=*/nullptr,

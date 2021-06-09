@@ -218,6 +218,7 @@
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "components/arc/arc_features.h"
 #include "components/arc/arc_util.h"
+#include "components/full_restore/features.h"
 #include "components/metrics/structured/structured_metrics_features.h"
 #include "media/capture/video/chromeos/video_capture_features_chromeos.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -923,10 +924,6 @@ const FeatureEntry::Choice kMemlogStackModeChoices[] = {
     {flag_descriptions::kMemlogStackModeNativeWithThreadNames,
      heap_profiling::kMemlogStackMode,
      heap_profiling::kMemlogStackModeNativeWithThreadNames},
-    {flag_descriptions::kMemlogStackModePseudo,
-     heap_profiling::kMemlogStackMode, heap_profiling::kMemlogStackModePseudo},
-    {flag_descriptions::kMemlogStackModeMixed, heap_profiling::kMemlogStackMode,
-     heap_profiling::kMemlogStackModeMixed},
 };
 
 const FeatureEntry::Choice kMemlogSamplingRateChoices[] = {
@@ -953,18 +950,9 @@ const FeatureEntry::Choice kMemlogSamplingRateChoices[] = {
 
 const FeatureEntry::FeatureVariation kMemoriesVariations[] = {
     {
-        "Persist Context + Limit 1k",
-        (FeatureEntry::FeatureParam[]){
-            {"MemoriesPersistContextAnnotationsInHistoryDb", "true"}},
+        "Visit Limit 10k",
+        (FeatureEntry::FeatureParam[]){{"MemoriesMaxVisitsToCluster", "10000"}},
         1,
-        nullptr,
-    },
-    {
-        "Persist Context + Limit 10k",
-        (FeatureEntry::FeatureParam[]){
-            {"MemoriesPersistContextAnnotationsInHistoryDb", "true"},
-            {"MemoriesMaxVisitsToCluster", "10000"}},
-        2,
         nullptr,
     },
 };
@@ -2871,9 +2859,6 @@ const FeatureEntry kFeatureEntries[] = {
         FEATURE_VALUE_TYPE(ash::features::kWebUITabStripTabDragIntegration),
     },
 #endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP) && BUILDFLAG(IS_CHROMEOS_ASH)
-    {"focus-mode", flag_descriptions::kFocusMode,
-     flag_descriptions::kFocusModeDescription, kOsDesktop,
-     FEATURE_VALUE_TYPE(features::kFocusMode)},
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     {"disable-explicit-dma-fences",
      flag_descriptions::kDisableExplicitDmaFencesName,
@@ -4363,6 +4348,10 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOmniboxKeywordSpaceTriggeringSettingName,
      flag_descriptions::kOmniboxKeywordSpaceTriggeringSettingDescription,
      kOsDesktop, FEATURE_VALUE_TYPE(omnibox::kKeywordSpaceTriggeringSetting)},
+    {"omnibox-active-search-engines",
+     flag_descriptions::kOmniboxActiveSearchEnginesName,
+     flag_descriptions::kOmniboxActiveSearchEnginesDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(omnibox::kActiveSearchEngines)},
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC) ||
         // defined(OS_WIN)
 
@@ -5278,7 +5267,7 @@ const FeatureEntry kFeatureEntries[] = {
 
     {"arc-ghost-window", flag_descriptions::kArcGhostWindowName,
      flag_descriptions::kArcGhostWindowDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(ash::features::kArcGhostWindow)},
+     FEATURE_VALUE_TYPE(full_restore::features::kArcGhostWindow)},
 
     {"arc-resize-lock", flag_descriptions::kArcResizeLockName,
      flag_descriptions::kArcResizeLockDescription, kOsCrOS,
@@ -5286,7 +5275,7 @@ const FeatureEntry kFeatureEntries[] = {
 
     {"full-restore", flag_descriptions::kFullRestoreName,
      flag_descriptions::kFullRestoreDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(ash::features::kFullRestore)},
+     FEATURE_VALUE_TYPE(full_restore::features::kFullRestore)},
 
     {"use-fake-device-for-media-stream",
      flag_descriptions::kUseFakeDeviceForMediaStreamName,
@@ -7117,14 +7106,12 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(
          autofill::features::kAutofillAutoTriggerManualFallbackForCards)},
 
-    {"autofill-suggest-virtual-cards-only-on-full-form-detection",
-     flag_descriptions::kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionName,
-     flag_descriptions::
-         kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionDescription,
+    {"autofill-suggest-virtual-cards-on-incomplete-form",
+     flag_descriptions::kAutofillSuggestVirtualCardsOnIncompleteFormName,
+     flag_descriptions::kAutofillSuggestVirtualCardsOnIncompleteFormDescription,
      kOsDesktop | kOsAndroid,
      FEATURE_VALUE_TYPE(
-         autofill::features::
-             kAutofillSuggestVirtualCardsOnlyOnFullFormDetection)},
+         autofill::features::kAutofillSuggestVirtualCardsOnIncompleteForm)},
 
     {"enable-penetrating-image-selection",
      flag_descriptions::kEnablePenetratingImageSelectionName,
@@ -7216,6 +7203,18 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kFocusFollowsCursorDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(::features::kFocusFollowsCursor)},
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+    {"privacy-review", flag_descriptions::kPrivacyReviewName,
+     flag_descriptions::kPrivacyReviewDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kPrivacyReview)},
+
+#if defined(OS_ANDROID)
+    {"unified-password-manager-android",
+     flag_descriptions::kUnifiedPasswordManagerAndroidName,
+     flag_descriptions::kUnifiedPasswordManagerAndroidDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(
+         password_manager::features::kUnifiedPasswordManagerAndroid)},
+#endif
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum
     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag

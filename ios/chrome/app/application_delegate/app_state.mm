@@ -419,9 +419,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   } else {
     [HandlerForProtocol(dispatcher, HelpCommands) showHelpBubbleIfEligible];
   }
-
-  [MetricsMediator logStartupDuration:self.startupInformation
-                connectionInformation:connectionInformation];
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
@@ -558,6 +555,12 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   DCHECK(agent);
   [self.agents addObject:agent];
   [agent setAppState:self];
+}
+
+- (void)removeAgent:(id<AppStateAgent>)agent {
+  DCHECK(agent);
+  DCHECK([self.agents containsObject:agent]);
+  [self.agents removeObject:agent];
 }
 
 - (void)queueTransitionToNextInitStage {
@@ -732,13 +735,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
 - (void)sceneState:(SceneState*)sceneState
     transitionedToActivationLevel:(SceneActivationLevel)level {
   if (level >= SceneActivationLevelForegroundActive) {
-    if (!self.firstSceneHasActivated) {
-      self.firstSceneHasActivated = YES;
-      if (self.initStage > InitStageSafeMode) {
-        [MetricsMediator logStartupDuration:self.startupInformation
-                      connectionInformation:sceneState.controller];
-      }
-    }
     sceneState.presentingModalOverlay =
         (self.uiBlockerTarget != nil) && (self.uiBlockerTarget != sceneState);
   }
@@ -754,6 +750,13 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
         base::mac::ObjCCastStrict<UIWindowScene>(notification.object);
     SceneDelegate* sceneDelegate =
         base::mac::ObjCCastStrict<SceneDelegate>(scene.delegate);
+
+    // Under some iOS 15 betas, Chrome gets scene connection events for some
+    // system scene connections. To handle this, early return if the connecting
+    // scene doesn't have a valid delegate. (See crbug.com/1217461)
+    if (!sceneDelegate)
+      return;
+
     SceneState* sceneState = sceneDelegate.sceneState;
     DCHECK(sceneState);
 

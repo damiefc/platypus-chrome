@@ -17,15 +17,35 @@
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
+#include "base/allocator/partition_allocator/reservation_offset_table.h"
 #include "base/allocator/partition_allocator/starscan/object_bitmap.h"
 #include "base/bits.h"
 #include "base/check.h"
+#include "base/debug/alias.h"
 #include "build/build_config.h"
 
 namespace base {
 namespace internal {
 
 namespace {
+
+template <bool thread_safe>
+[[noreturn]] NOINLINE void PartitionOutOfMemoryMappingFailure(
+    PartitionRoot<thread_safe>* root,
+    size_t size) LOCKS_EXCLUDED(root->lock_) {
+  NO_CODE_FOLDING();
+  root->OutOfMemory(size);
+  IMMEDIATE_CRASH();  // Not required, kept as documentation.
+}
+
+template <bool thread_safe>
+[[noreturn]] NOINLINE void PartitionOutOfMemoryCommitFailure(
+    PartitionRoot<thread_safe>* root,
+    size_t size) LOCKS_EXCLUDED(root->lock_) {
+  NO_CODE_FOLDING();
+  root->OutOfMemory(size);
+  IMMEDIATE_CRASH();  // Not required, kept as documentation.
+}
 
 #if !defined(PA_HAS_64_BITS_POINTERS) && BUILDFLAG(USE_BRP_POOL_BLOCKLIST)
 // |start| has to be aligned to kSuperPageSize, but |end| doesn't. This means
@@ -69,7 +89,7 @@ char* ReserveMemoryFromGigaCage(pool_handle pool,
                                 size_t requested_size) {
   PA_DCHECK(!(reinterpret_cast<uintptr_t>(requested_address) % kSuperPageSize));
 
-  char* ptr = internal::AddressPoolManager::GetInstance()->Reserve(
+  char* ptr = AddressPoolManager::GetInstance()->Reserve(
       pool, requested_address, requested_size);
 
   // In 32-bit mode, when allocating from BRP pool, verify that the requested
@@ -162,7 +182,6 @@ SlotSpanMetadata<thread_safe>* PartitionDirectMap(
     // that's violating the contract of base::TerminateBecauseOutOfMemory().
     ScopedUnlockGuard<thread_safe> unlock{root->lock_};
     PartitionExcessiveAllocationSize(raw_size);
-    IMMEDIATE_CRASH();  // Not required, kept as documentation.
   }
 
   PartitionDirectMapExtent<thread_safe>* map_extent = nullptr;
@@ -217,12 +236,7 @@ SlotSpanMetadata<thread_safe>* PartitionDirectMap(
       if (return_null)
         return nullptr;
 
-      // Crash handling is split on purpose in this function:
-      // - Crashing here likely means that Chrome is out of address space (on 32
-      //   bit platforms), or out of GigaCage space (on 64 bit ones).
-      // - Crashing below would likely mean out of commit charge.
-      root->OutOfMemory(raw_size);
-      IMMEDIATE_CRASH();  // Not required, kept as documentation.
+      PartitionOutOfMemoryMappingFailure(root, reserved_size);
     }
 
     root->total_size_of_direct_mapped_pages.fetch_add(
@@ -257,12 +271,11 @@ SlotSpanMetadata<thread_safe>* PartitionDirectMap(
                                                         PageUpdatePermissions);
     if (!ok) {
       if (!return_null) {
-        root->OutOfMemory(raw_size);
-        IMMEDIATE_CRASH();  // Not required, kept as documentation.
+        PartitionOutOfMemoryCommitFailure(root, slot_size);
       }
 
-      internal::AddressPoolManager::GetInstance()->UnreserveAndDecommit(
-          pool, ptr, reserved_size);
+      AddressPoolManager::GetInstance()->UnreserveAndDecommit(pool, ptr,
+                                                              reserved_size);
       return nullptr;
     }
 
@@ -273,11 +286,11 @@ SlotSpanMetadata<thread_safe>* PartitionDirectMap(
     // function returns.
     uintptr_t ptr_start = reinterpret_cast<uintptr_t>(ptr);
     uintptr_t ptr_end = ptr_start + reserved_size;
-    auto* offset_ptr = base::internal::ReservationOffsetPointer(ptr_start);
+    auto* offset_ptr = ReservationOffsetPointer(ptr_start);
     int offset = 0;
     while (ptr_start < ptr_end) {
-      PA_DCHECK(offset_ptr < internal::EndOfReservationOffsetTable());
-      PA_DCHECK(offset < internal::NotInDirectMapOffsetTag());
+      PA_DCHECK(offset_ptr < GetReservationOffsetTableEnd());
+      PA_DCHECK(offset < kOffsetTagNormalBuckets);
       *offset_ptr++ = offset++;
       ptr_start += kSuperPageSize;
     }
@@ -523,12 +536,8 @@ ALWAYS_INLINE void* PartitionBucket<thread_safe>::AllocNewSuperPage(
   if (UNLIKELY(!super_page))
     return nullptr;
 
-  // The reservation offset table is used to see whether the given SuperPage
-  // is DirectMap allocated or not by comparing the table entry with
-  // NotInDirectMapOffsetTag (!=0). Since the SuperPage is not DirectMap
-  // allocated, the table entry must be NotInDirectMapOffsetTag.
-  *base::internal::ReservationOffsetPointer(reinterpret_cast<uintptr_t>(
-      super_page)) = base::internal::NotInDirectMapOffsetTag();
+  *ReservationOffsetPointer(reinterpret_cast<uintptr_t>(super_page)) =
+      kOffsetTagNormalBuckets;
 
   root->total_size_of_super_pages.fetch_add(kSuperPageSize,
                                             std::memory_order_relaxed);
@@ -721,7 +730,7 @@ ALWAYS_INLINE char* PartitionBucket<thread_safe>::ProvisionMoreSlotsAndAllocOne(
   // is large), meaning that |slot_span->freelist_head| can be nullptr.
   if (slot_span->freelist_head) {
     PA_DCHECK(free_list_entries_added);
-    slot_span->freelist_head->CheckFreeList();
+    slot_span->freelist_head->CheckFreeList(slot_size);
   }
 #endif
 
@@ -917,7 +926,7 @@ void* PartitionBucket<thread_safe>::SlowPathAlloc(
   // have a usable freelist head.
   if (LIKELY(new_slot_span->freelist_head != nullptr)) {
     PartitionFreelistEntry* entry = new_slot_span->freelist_head;
-    PartitionFreelistEntry* new_head = entry->GetNext();
+    PartitionFreelistEntry* new_head = entry->GetNext(slot_size);
     new_slot_span->SetFreelistHead(new_head);
     new_slot_span->num_allocated_slots++;
 

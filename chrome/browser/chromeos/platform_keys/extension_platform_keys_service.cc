@@ -22,10 +22,9 @@
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
-#include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
-#include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/crosapi/cpp/keystore_service_util.h"
+#include "chromeos/crosapi/mojom/keystore_error.mojom-shared.h"
 #include "chromeos/crosapi/mojom/keystore_error.mojom.h"
 #include "chromeos/crosapi/mojom/keystore_service.mojom.h"
 #include "content/public/browser/browser_context.h"
@@ -60,6 +59,8 @@ using crosapi::mojom::KeystoreECDSAParamsPtr;
 using crosapi::mojom::KeystoreError;
 using crosapi::mojom::KeystorePKCS115Params;
 using crosapi::mojom::KeystorePKCS115ParamsPtr;
+using crosapi::mojom::KeystoreSelectClientCertificatesResult;
+using crosapi::mojom::KeystoreSelectClientCertificatesResultPtr;
 using crosapi::mojom::KeystoreService;
 using crosapi::mojom::KeystoreSigningAlgorithm;
 using crosapi::mojom::KeystoreSigningAlgorithmPtr;
@@ -71,6 +72,14 @@ namespace chromeos {
 namespace {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+
+// TODO(miersh): minimize the use of these functions.
+std::vector<uint8_t> StrToBlob(const std::string& str) {
+  return std::vector<uint8_t>(str.begin(), str.end());
+}
+std::string BlobToStr(const std::vector<uint8_t>& blob) {
+  return std::string(blob.begin(), blob.end());
+}
 
 // Verify the allowlisted kKeyPermissionsInLoginScreen feature behaviors.
 bool IsExtensionAllowlisted(const extensions::Extension* extension) {
@@ -237,8 +246,7 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
                                  result->get_error());
         break;
       case Tag::BLOB:
-        const std::vector<uint8_t>& blob = result->get_blob();
-        public_key_spki_der_ = std::string(blob.begin(), blob.end());
+        public_key_spki_der_ = BlobToStr(result->get_blob());
         break;
     }
     DoStep();
@@ -250,43 +258,43 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
         GetForBrowserContextAndExtension(
             base::BindOnce(&GenerateKeyTask::GotPermissions,
                            base::Unretained(this)),
-            service_->browser_context_, extension_id_,
-            service_->key_permissions_service_);
+            service_->browser_context_, extension_id_);
   }
 
-  void OnKeyRegisteredForCorporateUsage(platform_keys::Status status) {
-    if (status == platform_keys::Status::kSuccess) {
+  void OnKeyRegisteredForCorporateUsage(bool is_error,
+                                        crosapi::mojom::KeystoreError error) {
+    if (!is_error) {
       std::move(callback_).Run(public_key_spki_der_, /*error=*/absl::nullopt);
       DoStep();
       return;
     }
 
     LOG(ERROR) << "Corporate key registration failed: "
-               << platform_keys::StatusToString(status);
+               << platform_keys::KeystoreErrorToString(error);
 
-    service_->platform_keys_service_->RemoveKey(
-        token_id_, public_key_spki_der_,
+    service_->keystore_service_->RemoveKey(
+        KeystoreTypeFromTokenId(token_id_), StrToBlob(public_key_spki_der_),
         base::BindOnce(&GenerateKeyTask::RemoveKeyCallback,
                        base::Unretained(this),
-                       /*corporate_key_registration_error_status=*/status));
+                       /*corporate_key_registration_error_status=*/error));
   }
 
   void RemoveKeyCallback(
-      platform_keys::Status corporate_key_registration_error_status,
-      platform_keys::Status remove_key_status) {
-    if (remove_key_status != platform_keys::Status::kSuccess) {
+      crosapi::mojom::KeystoreError corporate_key_registration_error,
+      bool is_remove_error,
+      KeystoreError remove_error) {
+    if (is_remove_error) {
       LOG(ERROR)
           << "Failed to remove a dangling key with error: "
-          << platform_keys::StatusToString(remove_key_status)
+          << platform_keys::KeystoreErrorToString(remove_error)
           << ", after failing to register key for corporate usage with error: "
-          << platform_keys::StatusToString(
-                 corporate_key_registration_error_status);
+          << platform_keys::KeystoreErrorToString(
+                 corporate_key_registration_error);
     }
 
     next_step_ = Step::DONE;
     std::move(callback_).Run(std::string() /* no public key */,
-                             platform_keys::StatusToKeystoreError(
-                                 corporate_key_registration_error_status));
+                             corporate_key_registration_error);
     DoStep();
   }
 
@@ -391,7 +399,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
            SignCallback callback,
            ExtensionPlatformKeysService* service)
       : token_id_(token_id),
-        data_(data.begin(), data.end()),
+        data_(StrToBlob(data)),
         public_key_spki_der_(public_key_spki_der),
         extension_id_(extension_id),
         callback_(std::move(callback)),
@@ -439,8 +447,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
     platform_keys::ExtensionKeyPermissionsServiceFactory::
         GetForBrowserContextAndExtension(
             base::BindOnce(&SignTask::GotPermissions, base::Unretained(this)),
-            service_->browser_context_, extension_id_,
-            service_->key_permissions_service_);
+            service_->browser_context_, extension_id_);
   }
 
   void GotPermissions(
@@ -487,13 +494,13 @@ class ExtensionPlatformKeysService::SignTask : public Task {
                        base::Unretained(this)));
   }
 
-  void OnSetKeyUsedForSigningDone(platform_keys::Status status) {
-    if (status != platform_keys::Status::kSuccess) {
+  void OnSetKeyUsedForSigningDone(bool is_error,
+                                  crosapi::mojom::KeystoreError error) {
+    if (is_error) {
       LOG(ERROR) << "Marking a key used for signing failed: "
-                 << platform_keys::StatusToString(status);
+                 << platform_keys::KeystoreErrorToString(error);
       next_step_ = Step::DONE;
-      std::move(callback_).Run(std::string() /* no signature */,
-                               platform_keys::StatusToKeystoreError(status));
+      std::move(callback_).Run(std::string() /* no signature */, error);
       DoStep();
       return;
     }
@@ -512,12 +519,11 @@ class ExtensionPlatformKeysService::SignTask : public Task {
       is_keystore_provided = true;
       keystore = KeystoreTypeFromTokenId(token_id_.value());
     }
-    std::vector<uint8_t> public_key(public_key_spki_der_.begin(),
-                                    public_key_spki_der_.end());
 
     service_->keystore_service_->Sign(
-        is_keystore_provided, keystore, std::move(public_key), signing_scheme_,
-        data_, base::BindOnce(&SignTask::DidSign, weak_factory_.GetWeakPtr()));
+        is_keystore_provided, keystore, StrToBlob(public_key_spki_der_),
+        signing_scheme_, data_,
+        base::BindOnce(&SignTask::DidSign, weak_factory_.GetWeakPtr()));
   }
 
   void DidSign(KeystoreBinaryResultPtr result) {
@@ -529,7 +535,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
       case KeystoreBinaryResult::Tag::BLOB:
         const std::vector<uint8_t>& blob = result->get_blob();
         std::move(callback_).Run(
-            /*signature=*/std::string(blob.begin(), blob.end()),
+            /*signature=*/BlobToStr(blob),
             /*error=*/absl::nullopt);
         break;
     }
@@ -643,8 +649,7 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
     platform_keys::ExtensionKeyPermissionsServiceFactory::
         GetForBrowserContextAndExtension(
             base::BindOnce(&SelectTask::GotPermissions, base::Unretained(this)),
-            service_->browser_context_, extension_id_,
-            service_->key_permissions_service_);
+            service_->browser_context_, extension_id_);
   }
 
   void GotPermissions(
@@ -658,7 +663,7 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   // Retrieves all certificates matching |request_|. Will call back to
   // |GotMatchingCerts()|.
   void GetMatchingCerts() {
-    service_->platform_keys_service_->SelectClientCertificates(
+    service_->keystore_service_->SelectClientCertificates(
         request_.certificate_authorities,
         base::BindOnce(&SelectTask::GotMatchingCerts,
                        weak_factory_.GetWeakPtr()));
@@ -669,18 +674,24 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
   // occurred, |matches| will be null. Note that the order of |matches|, based
   // on the expiration/issuance date, is relevant and must be preserved in any
   // processing of the list.
-  void GotMatchingCerts(std::unique_ptr<net::CertificateList> matches,
-                        platform_keys::Status status) {
-    if (status != platform_keys::Status::kSuccess) {
+  void GotMatchingCerts(KeystoreSelectClientCertificatesResultPtr result) {
+    if (result->which() ==
+        KeystoreSelectClientCertificatesResult::Tag::kError) {
       next_step_ = Step::DONE;
-      std::move(callback_).Run(nullptr /* no certificates */, status);
+      std::move(callback_).Run(nullptr /* no certificates */,
+                               result->get_error());
       DoStep();
       return;
     }
 
-    for (scoped_refptr<net::X509Certificate>& certificate : *matches) {
-      // Filter the retrieved certificates returning only those whose type is
-      // equal to one of the entries in the type field of the certificate
+    for (const std::vector<uint8_t>& binary_cert : result->get_certificates()) {
+      scoped_refptr<net::X509Certificate> certificate =
+          net::X509Certificate::CreateFromBytes(
+              reinterpret_cast<const char*>(binary_cert.data()),
+              binary_cert.size());
+
+      // Filter the retrieved certificates returning only those whose type
+      // is equal to one of the entries in the type field of the certificate
       // request.
       // If the type field does not contain any entries, certificates of all
       // types shall be returned.
@@ -735,11 +746,8 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
       matches_.push_back(certificate);
       DoStep();
     } else if (interactive_) {
-      platform_keys::KeyPermissionsService* const key_permissions_service =
-          platform_keys::KeyPermissionsServiceFactory::GetForBrowserContext(
-              service_->browser_context_);
-      key_permissions_service->CanUserGrantPermissionForKey(
-          public_key_spki_der,
+      service_->keystore_service_->CanUserGrantPermissionForKey(
+          StrToBlob(public_key_spki_der),
           base::BindOnce(&SelectTask::OnAbilityToGrantPermissionKnown,
                          base::Unretained(this), std::move(certificate)));
     } else {
@@ -812,10 +820,11 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
                                             base::Unretained(this)));
   }
 
-  void OnPermissionsUpdated(platform_keys::Status status) {
-    if (status != platform_keys::Status::kSuccess) {
+  void OnPermissionsUpdated(bool is_error,
+                            crosapi::mojom::KeystoreError error) {
+    if (is_error) {
       LOG(WARNING) << "Error while updating permissions: "
-                   << platform_keys::StatusToString(status);
+                   << platform_keys::KeystoreErrorToString(error);
     }
 
     DoStep();
@@ -831,8 +840,7 @@ class ExtensionPlatformKeysService::SelectTask : public Task {
       selection->assign(matches_.begin(), matches_.end());
     }
 
-    std::move(callback_).Run(std::move(selection),
-                             platform_keys::Status::kSuccess);
+    std::move(callback_).Run(std::move(selection), /*error=*/absl::nullopt);
     DoStep();
   }
 
@@ -862,14 +870,7 @@ ExtensionPlatformKeysService::SelectDelegate::~SelectDelegate() {}
 
 ExtensionPlatformKeysService::ExtensionPlatformKeysService(
     content::BrowserContext* browser_context)
-    : browser_context_(browser_context),
-      platform_keys_service_(
-          platform_keys::PlatformKeysServiceFactory::GetForBrowserContext(
-              browser_context)),
-      key_permissions_service_(
-          chromeos::platform_keys::KeyPermissionsServiceFactory::
-              GetForBrowserContext(browser_context)) {
-  DCHECK(platform_keys_service_);
+    : browser_context_(browser_context) {
   DCHECK(browser_context);
 
   BindKeystoreService(browser_context,

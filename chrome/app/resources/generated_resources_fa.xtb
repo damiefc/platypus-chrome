@@ -238,6 +238,7 @@
 <translation id="1243436884219965846">بازبینی گذرواژه‌ها</translation>
 <translation id="1244265436519979884">‏درحال‌حاضر بازیابی Linux درحال انجام است</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
+<translation id="1246863218384630739"><ph name="VM_NAME" /> نصب نشد: نشانی وب تصویر کد خطای <ph name="HTTP_ERROR" /> را برگرداند. لطفاً با سرپرست تماس بگیرید.</translation>
 <translation id="1246905108078336582">پیشنهاد از بریده‌دان حذف شود؟</translation>
 <translation id="1251366534849411931">اینجا باید آکولاد باز باشد: <ph name="ERROR_LINE" /></translation>
 <translation id="1251480783646955802">با این کار <ph name="TOTAL_USAGE" /> از داده‌هایی که سایت‌ها و برنامه‌های نصب‌شده ذخیره کرده‌اند پاک می‌شود</translation>
@@ -1534,6 +1535,7 @@
 <translation id="2610260699262139870">اندازه &amp;واقعی</translation>
 <translation id="2610780100389066815">‏امضای فهرست اطمینان Microsoft</translation>
 <translation id="2612676031748830579">شماره کارت</translation>
+<translation id="2613535083491958306"><ph name="ORIGIN" /> خواهد توانست <ph name="FILENAME" /> را ویرایش کند</translation>
 <translation id="2616366145935564096">خواندن و تغییر داده‌هایتان در <ph name="WEBSITE_1" /></translation>
 <translation id="2617342710774726426">سیم‌کارت قفل است</translation>
 <translation id="2618797463720777311">راه‌اندازی «هم‌رسانی با اطراف»</translation>
@@ -1672,6 +1674,7 @@
 <translation id="2755349111255270002">بازنشانی این <ph name="DEVICE_TYPE" /></translation>
 <translation id="2755367719610958252">مدیریت قابلیت‌های دسترس‌پذیری</translation>
 <translation id="275662540872599901">صفحه خاموش است</translation>
+<translation id="2757161511365746634">مشاهده چاپگر</translation>
 <translation id="2757338480560142065">مطمئن شوید گذرواژه‌ای که ذخیره می‌کنید با گذرواژه <ph name="WEBSITE" /> مطابقت داشته باشد</translation>
 <translation id="2762441749940182211">دوربین مسدود شده است</translation>
 <translation id="2764786626780673772">‏جزئیات VPN</translation>
@@ -1714,6 +1717,7 @@
 <translation id="2799223571221894425">راه‌اندازی مجدد</translation>
 <translation id="2800760947029405028">بارگذاری تصویر</translation>
 <translation id="2801954693771979815">اندازه صفحه‌نمایش</translation>
+<translation id="2802557211515765772">چاپگر مدیریت‌شده‌ای وجود ندارد.</translation>
 <translation id="2803313416453193357">بازکردن پوشه</translation>
 <translation id="2803375539583399270">پین را وارد کنید</translation>
 <translation id="2804043232879091219">مرورگر جایگزین باز نشد</translation>
@@ -2292,6 +2296,7 @@
 <translation id="3441653493275994384">صفحه</translation>
 <translation id="3441663102605358937">برای به‌تأیید رساندن این حساب، دوباره به سیستم <ph name="ACCOUNT" /> وارد شوید</translation>
 <translation id="3444641828375597683">‏تبلیغ‌کنندگان و ناشران می‌توانند از FLoC که در بخش‌های بعدی این صفحه شرح داده شده استفاده کنند.</translation>
+<translation id="3444726579402183581"><ph name="ORIGIN" /> خواهد توانست <ph name="FILENAME" /> را مشاهده کند</translation>
 <translation id="3445047461171030979">‏پاسخ‌های سریع «دستیار Google»</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> دقیقه</translation>
 <translation id="3445925074670675829">‏دستگاه USB-C</translation>
@@ -3790,6 +3795,7 @@
 <translation id="5086874064903147617">صفحه اصلی پیش‌فرض بازیابی شود؟</translation>
 <translation id="5087249366037322692">توسط یک شخص ثالث اضافه شده است</translation>
 <translation id="5087580092889165836">افزودن کارت</translation>
+<translation id="5087748406101774740"><ph name="APP_NAME" /> <ph name="PROFILE_NAME" /></translation>
 <translation id="5088534251099454936">‏PKCS #1 SHA-512 با رمزگذاری RSA</translation>
 <translation id="5090637338841444533">اجازه ندارد موقعیت دوربین را ردیابی کند</translation>
 <translation id="5094721898978802975">ارتباط با برنامه‌های بومی همکار</translation>
@@ -3824,7 +3830,6 @@
 <translation id="512903556749061217">متصل</translation>
 <translation id="5130675701626084557">نمایه را نمی‌توان بارگیری کرد. لطفاً بعداً دوباره امتحان کنید یا برای راهنمایی با شرکت مخابراتی تماس بگیرید.</translation>
 <translation id="5131591206283983824">کشیدن با ضربه روی صفحه لمسی</translation>
-<translation id="5133483819862530305">غروب تا طلوع</translation>
 <translation id="5135085122826131075">‏با گفتن «OK Google» به «دستیار» دسترسی پیدا کنید.</translation>
 <translation id="5135533361271311778">ایجاد مورد نشانک ممکن نیست.</translation>
 <translation id="5136343472380336530">مطمئن شوید قفل هر دو دستگاه باز باشد، نزدیک یکدیگر باشند، و بلوتوث آن‌ها روشن باشد. <ph name="LINK_BEGIN" />بیشتر بدانید<ph name="LINK_END" /></translation>
@@ -3861,6 +3866,7 @@
 <translation id="5170568018924773124">نمایش در پوشه</translation>
 <translation id="5171045022955879922">‏جستجو یا تایپ URL</translation>
 <translation id="5171343362375269016">حافظه جابجاشده</translation>
+<translation id="5172855596271336236">۱ چاپگر مدیریت‌شده وجود دارد.</translation>
 <translation id="5173668317844998239">اثرانگشت به کلید امنیتی اضافه کنید یا اثرهای انگشت ذخیره‌شده در آن را حذف کنید</translation>
 <translation id="5175379009094579629">نام دستگاه نامعتبر است. برای امتحان مجدد نام دستگاه معتبری وارد کنید.</translation>
 <translation id="5177479852722101802">ادامه مسدود کردن دسترسی به دوربین و میکروفن</translation>
@@ -4570,6 +4576,7 @@
 <translation id="5964113968897211042">{COUNT,plural, =0{باز کردن همه در پنجره جدید}=1{باز کردن در پنجره جدید}one{باز کردن همه ({COUNT}) در پنجره جدید}other{باز کردن همه ({COUNT}) در پنجره جدید}}</translation>
 <translation id="5965661248935608907">‏این برنامه افزودنی همچنین صفحه‌ای را که هنگام کلیک کردن روی دکمه صفحه اصلی یا جستجو از Omnibox نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="5969419185858894314"><ph name="ORIGIN" /> می‌تواند فایل‌های <ph name="FOLDERNAME" /> را مشاهده کند</translation>
+<translation id="5969728632630673489">اعلان میان‌برهای صفحه‌کلید رد شد</translation>
 <translation id="5971037678316050792">کنترل حالت آداپتور بلوتوث و مرتبط‌سازی</translation>
 <translation id="597235323114979258">دیدن مقصدهای بیشتر</translation>
 <translation id="5972666587303800813">سرویس غیرفعال</translation>
@@ -6122,6 +6129,7 @@
 <translation id="7674542105240814168">دسترسی به مکان رد شد</translation>
 <translation id="7676119992609591770"><ph name="NUM" /> برگه برای «<ph name="SEARCH_TEXT" />» پیدا شد</translation>
 <translation id="7676867886086876795">‏صدایتان را برای Google ارسال کنید تا بتوانید هر فیلد نوشتاری را با دیکته کردن پر کنید.</translation>
+<translation id="7679171213002716280"><ph name="PRINTER_COUNT" /> چاپگر مدیریت‌شده وجود دارد.</translation>
 <translation id="7680416688940118410">تنظیم صفحه لمسی</translation>
 <translation id="7681095912841365527">سایت می‌تواند از بلوتوث استفاده کند</translation>
 <translation id="7681597159868843240">سایت‌ها معمولاً برای ارائه ویژگی‌هایی مثل واقعیت مجازی یا ردیابی تناسب اندام از حسگرهای حرکتی دستگاه استفاده می‌کنند</translation>
@@ -6205,6 +6213,7 @@
 <translation id="7766807826975222231">گشت زدن</translation>
 <translation id="7766838926148951335">پذیرفتن مجوزها</translation>
 <translation id="7768507955883790804">وقتی از سایت‌ها بازدید می‌کنید، آن‌ها به‌طور خودکار این تنظیم را دنبال می‌کنند</translation>
+<translation id="7768526219335215384"><ph name="ORIGIN" /> خواهد توانست فایل‌های <ph name="FOLDERNAME" /> را مشاهده کند</translation>
 <translation id="7768770796815395237">تغییر دادن</translation>
 <translation id="7768784765476638775">انتخاب برای شنیدن</translation>
 <translation id="7770612696274572992">تصویر از دستگاه دیگری کپی شده است</translation>
@@ -6509,6 +6518,7 @@
 <translation id="8063235345342641131">چهره‌نمای پیش‌فرض سبز</translation>
 <translation id="8063535366119089408">مشاهده فایل</translation>
 <translation id="8064279191081105977">گروه <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
+<translation id="8066444921260601116">کادر گفتگوی اتصال</translation>
 <translation id="8068253693380742035">برای ورود به سیستم لمس کنید</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">چاپ کردن به‌‌عنوان تصویر</translation>
@@ -7540,6 +7550,7 @@
 <translation id="9186963452600581158">‏ورود به سیستم با «حساب Google» فرزند</translation>
 <translation id="9188732951356337132">‏داده‌های استفاده و عیب‌یابی را ارسال کنید. این دستگاه درحال‌حاضر به‌صورت‌ خودکار داده‌های عیب‌یابی و داده‌های استفاده از دستگاه و برنامه را برای Google ارسال می‌کند. این داده‌ها برای شناسایی فرزندتان استفاده نخواهند شد و به بهبود پایداری سیستم و برنامه و موارد دیگر کمک خواهد کرد. بعضی داده‌های انبوهشی نیز به برنامه‌ها و شرکای Google (مانند برنامه‌نویس‌های Android) کمک می‌کند. اگر تنظیم «فعالیت وب و برنامه» تکمیلی برای فرزندتان روشن باشد، ممکن است این داده‌ها در حساب Google او ذخیره شود. <ph name="BEGIN_LINK2" />بیشتر بدانید<ph name="END_LINK2" /></translation>
 <translation id="9198090666959937775">‏استفاده از تلفن Android به‌عنوان کلید امنیتی</translation>
+<translation id="9200339982498053969"><ph name="ORIGIN" /> خواهد توانست فایل‌های <ph name="FOLDERNAME" /> را ویرایش کند</translation>
 <translation id="920045321358709304">جستجوی <ph name="SEARCH_ENGINE" /></translation>
 <translation id="9201023452444595544">هرنوع داده آفلاینی حذف خواهد شد</translation>
 <translation id="9201220332032049474">گزینه‌های قفل صفحه</translation>
@@ -7600,6 +7611,7 @@
 <translation id="965211523698323809">ارسال و دریافت پیامک از <ph name="DEVICE_TYPE" /> شما. <ph name="LINK_BEGIN" />بیشتر بدانید<ph name="LINK_END" /></translation>
 <translation id="967398046773905967">‏به هیچ سایتی اجازه دسترسی به دستگاه‌های HID داده نشود</translation>
 <translation id="967624055006145463">داده ذخیره شد</translation>
+<translation id="96774243435178359">چاپگرهای مدیریت‌شده</translation>
 <translation id="968000525894980488">‏«خدمات Google Play» را روشن کنید.</translation>
 <translation id="968037381421390582">جای‌گذاری و جستجوی «<ph name="SEARCH_TERMS" />»</translation>
 <translation id="968174221497644223">حافظه پنهان برنامه</translation>

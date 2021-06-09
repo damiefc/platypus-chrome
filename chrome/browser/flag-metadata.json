@@ -396,7 +396,7 @@
     "expiry_milestone": 86
   },
   {
-    "name":"autofill-suggest-virtual-cards-only-on-full-form-detection",
+    "name":"autofill-suggest-virtual-cards-on-incomplete-form",
     "owners": ["siashah", "siyua"],
     "expiry_milestone":98
   },
@@ -3813,6 +3813,11 @@
     "expiry_milestone": 76
   },
   {
+    "name": "omnibox-active-search-engines",
+    "owners": [ "yoangela", "chrome-omnibox-team@google.com" ],
+    "expiry_milestone": 99
+  },
+  {
     "name": "omnibox-adaptive-suggestions-count",
     "owners": [ "ender", "chrome-omnibox-team@google.com" ],
     "expiry_milestone": 95
@@ -3881,11 +3886,6 @@
     "name": "omnibox-keyword-search-button",
     "owners": [ "jdonnelly", "yoangela", "orinj", "chrome-omnibox-team@google.com" ],
     "expiry_milestone": 95
-  },
-  {
-    "name": "omnibox-keyword-space-triggering",
-    "owners": [ "yoangela", "chrome-omnibox-team@google.com" ],
-    "expiry_milestone": 99
   },
   {
     "name": "omnibox-keyword-space-triggering-setting",
@@ -4253,6 +4253,15 @@
       "msramek",
       "chrome-friendly-settings@google.com"],
     "expiry_milestone": 94
+  },
+  {
+    "name": "privacy-review",
+    "owners": [
+      "rainhard",
+      "andzaytsev",
+      "msramek",
+      "chrome-friendly-settings@google.com"],
+    "expiry_milestone": 100
   },
   {
     "name": "privacy-sandbox-settings",
@@ -5070,6 +5079,11 @@
     // This flag is used for in-the-field debugging of animation issues on
     // Chrome OS.
     "expiry_milestone": -1
+  },
+  {
+    "name": "unified-password-manager-android",
+    "owners": [ "fhorschig", "vasilii" ],
+    "expiry_milestone": 97
   },
   {
     "name": "unsafely-treat-insecure-origin-as-secure",

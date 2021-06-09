@@ -129,7 +129,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.DropOutReason{Intent}"
-    enum="AutofillAssistantDropOutReason" expires_after="2021-08-22">
+    enum="AutofillAssistantDropOutReason" expires_after="2022-06-08">
   <owner>selakovic@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -145,7 +145,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.FeatureModuleInstallation"
     enum="AutofillAssistantFeatureModuleInstallation"
-    expires_after="2021-10-25">
+    expires_after="2022-06-08">
   <owner>mcarlen@chromium.org</owner>
   <owner>autofill_assistant+watch@google.com</owner>
   <summary>
@@ -156,7 +156,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.OnboardingFetcher.ResultStatus"
-    enum="AutofillAssistantOnboardingFetcherResultStatus" expires_after="M93">
+    enum="AutofillAssistantOnboardingFetcherResultStatus"
+    expires_after="2022-06-08">
   <owner>sandromaggi@google.com</owner>
   <owner>mcarlen@google.com</owner>
   <summary>
@@ -168,7 +169,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.OnBoarding{Intent}"
-    enum="AutofillAssistantOnBoarding" expires_after="2021-09-04">
+    enum="AutofillAssistantOnBoarding" expires_after="2022-06-08">
   <owner>lsuder@chromium.org</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -181,7 +182,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.AutofillChanged"
     enum="AutofillAssistantPaymentRequestAutofillInfoChanged"
-    expires_after="2021-10-04">
+    expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -192,7 +193,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.FirstNameOnly"
-    enum="Boolean" expires_after="M93">
+    enum="Boolean" expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -205,7 +206,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.MandatoryPostalCode"
     enum="AutofillAssistantPaymentRequestMandatoryPostalCode"
-    expires_after="M93">
+    expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -219,7 +220,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.AutofillAssistant.PaymentRequest.Prefilled"
-    enum="AutofillAssistantPaymentRequestPrefilled" expires_after="2021-10-04">
+    enum="AutofillAssistantPaymentRequestPrefilled" expires_after="2022-06-08">
   <owner>arbesser@google.com</owner>
   <owner>mcarlen@chromium.org</owner>
   <summary>
@@ -935,7 +936,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.OpenSource.Other"
-    enum="AndroidDownloadOpenSource" expires_after="2021-10-04">
+    enum="AndroidDownloadOpenSource" expires_after="2021-12-05">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -945,7 +946,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.DownloadManager.OpenSource.Video"
-    enum="AndroidDownloadOpenSource" expires_after="2021-10-04">
+    enum="AndroidDownloadOpenSource" expires_after="2021-12-05">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records how users open video download files on Android.</summary>
@@ -1146,7 +1147,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.FontLookup.Blink.DLFontsLatencySuccess" units="ms"
-    expires_after="2021-09-30">
+    expires_after="2021-12-05">
   <owner>drott@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -1500,7 +1501,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.KernelVersion" enum="AndroidKernelVersion"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>rsesek@chromium.org</owner>
   <summary>
     Reports the kernel major and minor version from the utsname.release field.
@@ -1638,7 +1639,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Android.MemoryPressureNotification"
-    enum="Android.MemoryPressureNotification" expires_after="2021-10-04">
+    enum="Android.MemoryPressureNotification" expires_after="2021-12-05">
   <owner>ssid@chromium.org</owner>
   <summary>
     Memory pressure notifications sent by Android through ComponentCallbacks2.
@@ -1863,7 +1864,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.SuggestionView.CreateTime"
-    units="microseconds" expires_after="2021-10-04">
+    units="microseconds" expires_after="2021-12-05">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -1886,7 +1887,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.Omnibox.SuggestionView.Reused" enum="BooleanReused"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>ender@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
@@ -1988,7 +1989,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.BitmapScalerTask" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -1997,7 +1998,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.CacheHits" units="Hits"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2007,7 +2008,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecodeRequests" units="Hits"
-    expires_after="2021-10-04">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2017,7 +2018,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostFailureOutOfMemory" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2031,7 +2032,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoFileError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2045,7 +2046,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoIoError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2059,7 +2060,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoRuntimeError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2073,7 +2074,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DecoderHostVideoUnknownError" units="%"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2087,7 +2088,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.DialogAction"
-    enum="PhotoPickerDialogAction" expires_after="2021-06-01">
+    enum="PhotoPickerDialogAction" expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2096,7 +2097,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumeratedFiles" units="Files"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2106,7 +2107,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumeratedRate"
-    units="Files per 10th of a second" expires_after="2021-06-01">
+    units="Files per 10th of a second" expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2116,7 +2117,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.EnumerationTime" units="ms"
-    expires_after="2021-08-09">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2126,7 +2127,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ExifOrientation" enum="ExifOrientation"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2137,7 +2138,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ImageByteCount" units="KB"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2147,7 +2148,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.ImageDecodeTime" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2157,7 +2158,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTime" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2168,7 +2169,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTimeAnimation" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2179,7 +2180,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.RequestProcessTimeThumbnail" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2190,7 +2191,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.UpscaleLowResBitmap" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2201,7 +2202,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoByteCount" units="KB"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2211,7 +2212,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoDecodeTimeAnimation" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2222,7 +2223,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PhotoPicker.VideoDecodeTimeThumbnail" units="ms"
-    expires_after="2021-06-01">
+    expires_after="2022-06-01">
   <owner>finnur@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -2232,7 +2233,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PlayServices.Installed" enum="BooleanInstalled"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -2242,7 +2243,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.PlayServices.Version" units="versioncode"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -2366,7 +2367,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.SeccompStatus.RendererSandbox"
-    enum="AndroidSeccompSandboxStatus" expires_after="2021-10-04">
+    enum="AndroidSeccompSandboxStatus" expires_after="2021-12-05">
   <owner>rsesek@chromium.org</owner>
   <summary>
     Reports the status of the seccomp-bpf sandbox in renderer processes.
@@ -2433,7 +2434,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.StrictMode.OverrideUrlLoadingTime" units="ms"
-    expires_after="2021-10-04">
+    expires_after="2021-12-05">
   <owner>yfriedman@chromium.org</owner>
   <owner>wnwen@chromium.org</owner>
   <summary>
@@ -2711,6 +2712,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn30s" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2721,6 +2725,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn3m" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2731,6 +2738,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowIn5s" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -2741,6 +2751,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.AttachedToWindowTime" units="ms"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -3091,6 +3104,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Android.WebView.EverAttachedToWindow" enum="Boolean"
     expires_after="2021-06-09">
+  <obsolete>
+    Removed in June 2021.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>
@@ -3128,7 +3144,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Android.WebView.Gfx.HardwareDrawType"
-    enum="WebViewDrawAndSubmissionType" expires_after="2021-06-15">
+    enum="WebViewDrawAndSubmissionType" expires_after="2022-01-15">
   <owner>vasilyt@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <summary>

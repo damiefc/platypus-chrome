@@ -9,6 +9,7 @@ interface AbortController
     method abort
     method constructor
 interface AbortSignal : EventTarget
+    static method abort
     attribute @@toStringTag
     getter aborted
     getter onabort
@@ -1164,7 +1165,7 @@ interface CanvasRenderingContext2D
     setter textWordSpacing
 interface CaptureHandleChangeEvent : Event
     attribute @@toStringTag
-    getter captureHandle
+    method captureHandle
     method constructor
 interface ChannelMergerNode : AudioNode
     attribute @@toStringTag
@@ -3532,7 +3533,6 @@ interface HTMLIFrameElement : HTMLElement
     getter contentDocument
     getter contentWindow
     getter csp
-    getter disallowDocumentAccess
     getter featurePolicy
     getter frameBorder
     getter height
@@ -3556,7 +3556,6 @@ interface HTMLIFrameElement : HTMLElement
     setter allowFullscreen
     setter allowPaymentRequest
     setter csp
-    setter disallowDocumentAccess
     setter frameBorder
     setter height
     setter loading
@@ -4160,6 +4159,7 @@ interface HTMLSelectElement : HTMLElement
     setter value
 interface HTMLSelectMenuElement : HTMLElement
     attribute @@toStringTag
+    getter open
     getter value
     method constructor
     setter value
@@ -10553,6 +10553,7 @@ interface WebTransport
     getter closed
     getter datagramReadable
     getter datagramWritable
+    getter datagrams
     getter incomingBidirectionalStreams
     getter incomingUnidirectionalStreams
     getter ready

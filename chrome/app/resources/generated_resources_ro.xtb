@@ -236,6 +236,7 @@
 <translation id="1243436884219965846">Examinează parolele</translation>
 <translation id="1244265436519979884">O restabilire Linux este în desfășurare</translation>
 <translation id="1244303850296295656">Eroare privind extensiile</translation>
+<translation id="1246863218384630739">Nu s-a putut instala <ph name="VM_NAME" />: adresa URL a imaginii a returnat un cod de eroare <ph name="HTTP_ERROR" />. Contactează administratorul.</translation>
 <translation id="1246905108078336582">Elimini sugestia din clipboard?</translation>
 <translation id="1251366534849411931">Se așteaptă o acoladă de deschidere: <ph name="ERROR_LINE" /></translation>
 <translation id="1251480783646955802">Astfel, se vor șterge <ph name="TOTAL_USAGE" /> din datele stocate de site-uri și de aplicațiile instalate</translation>
@@ -1523,6 +1524,7 @@ Poți gestiona setările contului dacă instalezi aplicația Family Link pe disp
 <translation id="2610260699262139870">Di&amp;mensiunea actuală</translation>
 <translation id="2610780100389066815">Semnarea listei de încredere Microsoft</translation>
 <translation id="2612676031748830579">Număr card</translation>
+<translation id="2613535083491958306"><ph name="ORIGIN" /> va putea să editeze <ph name="FILENAME" /></translation>
 <translation id="2616366145935564096">Citește și modifică datele de pe <ph name="WEBSITE_1" /></translation>
 <translation id="2617342710774726426">Cardul SIM este blocat</translation>
 <translation id="2618797463720777311">Configurează Trimiterea în apropiere</translation>
@@ -1661,6 +1663,7 @@ Poți gestiona setările contului dacă instalezi aplicația Family Link pe disp
 <translation id="2755349111255270002">Resetează <ph name="DEVICE_TYPE" /></translation>
 <translation id="2755367719610958252">Gestionează funcțiile de accesibilitate</translation>
 <translation id="275662540872599901">ecran dezactivat</translation>
+<translation id="2757161511365746634">Vezi imprimanta</translation>
 <translation id="2757338480560142065">Asigură-te că parola pe care o salvezi este aceeași cu parola pentru <ph name="WEBSITE" /></translation>
 <translation id="2762441749940182211">Camera foto este blocată</translation>
 <translation id="2764786626780673772">Detalii despre VPN</translation>
@@ -1703,6 +1706,7 @@ Poți gestiona setările contului dacă instalezi aplicația Family Link pe disp
 <translation id="2799223571221894425">Repornește</translation>
 <translation id="2800760947029405028">Încarcă o imagine</translation>
 <translation id="2801954693771979815">Dimensiunea ecranului</translation>
+<translation id="2802557211515765772">Nu sunt disponibile imprimante gestionate.</translation>
 <translation id="2803313416453193357">Deschideți dosarul</translation>
 <translation id="2803375539583399270">Introdu codul PIN</translation>
 <translation id="2804043232879091219">Browserul secundar nu a putut fi deschis</translation>
@@ -2281,6 +2285,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="3441653493275994384">Ecran</translation>
 <translation id="3441663102605358937">Conectează-te din nou la <ph name="ACCOUNT" /> pentru a confirma contul</translation>
 <translation id="3444641828375597683">Advertiserii și editorii pot folosi tehnologia ÎFG, descrisă mai jos în această pagină.</translation>
+<translation id="3444726579402183581"><ph name="ORIGIN" /> va putea să vadă <ph name="FILENAME" /></translation>
 <translation id="3445047461171030979">Răspunsuri rapide de la Asistentul Google</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> min.</translation>
 <translation id="3445925074670675829">Dispozitiv USB-C</translation>
@@ -3778,6 +3783,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="5086874064903147617">Restabilești pagina principală prestabilită?</translation>
 <translation id="5087249366037322692">Adăugată de o terță parte</translation>
 <translation id="5087580092889165836">Adaugă un card</translation>
+<translation id="5087748406101774740"><ph name="APP_NAME" /> (<ph name="PROFILE_NAME" />)</translation>
 <translation id="5088534251099454936">PKCS #1 SHA-512 cu criptare RSA</translation>
 <translation id="5090637338841444533">Nu au permisiunea de a urmări poziția camerei</translation>
 <translation id="5094721898978802975">Comunicarea cu aplicațiile native cooperante</translation>
@@ -3812,7 +3818,6 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="512903556749061217">conectat</translation>
 <translation id="5130675701626084557">Profilul nu a putut fi descărcat. Încearcă din nou mai târziu sau contactează operatorul pentru ajutor.</translation>
 <translation id="5131591206283983824">Tragerea prin atingere pe touchpad</translation>
-<translation id="5133483819862530305">De la apus la răsărit</translation>
 <translation id="5135085122826131075">Accesează Asistentul rostind „Ok Google”.</translation>
 <translation id="5135533361271311778">Elementul de marcaj nu a putut fi creat.</translation>
 <translation id="5136343472380336530">Asigură-te că ambele dispozitive sunt deblocate, apropiate unul de celălalt și au activată conexiunea Bluetooth. <ph name="LINK_BEGIN" />Află mai multe<ph name="LINK_END" /></translation>
@@ -3849,6 +3854,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="5170568018924773124">Afișează în dosar</translation>
 <translation id="5171045022955879922">Caută sau introdu adresa URL</translation>
 <translation id="5171343362375269016">Dimensiunea memoriei de swap</translation>
+<translation id="5172855596271336236">Este disponibilă o imprimantă gestionată.</translation>
 <translation id="5173668317844998239">Adaugă și șterge amprentele salvate pe cheia de securitate</translation>
 <translation id="5175379009094579629">Numele dispozitivului este nevalid. Introdu un nume de dispozitiv valid pentru a încerca din nou.</translation>
 <translation id="5177479852722101802">Blocați în continuare accesul la cameră și microfon</translation>
@@ -4558,6 +4564,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="5964113968897211042">{COUNT,plural, =0{Deschide-le pe toate într-o fereastră &amp;nouă}=1{Deschide într-o fereastră &amp;nouă}few{Deschide-le pe toate ({COUNT}) într-o fereastră &amp;nouă}other{Deschide-le pe toate ({COUNT}) într-o fereastră &amp;nouă}}</translation>
 <translation id="5965661248935608907">Stabilește și ce pagină se afișează când dai clic pe butonul Pagina principală sau când cauți din caseta polivalentă.</translation>
 <translation id="5969419185858894314"><ph name="ORIGIN" /> poate vedea fișiere din <ph name="FOLDERNAME" /></translation>
+<translation id="5969728632630673489">Notificarea privind comenzile rapide de la tastatură a fost închisă</translation>
 <translation id="5971037678316050792">Controlează starea și conectarea adaptorului Bluetooth</translation>
 <translation id="597235323114979258">Vezi mai multe destinații</translation>
 <translation id="5972666587303800813">Serviciu no-op</translation>
@@ -6110,6 +6117,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="7674542105240814168">Accesul la locație a fost refuzat</translation>
 <translation id="7676119992609591770">S-a găsit <ph name="NUM" /> filă pentru „<ph name="SEARCH_TEXT" />”</translation>
 <translation id="7676867886086876795">Trimite-ți vocea la Google pentru a permite dictarea în orice câmp de text.</translation>
+<translation id="7679171213002716280">Sunt disponibile <ph name="PRINTER_COUNT" /> imprimante gestionate.</translation>
 <translation id="7680416688940118410">Calibrarea ecranului tactil</translation>
 <translation id="7681095912841365527">Site-ul poate folosi Bluetooth</translation>
 <translation id="7681597159868843240">Site-urile folosesc de obicei senzorii de mișcare ai dispozitivului pentru funcții cum ar fi realitatea virtuală sau monitorizarea activității de fitness</translation>
@@ -6193,6 +6201,7 @@ Mesaj de la server: <ph name="SERVER_MSG" /></translation>
 <translation id="7766807826975222231">Faceți un tur</translation>
 <translation id="7766838926148951335">Acceptă permisiunile</translation>
 <translation id="7768507955883790804">Site-urile aplică automat această setare când le accesezi</translation>
+<translation id="7768526219335215384"><ph name="ORIGIN" /> va putea vedea fișierele din <ph name="FOLDERNAME" /></translation>
 <translation id="7768770796815395237">Modifică</translation>
 <translation id="7768784765476638775">Selectează și ascultă</translation>
 <translation id="7770612696274572992">Imagine copiată de pe alt dispozitiv</translation>
@@ -6496,6 +6505,7 @@ Păstrează fișierul cu cheia într-un loc sigur. Acesta va fi necesar la crear
 <translation id="8063235345342641131">Avatar verde prestabilit</translation>
 <translation id="8063535366119089408">Vezi fișierul</translation>
 <translation id="8064279191081105977">Grupul <ph name="GROUP_NAME" /> – <ph name="GROUP_CONTENTS" /> – <ph name="COLLAPSED_STATE" /></translation>
+<translation id="8066444921260601116">Fereastră de dialog de conectare</translation>
 <translation id="8068253693380742035">Atinge pentru a te conecta</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Printează ca imagine</translation>
@@ -7527,6 +7537,7 @@ Apasă o tastă de comutare atribuită pentru a elimina atribuirea.</translation
 <translation id="9186963452600581158">Conectează-te cu Contul Google al unui copil</translation>
 <translation id="9188732951356337132">Trimite date de utilizare și diagnosticare. Momentan, dispozitivul trimite automat date de diagnosticare și de utilizare a dispozitivului și aplicațiilor la Google. Acestea nu vor fi folosite la identificarea copilului și vor ajuta la stabilitatea sistemului, a aplicațiilor și altele. Unele date cumulate vor ajuta aplicațiile și partenerii Google, cum ar fi dezvoltatorii Android. Dacă ai activat setarea Activitatea suplimentară de pe web și din aplicații pentru copilul tău, aceste date pot fi salvate în Contul său Google. <ph name="BEGIN_LINK2" />Află mai multe<ph name="END_LINK2" /></translation>
 <translation id="9198090666959937775">Folosește telefonul Android ca pe o cheie de securitate</translation>
+<translation id="9200339982498053969"><ph name="ORIGIN" /> va putea edita fișierele din <ph name="FOLDERNAME" /></translation>
 <translation id="920045321358709304">Caută pe <ph name="SEARCH_ENGINE" /></translation>
 <translation id="9201023452444595544">Toate datele offline vor fi șterse</translation>
 <translation id="9201220332032049474">Opțiuni de blocare a ecranului</translation>
@@ -7587,6 +7598,7 @@ Apasă o tastă de comutare atribuită pentru a elimina atribuirea.</translation
 <translation id="965211523698323809">Trimite și primește mesaje text pe <ph name="DEVICE_TYPE" />. <ph name="LINK_BEGIN" />Află mai multe<ph name="LINK_END" /></translation>
 <translation id="967398046773905967">Nu permite niciunui site să acceseze dispozitive HID</translation>
 <translation id="967624055006145463">Date stocate</translation>
+<translation id="96774243435178359">Imprimante gestionate</translation>
 <translation id="968000525894980488">Activează serviciile Google Play.</translation>
 <translation id="968037381421390582">In&amp;serează și caută „<ph name="SEARCH_TERMS" />”</translation>
 <translation id="968174221497644223">Memoria cache a aplicației</translation>

@@ -209,6 +209,10 @@
       status: "experimental",
     },
     {
+      name: "AutofillShadowDOM",
+      status: "experimental",
+    },
+    {
       name: "AutoLazyLoadOnReloads",
       depends_on: ["LazyFrameLoading"],
     },
@@ -488,6 +492,13 @@
       status:  "experimental",
     },
     {
+      // Stop propagation from BODY to HTML and viewport if HTML or BODY
+      // elements have any containment applied.
+      // https://drafts.csswg.org/css-contain-2/#contain-property
+      name: "CSSContainedBodyPropagation",
+      status: "test",
+    },
+    {
       name: "CSSContainerQueries",
     },
     {
@@ -763,10 +774,6 @@
       // Disable composited layer squashing in pre-CompositeAfterPaint for
       // testing.
       name: "DisableLayerSquashing",
-    },
-    {
-      name: "DisallowDocumentAccess",
-      status: "experimental",
     },
     {
       name: "DisplayCapturePermissionPolicy",
@@ -1130,7 +1137,7 @@
       // provides a convenient way for testing legacy layout code path in blink
       // unit tests.
       name: "LayoutNG",
-      implied_by: ["LayoutNGGrid", "BidiCaretAffinity", "CSSContainerQueries"],
+      implied_by: ["BidiCaretAffinity", "CSSContainerQueries"],
       status: "stable",
     },
     {
@@ -1152,7 +1159,8 @@
     },
     {
       name: "LayoutNGGrid",
-      implied_by: ["CSSContainerQueries"],
+      depends_on: ["LayoutNG"],
+      status: "test",
     },
     {
       name: "LayoutNGLayoutOverflowRecalc",
@@ -1679,6 +1687,8 @@
     },
     {
       name: "Prerender2",
+      origin_trial_feature_name: "Prerender2",
+      origin_trial_os: ["android"],
     },
     {
       name: "Presentation",

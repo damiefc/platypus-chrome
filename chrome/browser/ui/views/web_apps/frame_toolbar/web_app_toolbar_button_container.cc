@@ -95,7 +95,7 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
   }
 
   // This is the point where we will be inserting page action icons.
-  page_action_insertion_point_ = int{children().size()};
+  page_action_insertion_point_ = static_cast<int>(children().size());
 
   // Insert the default page action icons.
   PageActionIconParams params;
@@ -138,8 +138,8 @@ WebAppToolbarButtonContainer::WebAppToolbarButtonContainer(
     web_app_menu_button_ =
         AddChildView(std::make_unique<WebAppMenuButton>(browser_view_));
     web_app_menu_button_->SetID(VIEW_ID_APP_MENU);
-    ConfigureWebAppToolbarButton(web_app_menu_button_, toolbar_button_provider_,
-                                 browser_view_->browser()->is_focus_mode());
+    ConfigureWebAppToolbarButton(web_app_menu_button_,
+                                 toolbar_button_provider_);
     web_app_menu_button_->SetProperty(views::kFlexBehaviorKey,
                                       views::FlexSpecification());
   }

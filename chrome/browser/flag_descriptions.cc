@@ -324,10 +324,11 @@ const char kAutofillSaveAndFillVPADescription[] =
     "it will offer to save it. If saved, it will be offered for filling in "
     "fields which expect a VPA.";
 
-const char kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionName[] =
-    "Autofill suggests virtual cards only on full form detection";
-const char kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionDescription[] =
-    "When enabled, merchant bound virtual cards will be suggested only if all "
+const char kAutofillSuggestVirtualCardsOnIncompleteFormName[] =
+    "Autofill suggests virtual cards on incomplete forms";
+const char kAutofillSuggestVirtualCardsOnIncompleteFormDescription[] =
+    "When enabled, merchant bound virtual cards will be suggested even if not "
+    "all "
     "of the card number, exp date and CVC fields are detected in a payment "
     "form.";
 
@@ -491,10 +492,6 @@ const char kEnablePasswordsAccountStorageIPHName[] =
 const char kEnablePasswordsAccountStorageIPHDescription[] =
     "Enables in-product help bubbles about storing passwords in a second, "
     "Gaia-account-scoped storage for signed-in but not syncing users";
-
-const char kFocusMode[] = "Focus Mode";
-const char kFocusModeDescription[] =
-    "If enabled, allows the user to switch to Focus Mode";
 
 const char kFontAccessAPIName[] = "Font Access APIs";
 const char kFontAccessAPIDescription[] =
@@ -1600,6 +1597,12 @@ const char kUpdateHoverAtBeginFrameDescription[] =
     "Recompute hover state at BeginFrame for layout and scroll based mouse "
     "moves, rather than old timing-based mechanism.";
 
+const char kOmniboxActiveSearchEnginesName[] =
+    "Active Search Engines section on settings page";
+const char kOmniboxActiveSearchEnginesDescription[] =
+    "Enables a 'Your Search Engines' section on "
+    "chrome://settings/searchEngines.";
+
 const char kOmniboxAdaptiveSuggestionsCountName[] =
     "Adaptive Omnibox Suggestions count";
 const char kOmniboxAdaptiveSuggestionsCountDescription[] =
@@ -1994,6 +1997,11 @@ const char kPrerender2Description[] =
 const char kPrivacyAdvisorName[] = "Privacy Advisor";
 const char kPrivacyAdvisorDescription[] =
     "Provides contextual entry points for adjusting privacy settings";
+
+const char kPrivacyReviewName[] = "Privacy Review";
+const char kPrivacyReviewDescription[] =
+    "Shows a new subpage in Settings that helps the user to review various "
+    "privacy settings.";
 
 const char kPrivacySandboxSettingsName[] = "Privacy Sandbox Settings";
 const char kPrivacySandboxSettingsDescription[] =
@@ -2514,6 +2522,12 @@ const char kTurnOffStreamingMediaCachingAlwaysName[] =
 const char kTurnOffStreamingMediaCachingAlwaysDescription[] =
     "Reduces disk activity during media playback, which can result in "
     "power savings.";
+
+const char kUnifiedPasswordManagerAndroidName[] = "Unified Password Manager";
+const char kUnifiedPasswordManagerAndroidDescription[] =
+    "Uses Google Mobile Services to store and retrieve passwords."
+    "Warning: Highly experimental. May lead to loss of passwords and "
+    "impact performance.";
 
 const char kUnsafeWebGPUName[] = "Unsafe WebGPU";
 const char kUnsafeWebGPUDescription[] =

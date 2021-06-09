@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.share;
 import android.app.Activity;
 import android.net.Uri;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
@@ -28,7 +27,7 @@ import org.chromium.chrome.browser.send_tab_to_self.SendTabToSelfShareActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetCoordinator;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder;
-import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
@@ -62,19 +61,6 @@ public class ShareDelegateImpl implements ShareDelegate {
     private final boolean mIsCustomTab;
     private long mShareStartTime;
 
-    private static final String ANY_SHARE_HISTOGRAM_NAME = "Sharing.AnyShareStarted";
-
-    // These values are recorded as histogram values. Entries should not be
-    // renumbered and numeric values should never be reused.
-    @IntDef({ShareSourceAndroid.ANDROID_SHARE_SHEET, ShareSourceAndroid.CHROME_SHARE_SHEET,
-            ShareSourceAndroid.DIRECT_SHARE})
-    private @interface ShareSourceAndroid {
-        int ANDROID_SHARE_SHEET = 0;
-        int CHROME_SHARE_SHEET = 1;
-        int DIRECT_SHARE = 2;
-        int COUNT = 3;
-    };
-
     private static boolean sScreenshotCaptureSkippedForTesting;
 
     /**
@@ -104,8 +90,7 @@ public class ShareDelegateImpl implements ShareDelegate {
         if (mShareStartTime == 0L) {
             mShareStartTime = System.currentTimeMillis();
         }
-        boolean isSyncEnabled =
-                ProfileSyncService.get() != null && ProfileSyncService.get().isSyncRequested();
+        boolean isSyncEnabled = SyncService.get() != null && SyncService.get().isSyncRequested();
         mDelegate.share(params, chromeShareExtras, mBottomSheetController, mLifecycleDispatcher,
                 mTabProvider, this::printTab, shareOrigin, isSyncEnabled, mShareStartTime,
                 isSharingHubEnabled());
@@ -318,15 +303,12 @@ public class ShareDelegateImpl implements ShareDelegate {
                 profile = Profile.fromWebContents(tabProvider.get().getWebContents());
             }
             if (chromeShareExtras.shareDirectly()) {
-                RecordHistogram.recordEnumeratedHistogram(ANY_SHARE_HISTOGRAM_NAME,
-                        ShareSourceAndroid.DIRECT_SHARE, ShareSourceAndroid.COUNT);
                 ShareHelper.shareWithLastUsedComponent(params);
             } else if (sharingHubEnabled && !chromeShareExtras.sharingTabGroup()
                     && tabProvider.get() != null) {
                 RecordHistogram.recordEnumeratedHistogram(
                         "Sharing.SharingHubAndroid.Opened", shareOrigin, ShareOrigin.COUNT);
-                RecordHistogram.recordEnumeratedHistogram(ANY_SHARE_HISTOGRAM_NAME,
-                        ShareSourceAndroid.CHROME_SHARE_SHEET, ShareSourceAndroid.COUNT);
+                ShareHelper.recordShareSource(ShareHelper.ShareSourceAndroid.CHROME_SHARE_SHEET);
                 // TODO(crbug.com/1085078): Sharing hub is suppressed for tab group sharing.
                 // Re-enable it when tab group sharing is supported by sharing hub.
                 ShareSheetCoordinator coordinator = new ShareSheetCoordinator(controller,
@@ -342,8 +324,6 @@ public class ShareDelegateImpl implements ShareDelegate {
             } else {
                 RecordHistogram.recordEnumeratedHistogram(
                         "Sharing.DefaultSharesheetAndroid.Opened", shareOrigin, ShareOrigin.COUNT);
-                RecordHistogram.recordEnumeratedHistogram(ANY_SHARE_HISTOGRAM_NAME,
-                        ShareSourceAndroid.ANDROID_SHARE_SHEET, ShareSourceAndroid.COUNT);
                 ShareHelper.showDefaultShareUi(params, profile, chromeShareExtras.saveLastUsed());
             }
         }

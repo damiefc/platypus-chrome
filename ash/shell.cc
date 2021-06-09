@@ -78,7 +78,6 @@
 #include "ash/multi_device_setup/multi_device_notification_presenter.h"
 #include "ash/policy/policy_recommendation_restorer.h"
 #include "ash/projector/projector_controller_impl.h"
-#include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/ash_switches.h"
@@ -185,6 +184,7 @@
 #include "chromeos/dbus/usb/usbguard_client.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/system/devicemode.h"
+#include "components/full_restore/features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -435,6 +435,9 @@ bool Shell::IsInTabletMode() const {
 bool Shell::ShouldSaveDisplaySettings() {
   return !(
       screen_orientation_controller_->ignore_display_configuration_updates() ||
+      // Save display settings if we don't need to show the display change
+      // dialog.
+      resolution_notification_controller_->ShouldShowDisplayChangeDialog() ||
       !display_configuration_observer_->save_preference());
 }
 
@@ -1233,7 +1236,7 @@ void Shell::Init(
 
   // Create full restore controller after WindowTreeHostManager::InitHosts()
   // since it may need to add observers to root windows.
-  if (features::IsFullRestoreEnabled())
+  if (full_restore::features::IsFullRestoreEnabled())
     full_restore_controller_ = std::make_unique<FullRestoreController>();
 
   cursor_manager_->HideCursor();  // Hide the mouse cursor on startup.

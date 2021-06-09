@@ -323,12 +323,12 @@
 #include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/policy/adb_sideloading_allowance_mode_policy_handler.h"
-#include "chrome/browser/chromeos/policy/auto_enrollment_client_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_impl.h"
 #include "chrome/browser/chromeos/policy/dm_token_storage.h"
-#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
+#include "chrome/browser/chromeos/policy/enrollment/auto_enrollment_client_impl.h"
+#include "chrome/browser/chromeos/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/policy/external_data/handlers/device_wallpaper_image_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/policy/networking/policy_cert_service_factory.h"
@@ -379,7 +379,7 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/component_updater/sw_reporter_installer_win.h"
-#include "chrome/browser/media/cdm_pref_service_impl.h"
+#include "chrome/browser/media/cdm_pref_service_helper.h"
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/win/conflicts/incompatible_applications_updater.h"
 #include "chrome/browser/win/conflicts/module_database.h"
@@ -1151,7 +1151,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
   ash::FamilyUserSessionMetrics::RegisterProfilePrefs(registry);
   chromeos::InlineLoginHandlerChromeOS::RegisterProfilePrefs(registry);
   chromeos::first_run::RegisterProfilePrefs(registry);
-  chromeos::file_system_provider::RegisterProfilePrefs(registry);
+  ash::file_system_provider::RegisterProfilePrefs(registry);
   chromeos::full_restore::RegisterProfilePrefs(registry);
   ash::KerberosCredentialsManager::RegisterProfilePrefs(registry);
   chromeos::login::SecurityTokenSessionController::RegisterProfilePrefs(
@@ -1206,7 +1206,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
 #endif
 
 #if defined(OS_WIN)
-  CdmPrefServiceImpl::RegisterProfilePrefs(registry);
+  CdmPrefServiceHelper::RegisterProfilePrefs(registry);
   component_updater::RegisterProfilePrefsForSwReporter(registry);
   NetworkProfileBubble::RegisterProfilePrefs(registry);
   safe_browsing::SettingsResetPromptPrefsManager::RegisterProfilePrefs(

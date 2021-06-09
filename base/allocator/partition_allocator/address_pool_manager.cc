@@ -236,9 +236,6 @@ AddressPoolManager::Pool::~Pool() = default;
 
 #else  // defined(PA_HAS_64_BITS_POINTERS)
 
-uint16_t AddressPoolManager::reservation_offset_table_
-    [AddressPoolManager::kReservationOffsetTableSize] = {};
-
 static_assert(
     kSuperPageSize % AddressPoolManagerBitmap::kBytesPer1BitOfBRPPoolBitmap ==
         0,

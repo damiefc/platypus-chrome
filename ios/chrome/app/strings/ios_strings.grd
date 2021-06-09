@@ -1169,10 +1169,10 @@ Because your account is managed by <ph name="HOSTED_DOMAIN">$1<ex>google.com</ex
         Clear
       </message>
       <message name="IDS_IOS_MANAGED_SIGNIN_ACCEPT_BUTTON" desc="The title of the Accept button of the Sign in to a managed account dialog. [40em]">
-        Accept and sign in
+        Accept and Sign in
       </message>
       <message name="IDS_IOS_MANAGED_SIGNIN_TITLE" desc="The title of the Sign in to a managed account dialog. [40em]">
-        Sign in with managed account
+        Sign in With Managed Account
       </message>
       <message name="IDS_IOS_MANAGED_SWITCH_ACCEPT_BUTTON" desc="The title of the Accept button of the Switch from a managed account dialog. [40em]">
         Accept and switch accounts
@@ -2240,9 +2240,6 @@ Try to use a unique password for every site.
       </message>
       <message name="IDS_IOS_SIGN_IN_DISMISS" desc="Title displayed when there is an unknown failure in sign-in and the user needs to attempt to sign in again. [Length: 20em] [iOS only]">
        Dismiss 
-      </message>
-      <message name="IDS_IOS_SIGN_IN_WRONG_CREDENTIALS" desc="Message displayed when the user's existing credentials are incorrect and should be updated. [iOS only]">
-        Your stored sign-in info might be out of date.
       </message>
       <message name="IDS_IOS_SIGN_IN_AUTH_FAILURE" desc="Message displayed when the user attempts to sign in, but the authentication step fails for an unknown reason. [iOS only]">
         Something went wrong during sign-in.

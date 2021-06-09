@@ -5,7 +5,7 @@
 import("//third_party/wayland/wayland_protocol.gni")
 
 wayland_protocol("gtk_shell_protocol") {
-  sources = [ "unstable/gtk-shell/gtk-shell.xml" ]
+  sources = [ "gtk/gdk/wayland/protocol/gtk-shell.xml" ]
 }
 
 wayland_protocol("gtk_primary_selection_protocol") {
@@ -142,5 +142,5 @@ wayland_protocol("weston_test") {
 }
 
 wayland_protocol("org_kde_kwin_idle") {
-  sources = [ "kde/idle/idle.xml" ]
+  sources = [ "kde/src/protocols/idle.xml" ]
 }

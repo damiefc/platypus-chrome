@@ -235,6 +235,7 @@
 <translation id="1243436884219965846">查看密碼</translation>
 <translation id="1244265436519979884">目前正在執行 Linux 還原作業</translation>
 <translation id="1244303850296295656">擴充功能錯誤</translation>
+<translation id="1246863218384630739">無法安裝 <ph name="VM_NAME" />：映像檔網址傳回 <ph name="HTTP_ERROR" /> 錯誤代碼。請與管理員聯絡。</translation>
 <translation id="1246905108078336582">要從剪貼簿中移除建議嗎？</translation>
 <translation id="1251366534849411931">缺少左大括弧：<ph name="ERROR_LINE" /></translation>
 <translation id="1251480783646955802">這會清除網站儲存的資料 (共 <ph name="TOTAL_USAGE" />)，以及所安裝的應用程式</translation>
@@ -1522,6 +1523,7 @@
 <translation id="2610260699262139870">實際大小(&amp;C)</translation>
 <translation id="2610780100389066815">Microsoft 信任清單簽署</translation>
 <translation id="2612676031748830579">卡號</translation>
+<translation id="2613535083491958306"><ph name="ORIGIN" /> 將可編輯「<ph name="FILENAME" />」</translation>
 <translation id="2616366145935564096">讀取以及變更你在 <ph name="WEBSITE_1" /> 網站上的資料</translation>
 <translation id="2617342710774726426">SIM 卡已鎖定</translation>
 <translation id="2618797463720777311">設定鄰近分享功能</translation>
@@ -1660,6 +1662,7 @@
 <translation id="2755349111255270002">重設這部 <ph name="DEVICE_TYPE" /></translation>
 <translation id="2755367719610958252">管理無障礙功能</translation>
 <translation id="275662540872599901">螢幕已關閉</translation>
+<translation id="2757161511365746634">查看印表機</translation>
 <translation id="2757338480560142065">請確認要儲存的密碼與 <ph name="WEBSITE" /> 上的密碼相符</translation>
 <translation id="2762441749940182211">無法使用攝影機</translation>
 <translation id="2764786626780673772">VPN 詳細資料</translation>
@@ -1702,6 +1705,7 @@
 <translation id="2799223571221894425">重新啟動</translation>
 <translation id="2800760947029405028">上傳圖片</translation>
 <translation id="2801954693771979815">螢幕大小</translation>
+<translation id="2802557211515765772">沒有受管理的印表機。</translation>
 <translation id="2803313416453193357">開啟資料夾</translation>
 <translation id="2803375539583399270">輸入 PIN</translation>
 <translation id="2804043232879091219">無法開啟替代瀏覽器</translation>
@@ -2280,6 +2284,7 @@
 <translation id="3441653493275994384">螢幕</translation>
 <translation id="3441663102605358937">再次登入 <ph name="ACCOUNT" /> 以驗證這個帳戶</translation>
 <translation id="3444641828375597683">廣告客戶和發布商可以使用 FLoC 技術 (本頁隨後會加以說明)。</translation>
+<translation id="3444726579402183581"><ph name="ORIGIN" /> 將可查看「<ph name="FILENAME" />」</translation>
 <translation id="3445047461171030979">Google 助理快速解答</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> 分鐘</translation>
 <translation id="3445925074670675829">USB-C 裝置</translation>
@@ -3776,6 +3781,7 @@
 <translation id="5086874064903147617">要還原預設首頁嗎？</translation>
 <translation id="5087249366037322692">由第三方新增</translation>
 <translation id="5087580092889165836">新增信用卡</translation>
+<translation id="5087748406101774740"><ph name="APP_NAME" /> (<ph name="PROFILE_NAME" />)</translation>
 <translation id="5088534251099454936">PKCS #1 SHA-512 (使用 RSA 加密)</translation>
 <translation id="5090637338841444533">不得追蹤攝影機位置</translation>
 <translation id="5094721898978802975">與合作原生應用程式建立連線</translation>
@@ -3810,7 +3816,6 @@
 <translation id="512903556749061217">已附加</translation>
 <translation id="5130675701626084557">無法載入設定檔。請稍後再試，或向電信業者尋求協助。</translation>
 <translation id="5131591206283983824">觸控板輕觸拖曳</translation>
-<translation id="5133483819862530305">日落到日出</translation>
 <translation id="5135085122826131075">只要說出「Ok Google」就能存取 Google 助理。</translation>
 <translation id="5135533361271311778">無法建立書籤項目。</translation>
 <translation id="5136343472380336530">請確認兩部裝置都已解鎖且彼此相鄰，並已開啟藍牙功能。<ph name="LINK_BEGIN" />瞭解詳情<ph name="LINK_END" /></translation>
@@ -3847,6 +3852,7 @@
 <translation id="5170568018924773124">在資料夾中顯示</translation>
 <translation id="5171045022955879922">搜尋或輸入網址</translation>
 <translation id="5171343362375269016">交換的記憶體</translation>
+<translation id="5172855596271336236">有 1 部受管理的印表機。</translation>
 <translation id="5173668317844998239">新增及刪除安全金鑰上儲存的指紋</translation>
 <translation id="5175379009094579629">裝置名稱無效。請輸入有效的裝置名稱，然後再試一次。</translation>
 <translation id="5177479852722101802">繼續封鎖存取攝影機和麥克風</translation>
@@ -4556,6 +4562,7 @@
 <translation id="5964113968897211042">{COUNT,plural, =0{在新視窗中開啟所有網址(&amp;N)}=1{在新視窗中開啟(&amp;N)}other{在新視窗中開啟所有 ({COUNT} 個) 網址(&amp;N)}}</translation>
 <translation id="5965661248935608907">這個擴充功能也會控管你點選 [首頁] 按鈕或使用網址列搜尋時所顯示的網頁。</translation>
 <translation id="5969419185858894314"><ph name="ORIGIN" /> 可以查看「<ph name="FOLDERNAME" />」中的檔案</translation>
+<translation id="5969728632630673489">已關閉鍵盤快速鍵通知</translation>
 <translation id="5971037678316050792">控制藍牙介面卡狀態與連線配對功能</translation>
 <translation id="597235323114979258">顯示更多列印端點</translation>
 <translation id="5972666587303800813">無作業服務</translation>
@@ -6108,6 +6115,7 @@
 <translation id="7674542105240814168">已拒絕提供位置資訊存取權</translation>
 <translation id="7676119992609591770">找到 <ph name="NUM" /> 個與「<ph name="SEARCH_TEXT" />」相符的分頁</translation>
 <translation id="7676867886086876795">將你的語音資料傳送給 Google，讓你在任何文字欄位中使用語音輸入功能。</translation>
+<translation id="7679171213002716280">有 <ph name="PRINTER_COUNT" /> 部受管理的印表機。</translation>
 <translation id="7680416688940118410">觸控螢幕校正</translation>
 <translation id="7681095912841365527">網站可以使用藍牙</translation>
 <translation id="7681597159868843240">網站通常會使用裝置的動作感應器提供虛擬實境或健身追蹤等功能</translation>
@@ -6191,6 +6199,7 @@
 <translation id="7766807826975222231">觀看導覽</translation>
 <translation id="7766838926148951335">接受權限</translation>
 <translation id="7768507955883790804">網站會在你造訪時自動套用這項設定</translation>
+<translation id="7768526219335215384"><ph name="ORIGIN" /> 將可查看「<ph name="FOLDERNAME" />」中的檔案</translation>
 <translation id="7768770796815395237">變更</translation>
 <translation id="7768784765476638775">隨選朗讀</translation>
 <translation id="7770612696274572992">從其他裝置複製的圖片</translation>
@@ -6495,6 +6504,7 @@
 <translation id="8063235345342641131">預設的綠色顯示圖片</translation>
 <translation id="8063535366119089408">查看檔案</translation>
 <translation id="8064279191081105977">「<ph name="GROUP_NAME" />」群組 - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
+<translation id="8066444921260601116">連線對話方塊</translation>
 <translation id="8068253693380742035">輕觸即可登入</translation>
 <translation id="8069615408251337349">Google 雲端列印</translation>
 <translation id="8071432093239591881">以圖片形式列印</translation>
@@ -7524,6 +7534,7 @@
 <translation id="9186963452600581158">使用孩子的 Google 帳戶登入</translation>
 <translation id="9188732951356337132">傳送使用狀況與診斷資料。這個裝置目前會自動將診斷資料以及裝置和應用程式的使用狀況資料傳送給 Google。這些資料將有助於系統和應用程式提高穩定性及做出其他改善，並不會用於識別貴子女的身分。部分匯總資料還能夠為 Google 應用程式和合作夥伴 (例如 Android 開發人員) 提供幫助。如果貴子女的「其他網路和應用程式活動」設定為開啟，系統可能會將這些資料儲存到他們的 Google 帳戶。<ph name="BEGIN_LINK2" />瞭解詳情<ph name="END_LINK2" /></translation>
 <translation id="9198090666959937775">使用你的 Android 手機做為安全金鑰</translation>
+<translation id="9200339982498053969"><ph name="ORIGIN" /> 將可編輯「<ph name="FOLDERNAME" />」中的檔案</translation>
 <translation id="920045321358709304">透過 <ph name="SEARCH_ENGINE" /> 搜尋</translation>
 <translation id="9201023452444595544">所有離線資料都將遭到清除</translation>
 <translation id="9201220332032049474">螢幕鎖定選項</translation>
@@ -7584,6 +7595,7 @@
 <translation id="965211523698323809">透過你的 <ph name="DEVICE_TYPE" /> 收發簡訊。<ph name="LINK_BEGIN" />瞭解詳情<ph name="LINK_END" /></translation>
 <translation id="967398046773905967">不允許任何網站存取 HID 裝置</translation>
 <translation id="967624055006145463">已儲存的資料</translation>
+<translation id="96774243435178359">受管理的印表機</translation>
 <translation id="968000525894980488">開啟 Google Play 服務。</translation>
 <translation id="968037381421390582">貼上「<ph name="SEARCH_TERMS" />」並執行搜尋</translation>
 <translation id="968174221497644223">應用程式快取</translation>

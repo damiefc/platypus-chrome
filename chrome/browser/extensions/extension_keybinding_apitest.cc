@@ -994,8 +994,8 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest, MAYBE_ChromeOSConversions) {
 // re-adding.
 IN_PROC_BROWSER_TEST_F(CommandsApiTest, AddRemoveAddComponentExtension) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(RunExtensionTest({.name = "keybinding/component"},
-                               {.load_as_component = true}))
+  ASSERT_TRUE(
+      RunExtensionTest("keybinding/component", {}, {.load_as_component = true}))
       << message_;
 
   extensions::ExtensionSystem::Get(browser()->profile())
@@ -1003,8 +1003,8 @@ IN_PROC_BROWSER_TEST_F(CommandsApiTest, AddRemoveAddComponentExtension) {
       ->component_loader()
       ->Remove("pkplfbidichfdicaijlchgnapepdginl");
 
-  ASSERT_TRUE(RunExtensionTest({.name = "keybinding/component"},
-                               {.load_as_component = true}))
+  ASSERT_TRUE(
+      RunExtensionTest("keybinding/component", {}, {.load_as_component = true}))
       << message_;
 }
 
@@ -1037,7 +1037,7 @@ IN_PROC_BROWSER_TEST_P(IncognitoCommandsApiTest, MAYBE_IncognitoMode) {
 
   bool is_incognito_enabled = GetParam();
 
-  ASSERT_TRUE(RunExtensionTest({.name = "keybinding/basics"},
+  ASSERT_TRUE(RunExtensionTest("keybinding/basics", {},
                                {.allow_in_incognito = is_incognito_enabled}))
       << message_;
 

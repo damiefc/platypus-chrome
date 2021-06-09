@@ -237,6 +237,7 @@
 <translation id="1243436884219965846">Έλεγχος κωδικών πρόσβασης</translation>
 <translation id="1244265436519979884">Η επαναφορά Linux βρίσκεται σε εξέλιξη.</translation>
 <translation id="1244303850296295656">Σφάλμα επέκτασης</translation>
+<translation id="1246863218384630739">Δεν ήταν δυνατή η εγκατάσταση του <ph name="VM_NAME" />: Το URL εικόνας εμφάνισε κωδικό σφάλματος <ph name="HTTP_ERROR" />. Επικοινωνήστε με τον διαχειριστή.</translation>
 <translation id="1246905108078336582">Θέλετε να καταργήσετε την πρόταση από το πρόχειρο;</translation>
 <translation id="1251366534849411931">Αναμενόμενο άγκιστρο ανοίγματος: <ph name="ERROR_LINE" /></translation>
 <translation id="1251480783646955802">Με αυτήν την ενέργεια θα διαγραφούν <ph name="TOTAL_USAGE" /> των δεδομένων που έχουν αποθηκευτεί από ιστοτόπους και τις εγκατεστημένες εφαρμογές τους.</translation>
@@ -1537,6 +1538,7 @@
 <translation id="2610260699262139870">Πραγματικό μέγεθος</translation>
 <translation id="2610780100389066815">Microsoft Trust List Signing</translation>
 <translation id="2612676031748830579">Αριθμός κάρτας</translation>
+<translation id="2613535083491958306">Το <ph name="ORIGIN" /> θα έχει δυνατότητα επεξεργασίας του <ph name="FILENAME" />.</translation>
 <translation id="2616366145935564096">Διαβάστε και αλλάξτε τα δεδομένα σας στο <ph name="WEBSITE_1" /></translation>
 <translation id="2617342710774726426">Η κάρτα SIM είναι κλειδωμένη</translation>
 <translation id="2618797463720777311">Ρύθμιση λειτουργίας Κοινοποίηση κοντά</translation>
@@ -1675,6 +1677,7 @@
 <translation id="2755349111255270002">Επαναφορά της συσκευής <ph name="DEVICE_TYPE" /></translation>
 <translation id="2755367719610958252">Διαχείριση λειτουργιών προσβασιμότητας</translation>
 <translation id="275662540872599901">η οθόνη απενεργοποιήθηκε</translation>
+<translation id="2757161511365746634">Προβολή εκτυπωτή</translation>
 <translation id="2757338480560142065">Βεβαιωθείτε ότι ο κωδικός πρόσβασης που αποθηκεύετε αντιστοιχεί στον κωδικό πρόσβασης για την υπηρεσία <ph name="WEBSITE" />.</translation>
 <translation id="2762441749940182211">Η κάμερα έχει αποκλειστεί</translation>
 <translation id="2764786626780673772">Στοιχεία VPN</translation>
@@ -1717,6 +1720,7 @@
 <translation id="2799223571221894425">Επανεκκίνηση</translation>
 <translation id="2800760947029405028">Μεταφόρτωση εικόνας</translation>
 <translation id="2801954693771979815">Μέγεθος οθόνης</translation>
+<translation id="2802557211515765772">Δεν υπάρχουν διαχειριζόμενοι εκτυπωτές.</translation>
 <translation id="2803313416453193357">Άνοιγμα φακέλου</translation>
 <translation id="2803375539583399270">Εισαγωγή PIN</translation>
 <translation id="2804043232879091219">Δεν ήταν δυνατό το άνοιγμα του εναλλακτικού προγράμματος περιήγησης</translation>
@@ -2295,6 +2299,7 @@
 <translation id="3441653493275994384">Έλεγχος</translation>
 <translation id="3441663102605358937">Συνδεθείτε ξανά στον λογαριασμό <ph name="ACCOUNT" /> για να τον επαληθεύσετε</translation>
 <translation id="3444641828375597683">Οι διαφημιζόμενοι και οι εκδότες μπορούν να χρησιμοποιήσουν την τεχνολογία FLoC, η οποία περιγράφεται παρακάτω σε αυτήν τη σελίδα.</translation>
+<translation id="3444726579402183581">Το <ph name="ORIGIN" /> θα έχει δυνατότητα προβολής του <ph name="FILENAME" />.</translation>
 <translation id="3445047461171030979">Γρήγορες απαντήσεις Βοηθού Google</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> λεπτά</translation>
 <translation id="3445925074670675829">Συσκευή USB-C</translation>
@@ -3793,6 +3798,7 @@
 <translation id="5086874064903147617">Επαναφορά προεπιλεγμένης αρχικής σελίδας;</translation>
 <translation id="5087249366037322692">Προστέθηκε από τρίτο μέρος</translation>
 <translation id="5087580092889165836">Προσθήκη κάρτας</translation>
+<translation id="5087748406101774740"><ph name="APP_NAME" /> (<ph name="PROFILE_NAME" />)</translation>
 <translation id="5088534251099454936">PKCS #1 SHA-512 με κρυπτογράφηση RSA</translation>
 <translation id="5090637338841444533">Δεν επιτρέπεται να παρακολουθούν τη θέση της κάμεράς σας</translation>
 <translation id="5094721898978802975">Επικοινωνία με συνεργαζόμενες εγγενείς εφαρμογές</translation>
@@ -3827,7 +3833,6 @@
 <translation id="512903556749061217">συνδέθηκε</translation>
 <translation id="5130675701626084557">Δεν ήταν δυνατή η λήψη του προφίλ. Δοκιμάστε ξανά αργότερα ή απευθυνθείτε στην εταιρεία κινητής τηλεφωνίας για βοήθεια.</translation>
 <translation id="5131591206283983824">Μεταφορά με πάτημα σε επιφάνεια αφής</translation>
-<translation id="5133483819862530305">Από ηλιοβασίλεμα σε ανατολή</translation>
 <translation id="5135085122826131075">Αποκτήστε πρόσβαση στον Βοηθό σας όταν λέτε Ok Google.</translation>
 <translation id="5135533361271311778">Δεν ήταν δυνατή η δημιουργία αντικειμένου σελιδοδείκτη.</translation>
 <translation id="5136343472380336530">Βεβαιωθείτε ότι και οι δύο συσκευές είναι ξεκλειδωμένες, βρίσκονται κοντά η μία στην άλλη και έχουν ενεργοποιημένο το Bluetooth. <ph name="LINK_BEGIN" />Μάθετε περισσότερα<ph name="LINK_END" /></translation>
@@ -3864,6 +3869,7 @@
 <translation id="5170568018924773124">Εμφάνιση στο φάκελο</translation>
 <translation id="5171045022955879922">Αναζήτηση ή πληκτρολόγηση διεύθυνσης URL</translation>
 <translation id="5171343362375269016">Μνήμη ανταλλαγής</translation>
+<translation id="5172855596271336236">Υπάρχει ένας διαχειριζόμενος εκτυπωτής.</translation>
 <translation id="5173668317844998239">Προσθέστε και διαγράψτε τα δακτυλικά αποτυπώματα που έχουν αποθηκευτεί στο κλειδί ασφαλείας σας.</translation>
 <translation id="5175379009094579629">Το όνομα της συσκευής δεν είναι έγκυρο. Εισαγάγετε ένα έγκυρο όνομα συσκευής για να δοκιμάσετε ξανά.</translation>
 <translation id="5177479852722101802">Συνέχιση αποκλεισμού της πρόσβασης στην κάμερα και στο μικρόφωνο</translation>
@@ -4574,6 +4580,7 @@
 <translation id="5964113968897211042">{COUNT,plural, =0{Άνοιγμα όλων σε &amp;νέο παράθυρο}=1{Άνοιγμα σε &amp;νέο παράθυρο}other{Άνοιγμα όλων ({COUNT}) σε &amp;νέο παράθυρο}}</translation>
 <translation id="5965661248935608907">Επίσης, ελέγχει τη σελίδα που εμφανίζεται όταν κάνετε κλικ στο κουμπί αρχικής σελίδας ή όταν κάνετε αναζήτηση από το κύριο πλαίσιο.</translation>
 <translation id="5969419185858894314">Ο ιστότοπος <ph name="ORIGIN" /> μπορεί να δει τα αρχεία στον φάκελο <ph name="FOLDERNAME" /></translation>
+<translation id="5969728632630673489">Η ειδοποίηση συντομεύσεων πληκτρολογίου παραβλέφθηκε.</translation>
 <translation id="5971037678316050792">Έλεγχος κατάστασης προσαρμογέα Bluetooth και σύζευξη</translation>
 <translation id="597235323114979258">Δείτε περισσότερους προορισμούς</translation>
 <translation id="5972666587303800813">Υπηρεσία No-op</translation>
@@ -6126,6 +6133,7 @@
 <translation id="7674542105240814168">Η πρόσβαση τοποθεσίας απορρίφθηκε</translation>
 <translation id="7676119992609591770">Βρέθηκε <ph name="NUM" /> καρτέλα για τον όρο αναζήτησης "<ph name="SEARCH_TEXT" />"</translation>
 <translation id="7676867886086876795">Αποστολή της φωνής σας στην Google, ώστε να επιτρέπεται η υπαγόρευση σε οποιοδήποτε πεδίο κειμένου.</translation>
+<translation id="7679171213002716280">Υπάρχουν <ph name="PRINTER_COUNT" /> διαχειριζόμενοι εκτυπωτές.</translation>
 <translation id="7680416688940118410">Βαθμονόμηση οθόνης αφής</translation>
 <translation id="7681095912841365527">Ο ιστότοπος μπορεί να χρησιμοποιεί bluetooth</translation>
 <translation id="7681597159868843240">Οι ιστότοποι χρησιμοποιούν συνήθως τους αισθητήρες κίνησης της συσκευής σας για λειτουργίες όπως η εικονική πραγματικότητα ή η παρακολούθηση φυσικής κατάστασης.</translation>
@@ -6209,6 +6217,7 @@
 <translation id="7766807826975222231">Κάντε μια περιήγηση</translation>
 <translation id="7766838926148951335">Αποδοχή αδειών</translation>
 <translation id="7768507955883790804">Οι ιστότοποι που επισκέπτεστε θα ακολουθούν αυτομάτως αυτήν τη ρύθμιση.</translation>
+<translation id="7768526219335215384">Το <ph name="ORIGIN" /> θα έχει δυνατότητα προβολής όλων των αρχείων στον φάκελο <ph name="FOLDERNAME" />.</translation>
 <translation id="7768770796815395237">Αλλαγή</translation>
 <translation id="7768784765476638775">Επιλέξτε για αυτόματη ανάγνωση</translation>
 <translation id="7770612696274572992">Η εικόνα αντιγράφηκε από άλλη συσκευή</translation>
@@ -6513,6 +6522,7 @@
 <translation id="8063235345342641131">Προεπιλεγμένο πράσινο avatar</translation>
 <translation id="8063535366119089408">Προβολή αρχείου</translation>
 <translation id="8064279191081105977">Ομάδα <ph name="GROUP_NAME" /> - <ph name="GROUP_CONTENTS" /> - <ph name="COLLAPSED_STATE" /></translation>
+<translation id="8066444921260601116">Παράθυρο διαλόγου σύνδεσης</translation>
 <translation id="8068253693380742035">Αγγίξτε για να συνδεθείτε</translation>
 <translation id="8069615408251337349">Google Cloud Print</translation>
 <translation id="8071432093239591881">Εκτύπωση ως εικόνα</translation>
@@ -7541,6 +7551,7 @@
 <translation id="9186963452600581158">Σύνδεση με τον Λογαριασμό Google παιδιού</translation>
 <translation id="9188732951356337132">Αποστολή δεδομένων χρήσης και διαγνωστικών. Επί του παρόντος, αυτή η συσκευή στέλνει αυτόματα διαγνωστικά δεδομένα, δεδομένα συσκευής και χρήσης εφαρμογών στην Google. Αυτά τα δεδομένα δεν θα χρησιμοποιηθούν για την ταυτοποίηση του παιδιού σας και θα βοηθήσουν με τη σταθερότητα του συστήματος και των εφαρμογών και την παροχή άλλων βελτιώσεων. Ορισμένα συγκεντρωτικά δεδομένα θα βοηθήσουν επίσης τις εφαρμογές και τους συνεργάτες της Google, όπως τους προγραμματιστές Android. Εάν είναι ενεργή η ρύθμιση της πρόσθετης Δραστηριότητας ιστού και εφαρμογών για το παιδί σας, αυτά τα δεδομένα μπορεί να αποθηκευτούν στον Λογαριασμό του Google. <ph name="BEGIN_LINK2" />Μάθετε περισσότερα<ph name="END_LINK2" /></translation>
 <translation id="9198090666959937775">Χρήση του τηλεφώνου σας Android ως κλειδιού ασφαλείας</translation>
+<translation id="9200339982498053969">Το <ph name="ORIGIN" /> θα έχει δυνατότητα επεξεργασίας όλων των αρχείων στον φάκελο <ph name="FOLDERNAME" />.</translation>
 <translation id="920045321358709304">Αναζήτηση <ph name="SEARCH_ENGINE" /></translation>
 <translation id="9201023452444595544">Όλα τα δεδομένα εκτός σύνδεσης θα διαγραφούν</translation>
 <translation id="9201220332032049474">Επιλογές κλειδώματος οθόνης</translation>
@@ -7601,6 +7612,7 @@
 <translation id="965211523698323809">Στείλτε και λάβετε μηνύματα κειμένου μέσω της συσκευής <ph name="DEVICE_TYPE" />. <ph name="LINK_BEGIN" />Μάθετε περισσότερα<ph name="LINK_END" /></translation>
 <translation id="967398046773905967">Να μην επιτρέπεται η πρόσβαση των ιστοτόπων στις συσκευές HID.</translation>
 <translation id="967624055006145463">Αποθηκευμένα δεδομένα</translation>
+<translation id="96774243435178359">Διαχειριζόμενοι εκτυπωτές</translation>
 <translation id="968000525894980488">Ενεργοποίηση των Υπηρεσιών Google Play.</translation>
 <translation id="968037381421390582">Επικόλληση και αναζήτηση για "<ph name="SEARCH_TERMS" />"</translation>
 <translation id="968174221497644223">Προσωρινή μνήμη εφαρμογής</translation>

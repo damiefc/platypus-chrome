@@ -401,6 +401,7 @@ Annars blockeras detta av sekretessinställningarna. Om du tillåter detta kan i
 <translation id="2359629602545592467">Flera</translation>
 <translation id="2359808026110333948">Fortsätt</translation>
 <translation id="2359961752320758691">Ditt virtuella kortnummer tillämpas.</translation>
+<translation id="236340516568226369">Ändra storlek på menyn för att aktivera och inaktivera</translation>
 <translation id="2367567093518048410">Nivå</translation>
 <translation id="2372464001869762664">När du bekräftar delas kortuppgifter från ditt Google-konto med webbplatsen. Du hittar CVC-koden i Plex-kontouppgifterna.</translation>
 <translation id="2380886658946992094">Legal</translation>
@@ -767,6 +768,7 @@ Annars blockeras detta av sekretessinställningarna. Om du tillåter detta kan i
 <translation id="3754210790023674521">Avsluta bild-i-bild-läge</translation>
 <translation id="3759461132968374835">Inga krascher har rapporterats nyligen. Krascher som uppstod när kraschrapporteringen var inaktiverad visas inte här.</translation>
 <translation id="3760561303380396507">Vill du använda Windows Hello i stället för CVC?</translation>
+<translation id="3761171036307311438">Namn på kort:</translation>
 <translation id="3761718714832595332">Dölj status</translation>
 <translation id="3765032636089507299">Sidan Säker webbsökning är under utveckling</translation>
 <translation id="3765588406864124894">Postfack 9</translation>
@@ -1713,6 +1715,7 @@ Mer information.
 <translation id="734600844861828519">11x15</translation>
 <translation id="7346048084945669753">Är anknuten:</translation>
 <translation id="7349430561505560861">A4-Extra</translation>
+<translation id="7352651011704765696">Något gick fel</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7359588939039777303">Annonser blockeras.</translation>
 <translation id="7363096869660964304">Men du är inte osynlig. Inkognitoläget döljer inte webbhistoriken för din arbetsgivare, internetleverantören eller webbplatserna du besöker.</translation>

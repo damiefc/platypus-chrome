@@ -84,6 +84,7 @@
 #include "third_party/blink/renderer/core/loader/preload_helper.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/loader/subresource_filter.h"
+#include "third_party/blink/renderer/core/mobile_metrics/mobile_friendliness_checker.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -791,6 +792,9 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
       commit_type == kWebHistoryInertCommit,
       FrameScheduler::NavigationType::kSameDocument);
 
+  if (auto* mf_checker = frame_->View()->GetMobileFriendlinessChecker())
+    mf_checker->EvaluateNow();
+
   GetLocalFrameClient().DidFinishSameDocumentNavigation(
       history_item_.Get(), commit_type, is_synchronously_committed,
       is_history_api_navigation, is_client_redirect_);
@@ -941,7 +945,8 @@ void DocumentLoader::BodyLoadingFinished(
         probe::ToCoreProbeSink(GetFrame()), main_resource_identifier_, this,
         completion_time, total_encoded_data_length, total_decoded_body_length,
         should_report_corb_blocking);
-    if (response_.IsHTTP() || is_error_page_for_failed_navigation_) {
+    if (response_.ShouldPopulateResourceTiming() ||
+        is_error_page_for_failed_navigation_) {
       // The response is being copied here to pass the Encoded and Decoded
       // sizes.
       // TODO(yoav): copy the sizes info directly.
@@ -1287,11 +1292,30 @@ mojom::CommitResult DocumentLoader::CommitSameDocumentNavigation(
   }
 
   if (!IsBackForwardLoadType(frame_load_type)) {
-    // In the case of non-history navigations, check that this is a
-    // same-document navigation. The browser should not send invalid
-    // same-document navigations.
+    // For the browser to send a same-document navigation, it will always have a
+    // fragment. When no fragment is present, the browser loads a new document.
     CHECK(url.HasFragmentIdentifier());
-    CHECK(EqualIgnoringFragmentIdentifier(frame_->GetDocument()->Url(), url));
+    if (!EqualIgnoringFragmentIdentifier(frame_->GetDocument()->Url(), url)) {
+      // A race condition has occurred! The renderer has changed the current
+      // document's URL through history.pushState(). This change was performed
+      // as a synchronous same-document navigation in the renderer process,
+      // though the URL of that document is changed as a result. The browser
+      // will hear about this and update its current URL too, but there's a time
+      // window before it hears about it. During that time, it may try to
+      // perform a same-document navigation based on the old URL. That would
+      // arrive here. There are effectively 2 incompatible navigations in flight
+      // at the moment, and the history.pushState() one was already performed.
+      // We will reorder the incoming navigation from the browser to be
+      // performed after the history.pushState() by bouncing it back through the
+      // browser. The way we do that is by sending RestartCrossDocument, which
+      // is not strictly what we want. We just want the browser to restart the
+      // navigation. However, since the document address has changed, the
+      // restarted navigation will probably be cross-document, and this prevents
+      // a resulting same-document navigation from getting bounced and restarted
+      // yet again by a renderer performing another history.pushState(). See
+      // https://crbug.com/1209772.
+      return mojom::blink::CommitResult::RestartCrossDocument;
+    }
   }
 
   // If the requesting document is cross-origin, perform the navigation

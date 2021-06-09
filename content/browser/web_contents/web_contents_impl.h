@@ -972,6 +972,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool IsWidgetForMainFrame(RenderWidgetHostImpl* render_widget_host) override;
   bool IsShowingContextMenuOnPage() const override;
   void DidChangeScreenOrientation() override;
+  gfx::Rect GetWindowsControlsOverlayRect() const override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -1529,15 +1530,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   void RemoveRenderWidgetHostDestructionObserver(
       RenderWidgetHost* render_widget_host);
 
-  // Traverses all the RenderFrameHosts in the FrameTree and creates a set
-  // all the unique RenderWidgetHostViews.
-  std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInTree();
-
   // Traverses all the WebContents in the WebContentsTree and creates a set of
   // all the unique RenderWidgetHostViews.
-  std::set<RenderWidgetHostView*> GetRenderWidgetHostViewsInWebContentsTree();
-  void GetRenderWidgetHostViewsInWebContentsTree(
-      std::set<RenderWidgetHostView*>& result);
+  std::set<RenderWidgetHostViewBase*>
+  GetRenderWidgetHostViewsInWebContentsTree();
 
   // Called with the result of a DownloadImage() request.
   void OnDidDownloadImage(base::WeakPtr<RenderFrameHostImpl> rfh,
@@ -2155,6 +2151,12 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Stores information from the main frame's renderer that needs to be shared
   // with OOPIF renderers.
   blink::mojom::TextAutosizerPageInfo text_autosizer_page_info_;
+
+  // Stores the rect of the Windows Control Overlay, which contains system UX
+  // affordances (e.g. close), for installed desktop Progress Web Apps (PWAs),
+  // if the app specifies the 'window-controls-overlay' DisplayMode in its
+  // manifest. This is in frame space coordinates.
+  gfx::Rect window_controls_overlay_rect_;
 
   // Observe native theme for changes to dark mode, preferred color scheme, and
   // preferred contrast. Used to notify the renderer of preferred color scheme

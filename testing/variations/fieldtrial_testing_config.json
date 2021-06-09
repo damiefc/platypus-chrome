@@ -623,6 +623,21 @@
             ]
         }
     ],
+    "AndroidMessagesUpdatePassword": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "MessagesForAndroidUpdatePassword"
+                    ]
+                }
+            ]
+        }
+    ],
     "AndroidPartnerCustomizationPhenotype": [
         {
             "platforms": [
@@ -1320,48 +1335,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "BrowserJankinessProfiling"
-                    ]
-                }
-            ]
-        }
-    ],
-    "BrowserVerifiedUserActivationKeyboardTrigger": [
-        {
-            "platforms": [
-                "windows",
-                "mac",
-                "chromeos",
-                "chromeos_lacros",
-                "linux",
-                "android",
-                "android_weblayer"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "BrowserVerifiedUserActivationKeyboard"
-                    ]
-                }
-            ]
-        }
-    ],
-    "BrowserVerifiedUserActivationMouseTrigger": [
-        {
-            "platforms": [
-                "windows",
-                "mac",
-                "chromeos",
-                "chromeos_lacros",
-                "linux",
-                "android",
-                "android_weblayer"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "BrowserVerifiedUserActivationMouse"
                     ]
                 }
             ]
@@ -2866,6 +2839,21 @@
             ]
         }
     ],
+    "DetailedLanguageSettings": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "DetailedLanguageSettings"
+                    ]
+                }
+            ]
+        }
+    ],
     "DetectFormSubmissionOnFormClearIOS": [
         {
             "platforms": [
@@ -3015,21 +3003,6 @@
                     "name": "Enabled",
                     "enable_features": [
                         "DirectCompositionSoftwareOverlays"
-                    ]
-                }
-            ]
-        }
-    ],
-    "DisableCryptAuthV1DeviceSync": [
-        {
-            "platforms": [
-                "chromeos"
-            ],
-            "experiments": [
-                {
-                    "name": "Enabled",
-                    "enable_features": [
-                        "DisableCryptAuthV1DeviceSync"
                     ]
                 }
             ]
@@ -3901,6 +3874,24 @@
             ]
         }
     ],
+    "IOSDefaultBrowserFullscreenTailoredPromoExperiment": [
+        {
+            "platforms": [
+                "ios"
+            ],
+            "experiments": [
+                {
+                    "name": "MadeForIOS",
+                    "params": {
+                        "variant_ios_enabled": "true"
+                    },
+                    "enable_features": [
+                        "DefaultPromoTailored"
+                    ]
+                }
+            ]
+        }
+    ],
     "IOSDefaultBrowserNonModalPromoExperiment": [
         {
             "platforms": [
@@ -4654,6 +4645,21 @@
             ]
         }
     ],
+    "LinkDoctorDeprecationAndroid": [
+        {
+            "platforms": [
+                "android"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "LinkDoctorDeprecationAndroid"
+                    ]
+                }
+            ]
+        }
+    ],
     "LiteVideo": [
         {
             "platforms": [
@@ -4860,6 +4866,26 @@
                     "name": "Enabled",
                     "enable_features": [
                         "MediaSessionWebRTC"
+                    ]
+                }
+            ]
+        }
+    ],
+    "MemoriesHistoryClusters": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "chromeos_lacros",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "MemoriesPersistContextAnnotationsInHistoryDb"
                     ]
                 }
             ]
@@ -5737,10 +5763,15 @@
             ]
         }
     ],
-    "OverlayPrioritizationTesting": [
+    "OverlayPrioritizationExtended": [
         {
             "platforms": [
-                "chromeos"
+                "android",
+                "android_weblayer",
+                "android_webview",
+                "chromeos",
+                "chromeos_lacros",
+                "linux"
             ],
             "experiments": [
                 {
@@ -5985,6 +6016,23 @@
                     "enable_features": [
                         "PasswordChangeInSettings",
                         "PasswordScriptsFetching"
+                    ]
+                }
+            ]
+        }
+    ],
+    "PasswordMassMigrationToGoogleAccount": [
+        {
+            "platforms": [
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "EnableMovingMultiplePasswordsToAccount"
                     ]
                 }
             ]
@@ -6269,6 +6317,26 @@
             ]
         }
     ],
+    "PrivacySandboxSettings2": [
+        {
+            "platforms": [
+                "android",
+                "chromeos",
+                "chromeos_lacros",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled",
+                    "enable_features": [
+                        "PrivacySandboxSettings2"
+                    ]
+                }
+            ]
+        }
+    ],
     "PrivacySettingsHats": [
         {
             "platforms": [
@@ -6319,7 +6387,6 @@
                 "android",
                 "chromeos",
                 "linux",
-                "mac",
                 "windows"
             ],
             "experiments": [
@@ -6893,6 +6960,37 @@
                     "name": "Enabled",
                     "enable_features": [
                         "SafeBrowsingCrxAllowlistShowWarnings"
+                    ]
+                }
+            ]
+        }
+    ],
+    "SafeBrowsingCsdComponentVersion25": [
+        {
+            "platforms": [
+                "chromeos",
+                "chromeos_lacros",
+                "linux",
+                "mac",
+                "windows"
+            ],
+            "experiments": [
+                {
+                    "name": "Enabled25_052021",
+                    "params": {
+                        "reporter_omaha_tag": "25"
+                    },
+                    "enable_features": [
+                        "ClientSideDetectionTag"
+                    ]
+                },
+                {
+                    "name": "Enabled26_052021",
+                    "params": {
+                        "reporter_omaha_tag": "26"
+                    },
+                    "enable_features": [
+                        "ClientSideDetectionTag"
                     ]
                 }
             ]

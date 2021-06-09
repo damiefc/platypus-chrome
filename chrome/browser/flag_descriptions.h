@@ -199,9 +199,8 @@ extern const char kAutofillPruneSuggestionsDescription[];
 extern const char kAutofillSaveAndFillVPAName[];
 extern const char kAutofillSaveAndFillVPADescription[];
 
-extern const char kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionName[];
-extern const char
-    kAutofillSuggestVirtualCardsOnlyOnFullFormDetectionDescription[];
+extern const char kAutofillSuggestVirtualCardsOnIncompleteFormName[];
+extern const char kAutofillSuggestVirtualCardsOnIncompleteFormDescription[];
 
 extern const char kAutofillUseImprovedLabelDisambiguationName[];
 extern const char kAutofillUseImprovedLabelDisambiguationDescription[];
@@ -711,9 +710,6 @@ extern const char kFillingAcrossAffiliatedWebsitesDescription[];
 extern const char kFillOnAccountSelectName[];
 extern const char kFillOnAccountSelectDescription[];
 
-extern const char kFocusMode[];
-extern const char kFocusModeDescription[];
-
 extern const char kForceTextDirectionName[];
 extern const char kForceTextDirectionDescription[];
 extern const char kForceDirectionLtr[];
@@ -934,6 +930,9 @@ extern const char kNotificationSchedulerImmediateBackgroundTaskDescription[];
 extern const char kNotificationsSystemFlagName[];
 extern const char kNotificationsSystemFlagDescription[];
 
+extern const char kOmniboxActiveSearchEnginesName[];
+extern const char kOmniboxActiveSearchEnginesDescription[];
+
 extern const char kOmniboxAdaptiveSuggestionsCountName[];
 extern const char kOmniboxAdaptiveSuggestionsCountDescription[];
 
@@ -1144,6 +1143,9 @@ extern const char kPrerender2Description[];
 
 extern const char kPrivacyAdvisorName[];
 extern const char kPrivacyAdvisorDescription[];
+
+extern const char kPrivacyReviewName[];
+extern const char kPrivacyReviewDescription[];
 
 extern const char kPrivacySandboxSettingsName[];
 extern const char kPrivacySandboxSettingsDescription[];
@@ -1448,6 +1450,9 @@ extern const char kTurnOffStreamingMediaCachingOnBatteryDescription[];
 
 extern const char kTurnOffStreamingMediaCachingAlwaysName[];
 extern const char kTurnOffStreamingMediaCachingAlwaysDescription[];
+
+extern const char kUnifiedPasswordManagerAndroidName[];
+extern const char kUnifiedPasswordManagerAndroidDescription[];
 
 extern const char kUnsafeWebGPUName[];
 extern const char kUnsafeWebGPUDescription[];
