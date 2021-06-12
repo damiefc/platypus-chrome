@@ -104,7 +104,8 @@ const size_t kTestSizes[] = {
     100,
     base::SystemPageSize(),
     base::SystemPageSize() + 1,
-    base::PartitionRoot<base::internal::ThreadSafe>::GetDirectMapSlotSize(100),
+    base::kMaxBucketed,
+    base::kMaxBucketed + 1,
     1 << 20,
     1 << 21,
 };
@@ -1102,25 +1103,38 @@ TEST_F(PartitionAllocTest, Realloc) {
   allocator.root()->Free(ptr);
 
   // Test that shrinking a direct mapped allocation happens in-place.
-  size = kMaxBucketed + 16 * SystemPageSize();
+  // Pick a large size so that Realloc doesn't think it's worthwhile to
+  // downsize even if one less super page is used (due to high granularity on
+  // 64-bit systems).
+  size = 10 * kSuperPageSize + SystemPageSize() - 42;
   ptr = allocator.root()->Alloc(size, type_name);
   size_t actual_capacity = allocator.root()->AllocationCapacityFromPtr(ptr);
   ptr2 = allocator.root()->Realloc(ptr, size - SystemPageSize(), type_name);
-  EXPECT_EQ(actual_capacity - SystemPageSize(),
-            allocator.root()->AllocationCapacityFromPtr(ptr2));
+  EXPECT_EQ(ptr, ptr2);
+  // While pages may have been decommitted, the capacity shouldn't change.
+  EXPECT_EQ(actual_capacity, allocator.root()->AllocationCapacityFromPtr(ptr2));
+  void* ptr3 =
+      allocator.root()->Realloc(ptr2, size - 32 * SystemPageSize(), type_name);
+  EXPECT_EQ(ptr2, ptr3);
+  EXPECT_EQ(actual_capacity, allocator.root()->AllocationCapacityFromPtr(ptr3));
 
   // Test that a previously in-place shrunk direct mapped allocation can be
   // expanded up again up to its original size.
-  ptr = allocator.root()->Realloc(ptr2, size, type_name);
-  EXPECT_EQ(ptr2, ptr);
+  ptr = allocator.root()->Realloc(ptr3, size, type_name);
+  EXPECT_EQ(ptr3, ptr);
   EXPECT_EQ(actual_capacity, allocator.root()->AllocationCapacityFromPtr(ptr));
+
+  // Test that the allocation can be expanded in place up to its capacity.
+  ptr2 = allocator.root()->Realloc(ptr, actual_capacity, type_name);
+  EXPECT_EQ(ptr, ptr2);
+  EXPECT_EQ(actual_capacity, allocator.root()->AllocationCapacityFromPtr(ptr2));
 
   // Test that a direct mapped allocation is performed not in-place when the
   // new size is small enough.
-  ptr2 = allocator.root()->Realloc(ptr, SystemPageSize(), type_name);
-  EXPECT_NE(ptr, ptr2);
+  ptr3 = allocator.root()->Realloc(ptr2, SystemPageSize(), type_name);
+  EXPECT_NE(ptr2, ptr3);
 
-  allocator.root()->Free(ptr2);
+  allocator.root()->Free(ptr3);
 }
 
 TEST_F(PartitionAllocTest, ReallocDirectMapAligned) {
@@ -1133,30 +1147,68 @@ TEST_F(PartitionAllocTest, ReallocDirectMapAligned) {
 
   for (size_t alignment : alignments) {
     // Test that shrinking a direct mapped allocation happens in-place.
-    size_t size = kMaxBucketed + 2 * SystemPageSize();
+    // Pick a large size so that Realloc doesn't think it's worthwhile to
+    // downsize even if one less super page is used (due to high granularity on
+    // 64-bit systems), even if the alignment padding is taken out.
+    size_t size = 10 * kSuperPageSize + SystemPageSize() - 42;
     void* ptr =
         allocator.root()->AllocFlagsInternal(0, size, alignment, type_name);
     size_t actual_capacity = allocator.root()->AllocationCapacityFromPtr(ptr);
     void* ptr2 =
         allocator.root()->Realloc(ptr, size - SystemPageSize(), type_name);
     EXPECT_EQ(ptr, ptr2);
-    EXPECT_EQ(actual_capacity - SystemPageSize(),
+    // While pages may have been decommitted, the capacity shouldn't change.
+    EXPECT_EQ(actual_capacity,
               allocator.root()->AllocationCapacityFromPtr(ptr2));
+    void* ptr3 = allocator.root()->Realloc(ptr2, size - 32 * SystemPageSize(),
+                                           type_name);
+    EXPECT_EQ(ptr2, ptr3);
+    EXPECT_EQ(actual_capacity,
+              allocator.root()->AllocationCapacityFromPtr(ptr3));
 
     // Test that a previously in-place shrunk direct mapped allocation can be
     // expanded up again up to its original size.
-    ptr = allocator.root()->Realloc(ptr2, size, type_name);
-    EXPECT_EQ(ptr2, ptr);
+    ptr = allocator.root()->Realloc(ptr3, size, type_name);
+    EXPECT_EQ(ptr3, ptr);
     EXPECT_EQ(actual_capacity,
               allocator.root()->AllocationCapacityFromPtr(ptr));
 
+    // Test that the allocation can be expanded in place up to its capacity.
+    ptr2 = allocator.root()->Realloc(ptr, actual_capacity, type_name);
+    EXPECT_EQ(ptr, ptr2);
+    EXPECT_EQ(actual_capacity,
+              allocator.root()->AllocationCapacityFromPtr(ptr2));
+
     // Test that a direct mapped allocation is performed not in-place when the
     // new size is small enough.
-    ptr2 = allocator.root()->Realloc(ptr, SystemPageSize(), type_name);
-    EXPECT_NE(ptr, ptr2);
+    ptr3 = allocator.root()->Realloc(ptr2, SystemPageSize(), type_name);
+    EXPECT_NE(ptr2, ptr3);
 
-    allocator.root()->Free(ptr2);
+    allocator.root()->Free(ptr3);
   }
+}
+
+TEST_F(PartitionAllocTest, ReallocDirectMapAlignedRelocate) {
+  // Pick size such that the alignment will put it cross the super page
+  // boundary.
+  size_t size = 2 * kSuperPageSize - kMaxSupportedAlignment + SystemPageSize();
+  void* ptr = allocator.root()->AllocFlagsInternal(
+      0, size, kMaxSupportedAlignment, type_name);
+  // Reallocating with the same size will actually relocate, because without a
+  // need for alignment we can downsize the reservation significantly.
+  void* ptr2 = allocator.root()->Realloc(ptr, size, type_name);
+  EXPECT_NE(ptr, ptr2);
+  allocator.root()->Free(ptr2);
+
+  // Again pick size such that the alignment will put it cross the super page
+  // boundary, but this time make it so large that Realloc doesn't fing it worth
+  // shrinking.
+  size = 10 * kSuperPageSize - kMaxSupportedAlignment + SystemPageSize();
+  ptr = allocator.root()->AllocFlagsInternal(0, size, kMaxSupportedAlignment,
+                                             type_name);
+  ptr2 = allocator.root()->Realloc(ptr, size, type_name);
+  EXPECT_EQ(ptr, ptr2);
+  allocator.root()->Free(ptr2);
 }
 
 // Tests the handing out of freelists for partial slot spans.
@@ -1986,10 +2038,16 @@ TEST_F(PartitionAllocTest, DumpMemoryStats) {
   {
     size_t size_smaller = kMaxBucketed + 1;
     size_t size_bigger = (kMaxBucketed * 2) + 1;
-    size_t real_size_smaller =
-        (size_smaller + SystemPageOffsetMask()) & SystemPageBaseMask();
-    size_t real_size_bigger =
-        (size_bigger + SystemPageOffsetMask()) & SystemPageBaseMask();
+    size_t raw_size_smaller =
+        allocator.root()->AdjustSizeForExtrasAdd(size_smaller);
+    size_t raw_size_bigger =
+        allocator.root()->AdjustSizeForExtrasAdd(size_bigger);
+    size_t bucket_size_smaller =
+        allocator.root()->GetDirectMapReservationSize(raw_size_smaller) -
+        allocator.root()->GetDirectMapMetadataAndGuardPagesSize();
+    size_t bucket_size_bigger =
+        allocator.root()->GetDirectMapReservationSize(raw_size_bigger) -
+        allocator.root()->GetDirectMapMetadataAndGuardPagesSize();
     void* ptr = allocator.root()->Alloc(size_smaller, type_name);
     void* ptr2 = allocator.root()->Alloc(size_bigger, type_name);
 
@@ -2000,13 +2058,13 @@ TEST_F(PartitionAllocTest, DumpMemoryStats) {
       EXPECT_TRUE(dumper.IsMemoryAllocationRecorded());
 
       const PartitionBucketMemoryStats* stats =
-          dumper.GetBucketStats(real_size_smaller);
+          dumper.GetBucketStats(bucket_size_smaller);
       EXPECT_TRUE(stats);
       EXPECT_TRUE(stats->is_valid);
       EXPECT_TRUE(stats->is_direct_map);
-      EXPECT_EQ(real_size_smaller, stats->bucket_slot_size);
-      EXPECT_EQ(real_size_smaller, stats->active_bytes);
-      EXPECT_EQ(real_size_smaller, stats->resident_bytes);
+      EXPECT_EQ(bucket_size_smaller, stats->bucket_slot_size);
+      EXPECT_EQ(bucket_size_smaller, stats->active_bytes);
+      EXPECT_EQ(bucket_size_smaller, stats->resident_bytes);
       EXPECT_EQ(0u, stats->decommittable_bytes);
       EXPECT_EQ(0u, stats->discardable_bytes);
       EXPECT_EQ(1u, stats->num_full_slot_spans);
@@ -2014,13 +2072,13 @@ TEST_F(PartitionAllocTest, DumpMemoryStats) {
       EXPECT_EQ(0u, stats->num_empty_slot_spans);
       EXPECT_EQ(0u, stats->num_decommitted_slot_spans);
 
-      stats = dumper.GetBucketStats(real_size_bigger);
+      stats = dumper.GetBucketStats(bucket_size_bigger);
       EXPECT_TRUE(stats);
       EXPECT_TRUE(stats->is_valid);
       EXPECT_TRUE(stats->is_direct_map);
-      EXPECT_EQ(real_size_bigger, stats->bucket_slot_size);
-      EXPECT_EQ(real_size_bigger, stats->active_bytes);
-      EXPECT_EQ(real_size_bigger, stats->resident_bytes);
+      EXPECT_EQ(bucket_size_bigger, stats->bucket_slot_size);
+      EXPECT_EQ(bucket_size_bigger, stats->active_bytes);
+      EXPECT_EQ(bucket_size_bigger, stats->resident_bytes);
       EXPECT_EQ(0u, stats->decommittable_bytes);
       EXPECT_EQ(0u, stats->discardable_bytes);
       EXPECT_EQ(1u, stats->num_full_slot_spans);

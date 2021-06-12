@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+
 #include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
@@ -35,6 +37,12 @@
 #include "sandbox/policy/switches.h"
 #include "services/audio/public/cpp/fake_stream_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
+
+#if defined(OS_WIN)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 using testing::StrictMock;
 
@@ -180,7 +188,13 @@ void SpeechRecognitionServiceTest::SetUp() {
 void SpeechRecognitionServiceTest::OnSpeechRecognitionRecognitionEvent(
     const media::SpeechRecognitionResult& result,
     OnSpeechRecognitionRecognitionEventCallback reply) {
-  recognition_results_.push_back(std::move(result.transcription));
+  std::string transcription = result.transcription;
+  // The language pack used by the MacOS builder is newer and has punctuation
+  // enabled whereas the one used by the Linux builder does not.
+  transcription.erase(
+      std::remove(transcription.begin(), transcription.end(), ','),
+      transcription.end());
+  recognition_results_.push_back(std::move(transcription));
   std::move(reply).Run(is_client_requesting_speech_recognition_);
 }
 
@@ -300,7 +314,11 @@ void SpeechRecognitionServiceTest::SendAudioChunk(
 
     // Sleep for 20ms to simulate real-time audio. SODA requires audio
     // streaming in order to return events.
+#if defined(OS_WIN)
+    ::Sleep(20);
+#else
     usleep(20000);
+#endif
   }
 }
 
@@ -343,7 +361,11 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionServiceTest, RecognizePhrase) {
   base::RunLoop().RunUntilIdle();
 
   // Sleep for 50ms to ensure SODA has returned real-time results.
+#if defined(OS_WIN)
+  ::Sleep(50);
+#else
   usleep(50000);
+#endif
   ASSERT_GT(static_cast<int>(recognition_results_.size()), kReplayAudioCount);
   ASSERT_EQ(recognition_results_.back(), "Hey Google Hey Google");
 
@@ -413,7 +435,11 @@ IN_PROC_BROWSER_TEST_F(SpeechRecognitionServiceTest,
   base::RunLoop().RunUntilIdle();
 
   // Sleep for 50ms to ensure SODA has returned real-time results.
+#if defined(OS_WIN)
+  ::Sleep(50);
+#else
   usleep(50000);
+#endif
   ASSERT_GT(static_cast<int>(recognition_results_.size()), 3);
   ASSERT_EQ(recognition_results_.back(), "Hey Google Hey Google");
 

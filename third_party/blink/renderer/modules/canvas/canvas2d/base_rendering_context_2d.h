@@ -230,6 +230,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
                                ExceptionState&);
 
   ImageData* createImageData(ImageData*, ExceptionState&) const;
+  ImageData* createImageData(int sw, int sh, ExceptionState&) const;
   ImageData* createImageData(int sw,
                              int sh,
                              ImageDataSettings*,
@@ -237,6 +238,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   // For deferred canvases this will have the side effect of drawing recorded
   // commands in order to finalize the frame
+  ImageData* getImageData(int sx, int sy, int sw, int sh, ExceptionState&);
   ImageData* getImageData(int sx,
                           int sy,
                           int sw,
@@ -286,7 +288,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   virtual cc::PaintCanvas* GetOrCreatePaintCanvas() = 0;
   virtual cc::PaintCanvas* GetPaintCanvas() const = 0;
 
-  virtual void DidDraw(const SkIRect& dirty_rect) = 0;
+  virtual void DidDraw2D(const SkIRect& dirty_rect) = 0;
 
   virtual bool StateHasFilter() = 0;
   virtual sk_sp<PaintFilter> StateGetFilter() = 0;
@@ -575,13 +577,13 @@ void BaseRenderingContext2D::DrawInternal(
       (GetState().ShouldDrawShadows() &&
        ShouldUseDropShadowPaintFilter(paint_type, image_type))) {
     CompositedDraw(draw_func, GetPaintCanvas(), paint_type, image_type);
-    DidDraw(clip_bounds);
+    DidDraw2D(clip_bounds);
   } else if (GetState().GlobalComposite() == SkBlendMode::kSrc) {
     ClearCanvas();  // takes care of checkOverdraw()
     const PaintFlags* flags =
         GetState().GetFlags(paint_type, kDrawForegroundOnly, image_type);
     draw_func(GetPaintCanvas(), flags);
-    DidDraw(clip_bounds);
+    DidDraw2D(clip_bounds);
   } else {
     SkIRect dirty_rect;
     if (ComputeDirtyRect(bounds, clip_bounds, &dirty_rect)) {
@@ -591,7 +593,7 @@ void BaseRenderingContext2D::DrawInternal(
           draw_covers_clip_bounds(clip_bounds))
         CheckOverdraw(bounds, flags, image_type, kClipFill);
       draw_func(GetPaintCanvas(), flags);
-      DidDraw(dirty_rect);
+      DidDraw2D(dirty_rect);
     }
   }
 }

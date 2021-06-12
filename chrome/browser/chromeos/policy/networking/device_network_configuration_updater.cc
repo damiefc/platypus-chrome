@@ -13,7 +13,7 @@
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_device_handler.h"
 #include "chromeos/network/onc/onc_parsed_certificates.h"
@@ -90,7 +90,7 @@ void DeviceNetworkConfigurationUpdater::Init() {
   // The highest authority regarding whether cellular data roaming should be
   // allowed is the Device Policy. If there is no Device Policy, then
   // data roaming should be allowed if this is a Cellular First device.
-  if (!connector->IsEnterpriseManaged() &&
+  if (!connector->IsDeviceEnterpriseManaged() &&
       chromeos::switches::IsCellularFirstDevice()) {
     network_device_handler_->SetCellularAllowRoaming(true);
   } else {
@@ -101,7 +101,7 @@ void DeviceNetworkConfigurationUpdater::Init() {
   // Set up MAC address randomization if we are not enterprise managed.
 
   network_device_handler_->SetMACAddressRandomizationEnabled(
-      !connector->IsEnterpriseManaged());
+      !connector->IsDeviceEnterpriseManaged());
 }
 
 void DeviceNetworkConfigurationUpdater::ImportClientCertificates() {

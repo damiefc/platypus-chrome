@@ -950,6 +950,12 @@ const FeatureEntry::Choice kMemlogSamplingRateChoices[] = {
 
 const FeatureEntry::FeatureVariation kMemoriesVariations[] = {
     {
+        "Visit Limit 200",
+        (FeatureEntry::FeatureParam[]){{"MemoriesMaxVisitsToCluster", "200"}},
+        1,
+        nullptr,
+    },
+    {
         "Visit Limit 10k",
         (FeatureEntry::FeatureParam[]){{"MemoriesMaxVisitsToCluster", "10000"}},
         1,
@@ -1882,22 +1888,6 @@ const FeatureEntry::FeatureVariation kHomepagePromoCardVariations[] = {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-const FeatureEntry::FeatureParam kContextMenuShopSimilarProducts[] = {
-    {"lensShopVariation", "ShopSimilarProducts"}};
-const FeatureEntry::FeatureParam kContextMenuShopImageWithGoogleLens[] = {
-    {"lensShopVariation", "ShopImageWithGoogleLens"}};
-const FeatureEntry::FeatureParam kContextMenuSearchSimilarProducts[] = {
-    {"lensShopVariation", "SearchSimilarProducts"}};
-
-const FeatureEntry::FeatureVariation
-    kContextMenuShopWithGoogleLensShopVariations[] = {
-        {"ShopSimilarProducts", kContextMenuShopSimilarProducts,
-         base::size(kContextMenuShopSimilarProducts), nullptr},
-        {"ShopImageWithGoogleLens", kContextMenuShopImageWithGoogleLens,
-         base::size(kContextMenuShopImageWithGoogleLens), nullptr},
-        {"SearchSimilarProducts", kContextMenuSearchSimilarProducts,
-         base::size(kContextMenuSearchSimilarProducts), nullptr}};
-
 const FeatureEntry::FeatureParam kLensCameraAssistedSearchLensButtonStart[] = {
     {"searchBoxStartVariantForLensCameraAssistedSearch", "true"}};
 
@@ -2170,33 +2160,6 @@ const FeatureEntry::FeatureVariation kBackForwardCacheVariations[] = {
      base::size(kBackForwardCache_SameSite), nullptr},
     {"force caching all pages (experimental)", kBackForwardCache_ForceCaching,
      base::size(kBackForwardCache_ForceCaching), nullptr},
-};
-
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_0[] = {
-    {"SharingDeviceExpirationHours", "0"}};
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_12[] = {
-    {"SharingDeviceExpirationHours", "12"}};
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_24[] = {
-    {"SharingDeviceExpirationHours", "24"}};
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_48[] = {
-    {"SharingDeviceExpirationHours", "48"}};
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_96[] = {
-    {"SharingDeviceExpirationHours", "96"}};
-const FeatureEntry::FeatureParam kSharingDeviceExpirationHours_240[] = {
-    {"SharingDeviceExpirationHours", "240"}};
-const FeatureEntry::FeatureVariation kSharingDeviceExpirationVariations[] = {
-    {"0 hours", kSharingDeviceExpirationHours_0,
-     base::size(kSharingDeviceExpirationHours_0), nullptr},
-    {"12 hours", kSharingDeviceExpirationHours_12,
-     base::size(kSharingDeviceExpirationHours_12), nullptr},
-    {"1 day", kSharingDeviceExpirationHours_24,
-     base::size(kSharingDeviceExpirationHours_24), nullptr},
-    {"2 days", kSharingDeviceExpirationHours_48,
-     base::size(kSharingDeviceExpirationHours_48), nullptr},
-    {"4 days", kSharingDeviceExpirationHours_96,
-     base::size(kSharingDeviceExpirationHours_96), nullptr},
-    {"10 days", kSharingDeviceExpirationHours_240,
-     base::size(kSharingDeviceExpirationHours_240), nullptr},
 };
 
 const FeatureEntry::FeatureParam
@@ -2756,6 +2719,20 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_WITH_PARAMS_VALUE_TYPE(chrome::android::kRelatedSearchesUi,
                                     kRelatedSearchesUiVariations,
                                     "RelatedSearchesUi")},
+    {"related-searches-in-bar", flag_descriptions::kRelatedSearchesInBarName,
+     flag_descriptions::kRelatedSearchesInBarDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kRelatedSearchesInBar)},
+    {"related-searches-alternate-ux",
+     flag_descriptions::kRelatedSearchesAlternateUxName,
+     flag_descriptions::kRelatedSearchesAlternateUxDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kRelatedSearchesAlternateUx)},
+    {"related-searches-simplified-ux",
+     flag_descriptions::kRelatedSearchesSimplifiedUxName,
+     flag_descriptions::kRelatedSearchesSimplifiedUxDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kRelatedSearchesSimplifiedUx)},
+    {"single-touch-select", flag_descriptions::kSingleTouchSelectName,
+     flag_descriptions::kSingleTouchSelectDescription, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kSingleTouchSelect)},
     {"bento-offline", flag_descriptions::kBentoOfflineName,
      flag_descriptions::kBentoOfflineDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kBentoOffline)},
@@ -2828,10 +2805,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kExperimentalWebPlatformFeaturesName,
      flag_descriptions::kExperimentalWebPlatformFeaturesDescription, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableExperimentalWebPlatformFeatures)},
-    {"silent-debugger-extension-api",
-     flag_descriptions::kSilentDebuggerExtensionApiName,
-     flag_descriptions::kSilentDebuggerExtensionApiDescription, kOsDesktop,
-     SINGLE_VALUE_TYPE(switches::kSilentDebuggerExtensionAPI)},
 #if BUILDFLAG(ENABLE_SPELLCHECK) && defined(OS_ANDROID)
     {"enable-android-spellchecker",
      flag_descriptions::kEnableAndroidSpellcheckerDescription,
@@ -3555,15 +3528,6 @@ const FeatureEntry kFeatureEntries[] = {
          switches::kSyncServiceURL,
          "https://chrome-sync.sandbox.google.com/chrome-sync/alpha")},
 #if !defined(OS_ANDROID)
-    {"load-media-router-component-extension",
-     flag_descriptions::kLoadMediaRouterComponentExtensionName,
-     flag_descriptions::kLoadMediaRouterComponentExtensionDescription,
-     kOsDesktop,
-     ENABLE_DISABLE_VALUE_TYPE_AND_VALUE(
-         switches::kLoadMediaRouterComponentExtension,
-         "1",
-         switches::kLoadMediaRouterComponentExtension,
-         "0")},
     {"media-router-cast-allow-all-ips",
      flag_descriptions::kMediaRouterCastAllowAllIPsName,
      flag_descriptions::kMediaRouterCastAllowAllIPsDescription, kOsDesktop,
@@ -4186,10 +4150,6 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kOmniboxMostVisitedTilesName,
      flag_descriptions::kOmniboxMostVisitedTilesDescription, kOsAndroid,
      FEATURE_VALUE_TYPE(omnibox::kMostVisitedTiles)},
-    {"omnibox-search-ready-incognito",
-     flag_descriptions::kOmniboxSearchReadyIncognitoName,
-     flag_descriptions::kOmniboxSearchReadyIncognitoDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(omnibox::kOmniboxSearchReadyIncognito)},
     {"omnibox-tab-switch-suggestions",
      flag_descriptions::kOmniboxTabSwitchSuggestionsName,
      flag_descriptions::kOmniboxTabSwitchSuggestionsDescription, kOsAndroid,
@@ -4502,7 +4462,7 @@ const FeatureEntry kFeatureEntries[] = {
 #if defined(OS_ANDROID)
     {"omnibox-spare-renderer", flag_descriptions::kOmniboxSpareRendererName,
      flag_descriptions::kOmniboxSpareRendererDescription, kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kOmniboxSpareRenderer)},
+     FEATURE_VALUE_TYPE(omnibox::kOmniboxSpareRenderer)},
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -4637,6 +4597,14 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_WITH_PARAMS_VALUE_TYPE(ntp_features::kNtpChromeCartModule,
                                     kNtpChromeCartModuleVariations,
                                     "DesktopNtpModules")},
+
+    {"ntp-modules-drag-and-drop", flag_descriptions::kNtpModulesDragAndDropName,
+     flag_descriptions::kNtpModulesDragAndDropDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(ntp_features::kNtpModulesDragAndDrop)},
+
+    {"ntp-modules-redesigned", flag_descriptions::kNtpModulesRedesignedName,
+     flag_descriptions::kNtpModulesRedesignedDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(ntp_features::kNtpModulesRedesigned)},
 #endif  // !defined(OS_ANDROID)
 
 #if defined(DCHECK_IS_CONFIGURABLE)
@@ -5192,13 +5160,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"sharing-send-via-sync", flag_descriptions::kSharingSendViaSyncName,
      flag_descriptions::kSharingSendViaSyncDescription, kOsAll,
      FEATURE_VALUE_TYPE(kSharingSendViaSync)},
-
-    {"sharing-device-expiration",
-     flag_descriptions::kSharingDeviceExpirationName,
-     flag_descriptions::kSharingDeviceExpirationDescription, kOsAll,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(kSharingDeviceExpiration,
-                                    kSharingDeviceExpirationVariations,
-                                    "SharingDeviceExpiration")},
 
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
     {"sharing-hub-desktop-app-menu",
@@ -5854,10 +5815,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"context-menu-shop-with-google-lens",
      flag_descriptions::kContextMenuShopWithGoogleLensName,
      flag_descriptions::kContextMenuShopWithGoogleLensDescription, kOsAndroid,
-     FEATURE_WITH_PARAMS_VALUE_TYPE(
-         chrome::android::kContextMenuShopWithGoogleLens,
-         kContextMenuShopWithGoogleLensShopVariations,
-         "ContextMenuShopWithGoogleLens")},
+     FEATURE_VALUE_TYPE(chrome::android::kContextMenuShopWithGoogleLens)},
 
     {"context-menu-search-and-shop-with-google-lens",
      flag_descriptions::kContextMenuSearchAndShopWithGoogleLensName,
@@ -6060,9 +6018,16 @@ const FeatureEntry kFeatureEntries[] = {
     {"split-settings-sync", flag_descriptions::kSplitSettingsSyncName,
      flag_descriptions::kSplitSettingsSyncDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kSplitSettingsSync)},
+    {"os-settings-app-notifications-page",
+     flag_descriptions::kOsSettingsAppNotificationsPageName,
+     flag_descriptions::kOsSettingsAppNotificationsPageDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(chromeos::features::kOsSettingsAppNotificationsPage)},
     {"os-settings-deep-linking", flag_descriptions::kOsSettingsDeepLinkingName,
      flag_descriptions::kOsSettingsDeepLinkingDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kOsSettingsDeepLinking)},
+    {"help-app-background-page", flag_descriptions::kHelpAppBackgroundPageName,
+     flag_descriptions::kHelpAppBackgroundPageDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(chromeos::features::kHelpAppBackgroundPage)},
     {"help-app-discover-tab", flag_descriptions::kHelpAppDiscoverTabName,
      flag_descriptions::kHelpAppDiscoverTabDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kHelpAppDiscoverTab)},
@@ -6082,9 +6047,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"media-app-handles-pdf", flag_descriptions::kMediaAppHandlesPdfName,
      flag_descriptions::kMediaAppHandlesPdfDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(chromeos::features::kMediaAppHandlesPdf)},
-    {"media-app-video", flag_descriptions::kMediaAppVideoName,
-     flag_descriptions::kMediaAppVideoDescription, kOsCrOS,
-     FEATURE_VALUE_TYPE(ash::features::kVideoPlayerAppHidden)},
     {"release-notes-notification",
      flag_descriptions::kReleaseNotesNotificationName,
      flag_descriptions::kReleaseNotesNotificationDescription, kOsCrOS,
@@ -7077,6 +7039,11 @@ const FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kDesktopPWAsAppIconShortcutsMenuUIName,
      flag_descriptions::kDesktopPWAsAppIconShortcutsMenuUIDescription, kOsCrOS,
      FEATURE_VALUE_TYPE(features::kDesktopPWAsAppIconShortcutsMenuUI)},
+
+    {"enable-input-event-logging",
+     flag_descriptions::kEnableInputEventLoggingName,
+     flag_descriptions::kEnableInputEventLoggingDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(ui::kEnableInputEventLogging)},
 #endif
 
     {"muting-compromised-credentials",
@@ -7215,6 +7182,21 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_VALUE_TYPE(
          password_manager::features::kUnifiedPasswordManagerAndroid)},
 #endif
+
+    {"extension-workflow-justification",
+     flag_descriptions::kExtensionWorkflowJustificationName,
+     flag_descriptions::kExtensionWorkflowJustificationDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kExtensionWorkflowJustification)},
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    {"arc-web-app-share", flag_descriptions::kArcWebAppShareName,
+     flag_descriptions::kArcWebAppShareDescription, kOsCrOS,
+     FEATURE_VALUE_TYPE(arc::kEnableWebAppShareFeature)},
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+    {"tab-restore-sub-menus", flag_descriptions::kTabRestoreSubMenusName,
+     flag_descriptions::kTabRestoreSubMenusDescription, kOsDesktop,
+     FEATURE_VALUE_TYPE(features::kTabRestoreSubMenus)},
 
     // NOTE: Adding a new flag requires adding a corresponding entry to enum
     // "LoginCustomFlags" in tools/metrics/histograms/enums.xml. See "Flag

@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -98,7 +99,8 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
   GpuChannelManagerDelegate* delegate() const { return delegate_; }
   GpuWatchdogThread* watchdog() const { return watchdog_; }
 
-  GpuChannel* EstablishChannel(int client_id,
+  GpuChannel* EstablishChannel(const base::UnguessableToken& channel_token,
+                               int client_id,
                                uint64_t client_tracing_id,
                                bool is_gpu_host,
                                bool cache_shaders_on_disk);
@@ -328,7 +330,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
   // alive until all clients have recovered, we use a ref-counted object and
   // allow the decoders to manage its lifetime.
   absl::optional<raster::GrShaderCache> gr_shader_cache_;
-  absl::optional<raster::GrCacheController> gr_cache_controller_;
   scoped_refptr<SharedContextState> shared_context_state_;
 
   // With --enable-vulkan, |vulkan_context_provider_| will be set from

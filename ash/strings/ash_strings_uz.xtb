@@ -61,6 +61,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="1341651618736211726">Kengaytirish</translation>
 <translation id="1346748346194534595">O‘ngga</translation>
 <translation id="1351937230027495976">Menyuni yopish</translation>
+<translation id="1383597849754832576">Avtomatik subtitr fayllarni yuklanmadi. Keyinroq urining.</translation>
 <translation id="1383876407941801731">Qidiruv</translation>
 <translation id="1391102559483454063">Yoniq</translation>
 <translation id="1407069428457324124">Tungi mavzu</translation>
@@ -130,8 +131,8 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="1972950159383891558">Salom <ph name="USERNAME" /></translation>
 <translation id="1978498689038657292">Matn kiritish</translation>
 <translation id="1989113344093894667">Kontent tasvirga olinmadi</translation>
+<translation id="1990046457226896323">Avtomatik subtitr fayllari yuklab olindi</translation>
 <translation id="1993072747612765854"><ph name="SYSTEM_APP_NAME" /> oxirgi yangilanishi haqida batafsil axborot</translation>
-<translation id="1995660704900986789">O‘chirish</translation>
 <translation id="1998100899771863792">Joriy ish stoli</translation>
 <translation id="2016340657076538683">Xabar yozing</translation>
 <translation id="2018630726571919839">Bitta latifa aytib ber</translation>
@@ -316,6 +317,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="3510164367642747937">Sichqoncha kursori ajratib ko‘rsatilsin</translation>
 <translation id="3513798432020909783">Hisobni <ph name="MANAGER_EMAIL" /> boshqaradi</translation>
 <translation id="3552189655002856821">Wi-Fi yoqilmagan</translation>
+<translation id="3560866052109807830">Marker bilan chizish vositalari</translation>
 <translation id="3563775809269155755">Hotspotni yoqish</translation>
 <translation id="3571734092741541777">Sozlash</translation>
 <translation id="3573179567135747900">"<ph name="FROM_LOCALE" />" tiliga qaytarish (qayta yuklash kerak bo‘ladi)</translation>
@@ -410,6 +412,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="4274537685965975248">Ctrl + Alt + Pastga strelka tezkor tugmasi oʻzgardi. End tugmasidan foydalanish uchun <ph name="LAUNCHER_KEY_NAME" /> tugmasi + Oʻngga strelkani bosing.</translation>
 <translation id="4279490309300973883">Ekran nusxasini boshqa ekranga uzatish</translation>
 <translation id="4285498937028063278">Olib tashlash</translation>
+<translation id="429402653707266969">Asboblar paneli joylashuvini oʻzgartirish</translation>
 <translation id="4294319844246081198">Xayrli tong, <ph name="GIVEN_NAME" /></translation>
 <translation id="4296136865091727875">Barcha bildirishnomalarni tozalash (<ph name="COUNT" />)</translation>
 <translation id="4302592941791324970">Mavjud emas</translation>
@@ -437,6 +440,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="4451374464530248585">Alt + Pastga strelka tezkor tugmasi oʻzgardi. Page Down tugmasidan foydalanish uchun <ph name="LAUNCHER_KEY_NAME" /> tugmasi + Pastga strelkani bosing.</translation>
 <translation id="445864333228800152">Xayrli kech,</translation>
 <translation id="4458688154122353284">Ekranni yozib olishni toʻxtatish</translation>
+<translation id="4471354919263203780">Nutqni aniqlash fayllari yuklab olinmoqda... <ph name="PERCENT" />%</translation>
 <translation id="4472575034687746823">Boshlash</translation>
 <translation id="4477350412780666475">Keyingi trek</translation>
 <translation id="4477892968187500306">Bu qurilmada Google tomonidan tekshirilmagan ilovalar boʻlishi mumkin.</translation>
@@ -670,7 +674,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="6424520630891723617">Himoya: <ph name="SECURITY_STATUS" />, Signal darajasi: <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="642644398083277086">Barcha eslatmalarni tozalang</translation>
 <translation id="643147933154517414">Bajarildi</translation>
-<translation id="6431865393913628856">Ekranni yozib olish</translation>
+<translation id="6431865393913628856">Ekran yozuvi</translation>
 <translation id="6445835306623867477"><ph name="ROUTE_TITLE" /> <ph name="RECEIVER_NAME" /> qurilmasiga translatsiya qilinmoqda</translation>
 <translation id="6452181791372256707">Rad etish</translation>
 <translation id="6453179446719226835">Til sozlamalari o‘zgardi</translation>
@@ -751,7 +755,7 @@ Quyidagi narsalardan boshlashingiz mumkin.</translation>
 <translation id="7045595904618419789">Lupani yoqish</translation>
 <translation id="7055910611768509537">Stilus bir haftadan beri ishlatilmagan</translation>
 <translation id="7066646422045619941">Bu tarmoq administrator tomonidan o‘chirib qo‘yilgan.</translation>
-<translation id="7067196344162293536">Avtomatik burilish</translation>
+<translation id="7067196344162293536">Avto-burilish</translation>
 <translation id="7068360136237591149">Ochiq fayllar</translation>
 <translation id="7076293881109082629">Kirish</translation>
 <translation id="7088960765736518739">Switch Access</translation>

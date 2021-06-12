@@ -541,7 +541,6 @@ android_library("chrome_java") {
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:com_google_guava_listenablefuture_java",
     "//third_party/android_deps:dagger_java",
-    "//third_party/android_deps:guava_android_java",
     "//third_party/android_deps:javax_inject_javax_inject_java",
     "//third_party/android_deps:material_design_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
@@ -932,6 +931,7 @@ junit_binary("chrome_junit_tests") {
     "//chrome/browser/password_entry_edit/android/internal:junit",
     "//chrome/browser/payments/android:junit",
     "//chrome/browser/performance_hints/android:java",
+    "//chrome/browser/policy/android:delegate_public_impl_java",
     "//chrome/browser/policy/android:java",
     "//chrome/browser/policy/android:junit",
     "//chrome/browser/preferences:java",
@@ -2140,6 +2140,7 @@ java_group("chrome_public_base_module_java") {
     ":chrome_all_java",
     "//chrome/browser/lens:delegate_public_impl_java",
     "//chrome/browser/locale:delegate_public_impl_java",
+    "//chrome/browser/policy/android:delegate_public_impl_java",
     "//components/externalauth/android:google_delegate_public_impl_java",
   ]
 }
@@ -2570,6 +2571,7 @@ template("monochrome_public_apk_or_module_tmpl") {
         "//chrome/android:app_hooks_java",
         "//chrome/browser/lens:delegate_public_impl_java",
         "//chrome/browser/locale:delegate_public_impl_java",
+        "//chrome/browser/policy/android:delegate_public_impl_java",
         "//components/externalauth/android:google_delegate_public_impl_java",
       ]
     }
@@ -3231,6 +3233,7 @@ template("monochrome_or_trichrome_public_bundle_tmpl") {
       "//chrome/android:app_hooks_java",
       "//chrome/browser/lens:delegate_public_impl_java",
       "//chrome/browser/locale:delegate_public_impl_java",
+      "//chrome/browser/policy/android:delegate_public_impl_java",
       "//components/externalauth/android:google_delegate_public_impl_java",
     ]
     if (!_is_trichrome) {
@@ -3640,7 +3643,7 @@ generate_jni("chrome_jni_headers") {
     "java/src/org/chromium/chrome/browser/suggestions/mostvisited/MostVisitedSites.java",
     "java/src/org/chromium/chrome/browser/suggestions/mostvisited/MostVisitedSitesBridge.java",
     "java/src/org/chromium/chrome/browser/survey/SurveyHttpClientBridge.java",
-    "java/src/org/chromium/chrome/browser/sync/ProfileSyncService.java",
+    "java/src/org/chromium/chrome/browser/sync/SyncServiceImpl.java",
     "java/src/org/chromium/chrome/browser/sync/TrustedVaultClient.java",
     "java/src/org/chromium/chrome/browser/tab/HistoricalTabSaver.java",
     "java/src/org/chromium/chrome/browser/tab/TabBrowserControlsConstraintsHelper.java",

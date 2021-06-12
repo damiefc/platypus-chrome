@@ -42,7 +42,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -99,13 +98,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     public static final String BUNDLE_EXIT_ANIMATION_RESOURCE =
             ANIMATION_BUNDLE_PREFIX + "animExitRes";
 
-    /**
-     * Extra that indicates whether or not the Custom Tab is being launched by an Intent fired by
-     * Chrome itself.
-     */
-    public static final String EXTRA_IS_OPENED_BY_CHROME =
-            "org.chromium.chrome.browser.customtabs.IS_OPENED_BY_CHROME";
-
     /** URL that should be loaded in place of the URL passed along in the data. */
     public static final String EXTRA_MEDIA_VIEWER_URL =
             "org.chromium.chrome.browser.customtabs.MEDIA_VIEWER_URL";
@@ -149,14 +141,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      */
     private static final String EXTRA_TRANSLATE_LANGUAGE =
             "androidx.browser.customtabs.extra.TRANSLATE_LANGUAGE";
-
-    /**
-     * Extra that, if set, results in hiding omnibox suggestions for visits from cct. The value is
-     * a boolean, and is only considered if the feature kSuggestVisitsWithPageTransitionFromApi2 is
-     * enabled.
-     */
-    public static final String EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT =
-            "androidx.browser.customtabs.extra.HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT";
 
     private static final String EXTRA_TWA_DISCLOSURE_UI =
             "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
@@ -228,7 +212,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
      */
     public static void addReaderModeUIExtras(Intent intent) {
         intent.putExtra(EXTRA_UI_TYPE, CustomTabsUiType.READER_MODE);
-        intent.putExtra(EXTRA_IS_OPENED_BY_CHROME, true);
         IntentHandler.addTrustedIntentExtras(intent);
     }
 
@@ -268,8 +251,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
 
         mKeepAliveServiceIntent = IntentUtils.safeGetParcelableExtra(intent, EXTRA_KEEP_ALIVE);
 
-        mIsOpenedByChrome = IntentUtils.safeGetBooleanExtra(
-                intent, EXTRA_IS_OPENED_BY_CHROME, false);
+        mIsOpenedByChrome = IntentHandler.wasIntentSenderChrome(intent);
 
         final int requestedUiType =
                 IntentUtils.safeGetIntExtra(intent, EXTRA_UI_TYPE, CustomTabsUiType.DEFAULT);
@@ -784,15 +766,5 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Nullable
     public int[] getGsaExperimentIds() {
         return mGsaExperimentIds;
-    }
-
-    public static boolean shouldHideOmniboxSuggestionsForCctVisits(Intent intent) {
-        return intent.getBooleanExtra(EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT, false)
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_HIDE_VISITS_FROM_CCT);
-    }
-
-    @Override
-    public boolean shouldHideOmniboxSuggestionsForCctVisits() {
-        return shouldHideOmniboxSuggestionsForCctVisits(mIntent);
     }
 }

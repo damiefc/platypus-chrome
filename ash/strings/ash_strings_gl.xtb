@@ -61,6 +61,7 @@ Para comezar, podes probar o seguinte.</translation>
 <translation id="1341651618736211726">Menú adicional</translation>
 <translation id="1346748346194534595">Dereita</translation>
 <translation id="1351937230027495976">Contraer menú</translation>
+<translation id="1383597849754832576">Non se puideron descargar os ficheiros de voz. Téntao máis tarde.</translation>
 <translation id="1383876407941801731">Buscar</translation>
 <translation id="1391102559483454063">Activada</translation>
 <translation id="1407069428457324124">Tema escuro</translation>
@@ -130,8 +131,8 @@ Para comezar, podes probar o seguinte.</translation>
 <translation id="1972950159383891558">Ola, <ph name="USERNAME" /></translation>
 <translation id="1978498689038657292">Introdución de texto</translation>
 <translation id="1989113344093894667">Non se puido realizar unha captura do contido</translation>
+<translation id="1990046457226896323">Descargáronse os ficheiros de voz</translation>
 <translation id="1993072747612765854">Máis información sobre a última actualización de <ph name="SYSTEM_APP_NAME" /></translation>
-<translation id="1995660704900986789">Apagar</translation>
 <translation id="1998100899771863792">Este escritorio</translation>
 <translation id="2016340657076538683">Escribe unha mensaxe</translation>
 <translation id="2018630726571919839">Cóntame un chiste</translation>
@@ -316,6 +317,7 @@ Para comezar, podes probar o seguinte.</translation>
 <translation id="3510164367642747937">Destacar o cursor do rato</translation>
 <translation id="3513798432020909783">A conta está xestionada por <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3552189655002856821">A wifi está desactivada</translation>
+<translation id="3560866052109807830">Ferramentas de debuxo (marcador)</translation>
 <translation id="3563775809269155755">Activar zona wifi</translation>
 <translation id="3571734092741541777">Configurar</translation>
 <translation id="3573179567135747900">Volver cambiar a "<ph name="FROM_LOCALE" />" (é necesario reiniciar)</translation>
@@ -411,6 +413,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="4274537685965975248">O atallo Control + Alt + Frecha abaixo cambiou. Para usar a tecla Fin, preme <ph name="LAUNCHER_KEY_NAME" /> + Frecha dereita.</translation>
 <translation id="4279490309300973883">Proxección</translation>
 <translation id="4285498937028063278">Deixar de fixar</translation>
+<translation id="429402653707266969">Alternar localización da barra de ferramentas</translation>
 <translation id="4294319844246081198">Bos días, <ph name="GIVEN_NAME" />!</translation>
 <translation id="4296136865091727875">Borrar as <ph name="COUNT" /> notificacións</translation>
 <translation id="4302592941791324970">Non dispoñible</translation>
@@ -438,6 +441,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="4451374464530248585">O atallo Alt + Frecha abaixo cambiou. Para usar a tecla Avanzar páxina, preme <ph name="LAUNCHER_KEY_NAME" /> + Frecha abaixo.</translation>
 <translation id="445864333228800152">Bo serán!</translation>
 <translation id="4458688154122353284">Deter gravación da pantalla</translation>
+<translation id="4471354919263203780">Descargando ficheiros de recoñecemento de voz… <ph name="PERCENT" /> %</translation>
 <translation id="4472575034687746823">Comezar</translation>
 <translation id="4477350412780666475">Pista seguinte</translation>
 <translation id="4477892968187500306">Este dispositivo pode conter aplicacións non verificadas por Google.</translation>
@@ -752,7 +756,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="7045595904618419789">Iniciar lupa</translation>
 <translation id="7055910611768509537">O lapis óptico non se usou desde hai máis dunha semana</translation>
 <translation id="7066646422045619941">Esta rede está desactivada polo administrador.</translation>
-<translation id="7067196344162293536">Xirar automaticamente</translation>
+<translation id="7067196344162293536">Xirar automat.</translation>
 <translation id="7068360136237591149">Abrir ficheiros</translation>
 <translation id="7076293881109082629">Iniciando sesión</translation>
 <translation id="7088960765736518739">Acceso con interruptores</translation>

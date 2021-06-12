@@ -16,7 +16,7 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,7 +46,7 @@ void ShowLowDiskSpaceErrorNotification(content::BrowserContext* context) {
   // enterprise managed device. crbug.com/656788.
   if (g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
-          ->IsEnterpriseManaged() &&
+          ->IsDeviceEnterpriseManaged() &&
       user_manager::UserManager::Get()->GetUsers().size() > 1) {
     LOG(WARNING) << "ARC booting is aborted due to low disk space, but the "
                  << "notification was suppressed on a managed device.";

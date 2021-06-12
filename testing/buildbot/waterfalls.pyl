@@ -836,7 +836,7 @@
           'lollipop',
         ],
         'additional_compile_targets': [
-          'android_lint_test',
+          'android_nocompile_tests',
           'cronet_test_instrumentation_apk',
           'errorprone_plugin_tests',
           'monochrome_static_initializers',
@@ -1987,7 +1987,7 @@
         ],
         'mixins': [
           'enable_resultdb',
-          'mac_11_x64',
+          'mac_10.15',
           'mac_toolchain',
           'out_dir_arg',
           'xcode_12d4e',
@@ -2021,7 +2021,7 @@
           'enable_resultdb',
           'ios_restart_device',
           'limited_capacity_bot',
-          'mac_11_x64',
+          'mac_10.15',
           'mac_toolchain',
           'out_dir_arg',
           'xcode_12d4e',
@@ -4976,19 +4976,6 @@
         'mixins': [
             'mac_11_x64',
         ],
-        # TODO(crbug.com/1176803): The Mac 11 pool seems to be an odd
-        # mix of machines where some of them are 3x slower than others,
-        # which really messes with the scheduling. Until we can figure
-        # out what to do about that, we'll just run most of the test suites
-        # on the slow bots (because they are fast) and run the big test
-        # suites on the faster machines.
-        'swarming': {
-          'dimension_sets': [
-            {
-              'machine_type': 'n1-highcpu-4',
-            },
-          ],
-        },
         'test_suites': {
           'gtest_tests': 'chromium_mac_gtests_no_nacl',
           'isolated_scripts': 'chromium_mac_rel_isolated_scripts',
@@ -5430,12 +5417,30 @@
     'name': 'chromium.updater',
     'mixins': ['chromium-tester-service-account'],
     'machines': {
-      # TODO(crbug.com/1120821): switch to new pool
-      # when arm64 device is configured.
+      'mac-arm64-updater-tester-dbg': {
+        'swarming': {
+          'dimension_sets': [
+            {
+              'cpu': 'arm-64',
+              'pool': 'chromium.updater.mac',
+              'os': 'Mac-11',
+            }
+          ]
+        },
+        'test_suites': {
+          'gtest_tests': 'updater_gtests',
+        },
+      },
       'mac-arm64-updater-tester-rel': {
-        'mixins': [
-            'mac_arm64_apple_dtk_experimental',
-        ],
+        'swarming': {
+          'dimension_sets': [
+            {
+              'cpu': 'arm-64',
+              'pool': 'chromium.updater.mac',
+              'os': 'Mac-11',
+            }
+          ]
+        },
         'test_suites': {
           'gtest_tests': 'updater_gtests',
         },

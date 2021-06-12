@@ -69,15 +69,6 @@
 namespace exo {
 namespace {
 
-// Set aura::client::kSkipImeProcessing to all Surface descendants.
-void SetSkipImeProcessingToDescendentSurfaces(aura::Window* window,
-                                              bool value) {
-  if (Surface::AsSurface(window))
-    window->SetProperty(aura::client::kSkipImeProcessing, value);
-  for (aura::Window* child : window->children())
-    SetSkipImeProcessingToDescendentSurfaces(child, value);
-}
-
 // The accelerator keys used to close ShellSurfaces.
 const struct {
   ui::KeyboardCode keycode;
@@ -585,12 +576,7 @@ void ShellSurfaceBase::DisableMovement() {
 }
 
 void ShellSurfaceBase::UpdateCanResize() {
-  if (overlay_widget_ && overlay_can_resize_.has_value()) {
-    SetCanResize(*overlay_can_resize_);
-    return;
-  }
-  SetCanResize(!movement_disabled_ &&
-               (minimum_size_.IsEmpty() || minimum_size_ != maximum_size_));
+  SetCanResize(CalculateCanResize());
 }
 
 void ShellSurfaceBase::RebindRootSurface(Surface* root_surface,
@@ -1333,6 +1319,13 @@ void ShellSurfaceBase::SetParentInternal(aura::Window* parent) {
       !parent_ && ash::desks_util::IsDeskContainerId(container_));
   if (widget_)
     widget_->OnSizeConstraintsChanged();
+}
+
+bool ShellSurfaceBase::CalculateCanResize() const {
+  if (overlay_widget_ && overlay_can_resize_.has_value())
+    return *overlay_can_resize_;
+  return !movement_disabled_ &&
+         (minimum_size_.IsEmpty() || minimum_size_ != maximum_size_);
 }
 
 void ShellSurfaceBase::CommitWidget() {

@@ -77,7 +77,7 @@ void SharesheetService::ShowBubble(content::WebContents* web_contents,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void SharesheetService::ShowNearbyShareBubble(
-    content::WebContents* web_contents,
+    gfx::NativeWindow native_window,
     apps::mojom::IntentPtr intent,
     SharesheetMetrics::LaunchSource source,
     sharesheet::DeliveredCallback delivered_callback,
@@ -93,8 +93,7 @@ void SharesheetService::ShowNearbyShareBubble(
   }
   SharesheetMetrics::RecordSharesheetLaunchSource(source);
 
-  auto* sharesheet_service_delegate =
-      GetOrCreateDelegate(web_contents->GetTopLevelNativeWindow());
+  auto* sharesheet_service_delegate = GetOrCreateDelegate(native_window);
   sharesheet_service_delegate->ShowNearbyShareBubble(
       std::move(intent), std::move(delivered_callback),
       std::move(close_callback));
@@ -428,7 +427,7 @@ void SharesheetService::RecordShareDataMetrics(
 
   // Record file count.
   const size_t file_count =
-      intent->file_urls.value_or(std::vector<GURL>()).size();
+      intent->files.has_value() ? intent->files->size() : 0;
   SharesheetMetrics::RecordSharesheetFilesSharedCount(file_count);
 }
 

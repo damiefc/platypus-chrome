@@ -786,7 +786,7 @@ void LocalFrameView::PerformLayout() {
       // This map will be used to avoid rebuilding several times the fragment
       // tree spine of a common ancestor.
       HashMap<const LayoutBlock*, unsigned> fragment_tree_spines;
-      for (auto& root : layout_subtree_root_list_.Ordered()) {
+      for (LayoutObject* root : layout_subtree_root_list_.Unordered()) {
         const LayoutBlock* cb = root->ContainingBlock();
         if (cb->PhysicalFragmentCount()) {
           auto add_result = fragment_tree_spines.insert(cb, 0);
@@ -794,26 +794,19 @@ void LocalFrameView::PerformLayout() {
         }
       }
       for (auto& root : layout_subtree_root_list_.Ordered()) {
-        {
-#if DCHECK_IS_ON()
-          // TODO(crbug.com/1214198): This should not be needed, but DCHECK
-          // hits.
-          NGPhysicalBoxFragment::AllowPostLayoutScope allow_post_layout_scope;
-#endif
-          LayoutBlock* cb = root->ContainingBlock();
-          auto it = fragment_tree_spines.find(cb);
-          DCHECK(it == fragment_tree_spines.end() || it->value > 0);
-          // Ensure fragment-tree consistency just after all the cb's
-          // descendants have completed their subtree layout.
-          bool should_rebuild_fragments =
-              it != fragment_tree_spines.end() && --it->value == 0;
+        LayoutBlock* cb = root->ContainingBlock();
+        auto it = fragment_tree_spines.find(cb);
+        DCHECK(it == fragment_tree_spines.end() || it->value > 0);
+        // Ensure fragment-tree consistency just after all the cb's
+        // descendants have completed their subtree layout.
+        bool should_rebuild_fragments =
+            it != fragment_tree_spines.end() && --it->value == 0;
 
-          if (!LayoutFromRootObject(*root))
-            continue;
+        if (!LayoutFromRootObject(*root))
+          continue;
 
-          if (should_rebuild_fragments)
-            cb->RebuildFragmentTreeSpine();
-        }
+        if (should_rebuild_fragments)
+          cb->RebuildFragmentTreeSpine();
 
         // We need to ensure that we mark up all layoutObjects up to the
         // LayoutView for paint invalidation. This simplifies our code as we
@@ -2718,6 +2711,7 @@ bool LocalFrameView::AnyFrameIsPrintingOrPaintingPreview() {
 }
 
 void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
+  DCHECK(LocalFrameTreeAllowsThrottling());
   TRACE_EVENT0("blink,benchmark", "LocalFrameView::RunPaintLifecyclePhase");
   // While printing or capturing a paint preview of a document, the paint walk
   // is done into a special canvas. There is no point doing a normal paint step
@@ -4902,6 +4896,8 @@ PaintLayer* LocalFrameView::GetFullScreenOverlayLayer() const {
 void LocalFrameView::RunPaintBenchmark(int repeat_count,
                                        cc::PaintBenchmarkResult& result) {
   DCHECK_EQ(Lifecycle().GetState(), DocumentLifecycle::kPaintClean);
+  DCHECK(GetFrame().IsLocalRoot());
+  AllowThrottlingScope allow_throttling(*this);
 
   auto run_benchmark = [&](PaintBenchmarkMode mode) -> double {
     constexpr int kTimeCheckInterval = 1;

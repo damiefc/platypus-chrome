@@ -82,6 +82,7 @@ class MockTrustedVaultConnection : public TrustedVaultConnection {
                    last_trusted_vault_key_and_version,
                const SecureBoxPublicKey& authentication_factor_public_key,
                AuthenticationFactorType authentication_factor_type,
+               absl::optional<int> authentication_factor_type_hint,
                RegisterAuthenticationFactorCallback callback),
               (override));
   MOCK_METHOD(std::unique_ptr<Request>,
@@ -120,7 +121,7 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
     // To avoid DCHECK failures in tests that exercise SetPrimaryAccount(),
     // return non-null for RegisterAuthenticationFactor(). This registration
     // operation will never complete, though.
-    ON_CALL(*connection_, RegisterAuthenticationFactor(_, _, _, _, _))
+    ON_CALL(*connection_, RegisterAuthenticationFactor(_, _, _, _, _, _))
         .WillByDefault(testing::InvokeWithoutArgs([&]() {
           return std::make_unique<TrustedVaultConnection::Request>();
         }));
@@ -156,12 +157,13 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
                     Eq(account_info),
                     OptionalTrustedVaultKeyAndVersionEq(vault_keys.back(),
                                                         last_vault_key_version),
-                    _, AuthenticationFactorType::kPhysicalDevice, _))
+                    _, AuthenticationFactorType::kPhysicalDevice,
+                    /*authentication_factor_type_hint=*/Eq(absl::nullopt), _))
         .WillOnce(
             [&](const CoreAccountInfo&,
                 const absl::optional<TrustedVaultKeyAndVersion>&,
                 const SecureBoxPublicKey& device_public_key,
-                AuthenticationFactorType,
+                AuthenticationFactorType, absl::optional<int>,
                 TrustedVaultConnection::RegisterAuthenticationFactorCallback
                     callback) {
               device_registration_callback = std::move(callback);
@@ -187,15 +189,6 @@ class StandaloneTrustedVaultBackendTest : public testing::Test {
             .private_key_material();
     return std::vector<uint8_t>(device_private_key_material.begin(),
                                 device_private_key_material.end());
-  }
-
-  bool GetIsRecoverabilityDegraded(const CoreAccountInfo& account_info) {
-    bool is_degraded = false;
-    base::MockCallback<base::OnceCallback<void(bool)>> completion_callback;
-    EXPECT_CALL(completion_callback, Run(_)).WillOnce(SaveArg<0>(&is_degraded));
-    backend()->GetIsRecoverabilityDegraded(account_info,
-                                           completion_callback.Get());
-    return is_degraded;
   }
 
  private:
@@ -347,11 +340,12 @@ TEST_F(StandaloneTrustedVaultBackendTest, ShouldRegisterDevice) {
       RegisterAuthenticationFactor(
           Eq(account_info),
           OptionalTrustedVaultKeyAndVersionEq(kVaultKey, kLastKeyVersion), _,
-          AuthenticationFactorType::kPhysicalDevice, _))
+          AuthenticationFactorType::kPhysicalDevice,
+          /*authentication_factor_type_hint=*/Eq(absl::nullopt), _))
       .WillOnce([&](const CoreAccountInfo&,
                     const absl::optional<TrustedVaultKeyAndVersion>&,
                     const SecureBoxPublicKey& device_public_key,
-                    AuthenticationFactorType,
+                    AuthenticationFactorType, absl::optional<int>,
                     TrustedVaultConnection::RegisterAuthenticationFactorCallback
                         callback) {
         serialized_public_device_key = device_public_key.ExportToBytes();
@@ -389,11 +383,12 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   backend()->StoreKeys(account_info.gaia, {kVaultKey}, kLastKeyVersion);
   TrustedVaultConnection::RegisterAuthenticationFactorCallback
       device_registration_callback;
-  ON_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _))
+  ON_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _))
       .WillByDefault(
           [&](const CoreAccountInfo&,
               const absl::optional<TrustedVaultKeyAndVersion>&,
               const SecureBoxPublicKey&, AuthenticationFactorType,
+              absl::optional<int>,
               TrustedVaultConnection::RegisterAuthenticationFactorCallback
                   callback) {
             device_registration_callback = std::move(callback);
@@ -402,7 +397,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 
   clock()->SetNow(base::Time::Now());
 
-  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _));
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _));
   // Setting the primary account will trigger device registration.
   backend()->SetPrimaryAccount(account_info);
   ASSERT_FALSE(device_registration_callback.is_null());
@@ -415,7 +410,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   // Following request should be throttled.
   device_registration_callback =
       TrustedVaultConnection::RegisterAuthenticationFactorCallback();
-  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _))
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _))
       .Times(0);
   // Reset and set primary account to trigger device registration attempt.
   backend()->SetPrimaryAccount(absl::nullopt);
@@ -426,7 +421,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   // Advance time to pass the throttling duration and trigger another attempt.
   clock()->Advance(switches::kTrustedVaultServiceThrottlingDuration.Get());
 
-  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _));
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _));
   // Reset and set primary account to trigger device registration attempt.
   backend()->SetPrimaryAccount(absl::nullopt);
   backend()->SetPrimaryAccount(account_info);
@@ -444,11 +439,12 @@ TEST_F(StandaloneTrustedVaultBackendTest,
   backend()->StoreKeys(account_info.gaia, {kVaultKey}, kLastKeyVersion);
   TrustedVaultConnection::RegisterAuthenticationFactorCallback
       device_registration_callback;
-  ON_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _))
+  ON_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _))
       .WillByDefault(
           [&](const CoreAccountInfo&,
               const absl::optional<TrustedVaultKeyAndVersion>&,
               const SecureBoxPublicKey&, AuthenticationFactorType,
+              absl::optional<int>,
               TrustedVaultConnection::RegisterAuthenticationFactorCallback
                   callback) {
             device_registration_callback = std::move(callback);
@@ -457,7 +453,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 
   clock()->SetNow(base::Time::Now());
 
-  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _));
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _));
   // Setting the primary account will trigger device registration.
   backend()->SetPrimaryAccount(account_info);
   ASSERT_FALSE(device_registration_callback.is_null());
@@ -472,7 +468,7 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 
   device_registration_callback =
       TrustedVaultConnection::RegisterAuthenticationFactorCallback();
-  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _));
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _));
   // Reset and set primary account to trigger device registration attempt.
   backend()->SetPrimaryAccount(absl::nullopt);
   backend()->SetPrimaryAccount(account_info);
@@ -615,11 +611,11 @@ TEST_F(StandaloneTrustedVaultBackendTest,
       *connection(),
       RegisterAuthenticationFactor(
           account_info,
-          /*last_trusted_vault_key_and_version=*/Eq(absl::nullopt), _, _, _))
+          /*last_trusted_vault_key_and_version=*/Eq(absl::nullopt), _, _, _, _))
       .WillOnce([&](const CoreAccountInfo&,
                     const absl::optional<TrustedVaultKeyAndVersion>&,
                     const SecureBoxPublicKey& device_public_key,
-                    AuthenticationFactorType,
+                    AuthenticationFactorType, absl::optional<int>,
                     TrustedVaultConnection::RegisterAuthenticationFactorCallback
                         callback) {
         device_registration_callback = std::move(callback);
@@ -672,45 +668,101 @@ TEST_F(StandaloneTrustedVaultBackendTest,
 }
 
 TEST_F(StandaloneTrustedVaultBackendTest, ShouldAddTrustedRecoveryMethod) {
-  // TODO(crbug.com/1201659): Implement proper test expectations when possible.
+  const std::vector<std::vector<uint8_t>> kVaultKeys = {{1, 2, 3}};
+  const int kLastKeyVersion = 0;
   const std::vector<uint8_t> kPublicKey = {1, 2, 3, 4};
   const CoreAccountInfo account_info = MakeAccountInfoWithGaiaId("user");
-  const int kUnusedMethodTypeHint = 7;
+  const int kMethodTypeHint = 7;
 
   backend()->SetPrimaryAccount(account_info);
-  backend()->SetRecoverabilityDegradedForTesting();
-  ASSERT_TRUE(GetIsRecoverabilityDegraded(account_info));
+  backend()->StoreKeys(account_info.gaia, kVaultKeys, kLastKeyVersion);
+
+  TrustedVaultConnection::RegisterAuthenticationFactorCallback
+      registration_callback;
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(
+                                 Eq(account_info),
+                                 OptionalTrustedVaultKeyAndVersionEq(
+                                     kVaultKeys.back(), kLastKeyVersion),
+                                 _, AuthenticationFactorType::kUnspecified,
+                                 Eq(kMethodTypeHint), _))
+      .WillOnce([&](const CoreAccountInfo&,
+                    const absl::optional<TrustedVaultKeyAndVersion>&,
+                    const SecureBoxPublicKey& device_public_key,
+                    AuthenticationFactorType, absl::optional<int>,
+                    TrustedVaultConnection::RegisterAuthenticationFactorCallback
+                        callback) {
+        registration_callback = std::move(callback);
+        return std::make_unique<TrustedVaultConnection::Request>();
+      });
 
   base::MockCallback<base::OnceClosure> completion_callback;
-  EXPECT_CALL(completion_callback, Run());
   backend()->AddTrustedRecoveryMethod(account_info.gaia, kPublicKey,
-                                      kUnusedMethodTypeHint,
+                                      kMethodTypeHint,
                                       completion_callback.Get());
 
-  EXPECT_FALSE(GetIsRecoverabilityDegraded(account_info));
+  // The operation should be in flight.
+  ASSERT_FALSE(registration_callback.is_null());
+
+  // Mimic successful completion of the request.
+  EXPECT_CALL(completion_callback, Run());
+  std::move(registration_callback)
+      .Run(TrustedVaultRegistrationStatus::kSuccess);
 }
 
 TEST_F(StandaloneTrustedVaultBackendTest,
        ShouldDeferTrustedRecoveryMethodUntilPrimaryAccount) {
-  // TODO(crbug.com/1201659): Implement proper test expectations when possible.
+  const std::vector<std::vector<uint8_t>> kVaultKeys = {{1, 2, 3}};
+  const int kLastKeyVersion = 0;
   const std::vector<uint8_t> kPublicKey = {1, 2, 3, 4};
   const CoreAccountInfo account_info = MakeAccountInfoWithGaiaId("user");
-  const int kUnusedMethodTypeHint = 7;
+  const int kMethodTypeHint = 7;
 
-  backend()->SetRecoverabilityDegradedForTesting();
-  ASSERT_TRUE(GetIsRecoverabilityDegraded(account_info));
+  backend()->StoreKeys(account_info.gaia, kVaultKeys, kLastKeyVersion);
 
+  // No request should be issued while there is no primary account.
   base::MockCallback<base::OnceClosure> completion_callback;
-  EXPECT_CALL(completion_callback, Run()).Times(0);
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(_, _, _, _, _, _))
+      .Times(0);
   backend()->AddTrustedRecoveryMethod(account_info.gaia, kPublicKey,
-                                      kUnusedMethodTypeHint,
+                                      kMethodTypeHint,
                                       completion_callback.Get());
 
-  EXPECT_TRUE(GetIsRecoverabilityDegraded(account_info));
-
-  EXPECT_CALL(completion_callback, Run());
+  // Upon setting a primary account, RegisterAuthenticationFactor() should be
+  // invoked. It should in fact be called twice: one for device registration,
+  // and one for the AddTrustedRecoveryMethod() call being tested here.
+  TrustedVaultConnection::RegisterAuthenticationFactorCallback
+      registration_callback;
+  EXPECT_CALL(*connection(),
+              RegisterAuthenticationFactor(
+                  _, _, _, AuthenticationFactorType::kPhysicalDevice, _, _));
+  EXPECT_CALL(*connection(), RegisterAuthenticationFactor(
+                                 Eq(account_info),
+                                 OptionalTrustedVaultKeyAndVersionEq(
+                                     kVaultKeys.back(), kLastKeyVersion),
+                                 _, AuthenticationFactorType::kUnspecified,
+                                 Eq(kMethodTypeHint), _))
+      .WillOnce([&](const CoreAccountInfo&,
+                    const absl::optional<TrustedVaultKeyAndVersion>&,
+                    const SecureBoxPublicKey& device_public_key,
+                    AuthenticationFactorType, absl::optional<int>,
+                    TrustedVaultConnection::RegisterAuthenticationFactorCallback
+                        callback) {
+        registration_callback = std::move(callback);
+        // Note: TrustedVaultConnection::Request doesn't support
+        // cancellation, so these tests don't cover the contract that
+        // caller should store Request object until it's completed or need
+        // to be cancelled.
+        return std::make_unique<TrustedVaultConnection::Request>();
+      });
   backend()->SetPrimaryAccount(account_info);
-  EXPECT_FALSE(GetIsRecoverabilityDegraded(account_info));
+
+  // The operation should be in flight.
+  ASSERT_FALSE(registration_callback.is_null());
+
+  // Mimic successful completion of the request.
+  EXPECT_CALL(completion_callback, Run());
+  std::move(registration_callback)
+      .Run(TrustedVaultRegistrationStatus::kSuccess);
 }
 
 }  // namespace

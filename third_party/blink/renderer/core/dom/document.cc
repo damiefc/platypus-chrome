@@ -818,8 +818,6 @@ Document::Document(const DocumentInit& initializer,
   // |fetcher_|.
   style_engine_ = MakeGarbageCollected<StyleEngine>(*this);
 
-  UpdateForcedColors();
-
   // The parent's parser should be suspended together with all the other
   // objects, else this new Document would have a new ExecutionContext which
   // suspended state would not match the one from the parent, and could start
@@ -2024,13 +2022,17 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
 
   if (!NeedsLayoutTreeUpdate()) {
     if (Lifecycle().GetState() < DocumentLifecycle::kStyleClean) {
-      // needsLayoutTreeUpdate may change to false without any actual layout
-      // tree update.  For example, needsAnimationTimingUpdate may change to
+      // NeedsLayoutTreeUpdate may change to false without any actual layout
+      // tree update.  For example, NeedsAnimationTimingUpdate may change to
       // false when time elapses.  Advance lifecycle to StyleClean because style
       // is actually clean now.
       Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
       Lifecycle().AdvanceTo(DocumentLifecycle::kStyleClean);
     }
+    // If we insert <object> elements into display:none subtrees, we might not
+    // need a layout tree update, but need to make sure they are not blocking
+    // the load event.
+    UnblockLoadEventAfterLayoutTreeUpdate();
     return;
   }
 
@@ -2628,6 +2630,7 @@ void Document::Initialize() {
   DCHECK_EQ(lifecycle_.GetState(), DocumentLifecycle::kInactive);
   DCHECK(!ax_object_cache_ || this != &AXObjectCacheOwner());
 
+  UpdateForcedColors();
   layout_view_ = new LayoutView(this);
   SetLayoutObject(layout_view_);
 
@@ -6596,6 +6599,9 @@ void Document::FinishedParsing() {
     BeginLifecycleUpdatesIfRenderingReady();
 
     frame->Loader().FinishedParsing();
+
+    if (frame->GetFrameScheduler())
+      frame->GetFrameScheduler()->OnDomContentLoaded();
 
     DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT(
         "MarkDOMContent", inspector_mark_load_event::Data, frame);

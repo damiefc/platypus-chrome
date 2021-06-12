@@ -217,7 +217,6 @@
 <translation id="1682696192498422849">પહેલાં ટૂંકી કિનારી</translation>
 <translation id="168693727862418163">આ પૉલિસીનું મૂલ્ય તેના સ્કીમા સામે માન્ય કરવામાં નિષ્ફળ ગયું છે અને તેને અવગણવામાં આવશે.</translation>
 <translation id="168841957122794586">સર્વર પ્રમાણપત્ર એક નબળી ક્રિપ્ટોગ્રાફિક કી ધરાવે છે.</translation>
-<translation id="1696290444144917273">વર્ચ્યુઅલ કાર્ડની વિગતો જુઓ</translation>
 <translation id="1697532407822776718">તમારું બધું સેટ છે!</translation>
 <translation id="1699570257714336246">માહિતી ખૂટે છે</translation>
 <translation id="1703835215927279855">અક્ષર</translation>
@@ -401,6 +400,7 @@
 <translation id="2359629602545592467">બહુવિધ</translation>
 <translation id="2359808026110333948">આગળ વધો</translation>
 <translation id="2359961752320758691">તમારો વર્ચ્યુઅલ કાર્ડ નંબર લાગુ કરવામાં આવ્યો છે.</translation>
+<translation id="236340516568226369">કદ બદલવા માટેના ટૉગલ ધરાવતું મેનૂ</translation>
 <translation id="2367567093518048410">સ્તર</translation>
 <translation id="2372464001869762664">તમે કન્ફર્મ કરો પછી, આ સાઇટ સાથે તમારા Google એકાઉન્ટમાંથી કાર્ડની વિગતો શેર કરવામાં આવશે. તમારા Plex એકાઉન્ટની વિગતોમાંથી CVC મેળવો.</translation>
 <translation id="2380886658946992094">કાનૂની</translation>
@@ -1202,7 +1202,6 @@
 <translation id="5314967030527622926">બુકલેટ માર્કર</translation>
 <translation id="5316812925700871227">ઘડિયાળની વિપરિત દિશામાં ફેરવો</translation>
 <translation id="5317780077021120954">સાચવો</translation>
-<translation id="5321288445143113935">મોટું કર્યું</translation>
 <translation id="5323105697514565458"><ph name="FRIENDLY_MATCH_TEXT" />, <ph name="NUM_MATCHES" /> માંથી <ph name="MATCH_POSITION" /></translation>
 <translation id="5324080437450482387">સંપર્કની માહિતી પસંદ કરો</translation>
 <translation id="5327248766486351172">નામ</translation>
@@ -1683,6 +1682,7 @@
 <translation id="7219179957768738017">કનેક્શન <ph name="SSL_VERSION" /> નો ઉપયોગ કરે છે.</translation>
 <translation id="7220786058474068424">પ્રક્રિયા કરી રહ્યું છે</translation>
 <translation id="7221855153210829124">સૂચનાઓ દર્શાવો</translation>
+<translation id="722454870747268814">નવું છૂપું ટૅબ</translation>
 <translation id="7229659723041939809">હમણાં જ કોઈ છેતરામણી સાઇટ પર તમે તમારો પાસવર્ડ દાખલ કર્યો. <ph name="WEBSITE_1" />, <ph name="WEBSITE_2" />, <ph name="WEBSITE_3" /> અને હવે તમે આ પાસવર્ડનો જ્યાં ઉપયોગ કરતા હો તે અન્ય સાઇટ પરના તમે સાચવેલા પાસવર્ડ ચેક કરવાનો Chrome સુઝાવ આપે છે.</translation>
 <translation id="7233592378249864828">કન્ફર્મેશન શીટ પ્રિન્ટ કરો</translation>
 <translation id="7238585580608191973">SHA-256 ફિંગરપ્રિંટ</translation>

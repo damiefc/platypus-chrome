@@ -18,8 +18,8 @@
 #include "chrome/browser/ash/attestation/attestation_ca_client.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/chromeos/policy/enrollment/enrollment_handler_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment/enrollment_requisition_manager.h"
@@ -41,11 +41,8 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/prefs/pref_service.h"
 
-namespace chromeos {
-class ActiveDirectoryJoinDelegate;
-}
-
 namespace policy {
+class ActiveDirectoryJoinDelegate;
 
 namespace {
 
@@ -121,7 +118,7 @@ void DeviceCloudPolicyInitializer::Shutdown() {
 
 void DeviceCloudPolicyInitializer::PrepareEnrollment(
     DeviceManagementService* device_management_service,
-    chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
+    ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
     DMAuth dm_auth,
     EnrollmentCallback enrollment_callback) {

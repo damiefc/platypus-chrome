@@ -197,7 +197,7 @@ void YUVAToRGBA(const avifImage* image,
   avifGetPixelFormatInfo(image->yuvFormat, &format_info);
   gfx::Point3F pixel;
   const int max_channel_i = (1 << image->depth) - 1;
-  const float max_channel = float{max_channel_i};
+  const float max_channel = static_cast<float>(max_channel_i);
   for (uint32_t j = 0; j < image->height; ++j) {
     const int uv_j = j >> format_info.chromaShiftY;
 
@@ -853,9 +853,11 @@ void AVIFImageDecoder::UpdateColorTransform(const gfx::ColorSpace& frame_cs,
 
   // For YUV-to-RGB color conversion we can pass an invalid dst color space to
   // skip the code for full color conversion.
+  gfx::ColorTransform::Options options;
+  options.src_bit_depth = bit_depth;
+  options.dst_bit_depth = bit_depth;
   color_transform_ = gfx::ColorTransform::NewColorTransform(
-      frame_cs, bit_depth, gfx::ColorSpace(), bit_depth,
-      gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
+      frame_cs, gfx::ColorSpace(), options);
 }
 
 bool AVIFImageDecoder::RenderImage(const avifImage* image, ImageFrame* buffer) {

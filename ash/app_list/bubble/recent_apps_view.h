@@ -12,13 +12,9 @@
 #include "ash/ash_export.h"
 #include "ui/views/view.h"
 
-namespace ui {
-class Event;
-}  // namespace ui
-
 namespace ash {
 
-class AppListItem;
+class AppListItemView;
 class AppListViewDelegate;
 
 // The recent apps row in the "Continue" section of the bubble launcher. Shows
@@ -30,14 +26,9 @@ class ASH_EXPORT RecentAppsView : public views::View {
   RecentAppsView& operator=(const RecentAppsView&) = delete;
   ~RecentAppsView() override;
 
+  AppListItemView* GetItemViewForTest(int index);
+
  private:
-  // Adds an app icon as a child view.
-  void AddAppIcon(AppListItem* item);
-
-  // Callback for clicking on an app.
-  void OnAppListItemViewPressed(const std::string& item_id,
-                                const ui::Event& event);
-
   AppListViewDelegate* const view_delegate_;
 
   // The grid delegate for each AppListItemView.

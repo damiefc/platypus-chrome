@@ -101,6 +101,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
       base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromo));
   source->AddBoolean("modulesEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kModules));
+  source->AddBoolean(
+      "modulesDragAndDropEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpModulesDragAndDrop));
   source->AddBoolean("modulesLoadEnabled", base::FeatureList::IsEnabled(
                                                ntp_features::kNtpModulesLoad));
   source->AddInteger("modulesLoadTimeout",
@@ -268,6 +271,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(
           ntp_features::kNtpChromeCartModule,
           ntp_features::kNtpChromeCartModuleAbandonedCartDiscountParam) ==
           "true");
+  source->AddBoolean(
+      "modulesRedesignedEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpModulesRedesigned));
 
   RealboxHandler::SetupWebUIDataSource(source);
 

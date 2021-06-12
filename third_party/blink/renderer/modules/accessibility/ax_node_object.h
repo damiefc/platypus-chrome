@@ -98,6 +98,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsHovered() const final;
   bool IsImageButton() const;
   bool IsInputImage() const final;
+  bool IsLineBreakingObject() const override;
   bool IsLoaded() const override;
   bool IsMultiSelectable() const override;
   bool IsNativeImage() const final;
@@ -249,7 +250,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool OnNativeSetSequentialFocusNavigationStartingPointAction() final;
 
   // Notifications that this object may have changed.
-  void ChildrenChanged() override;
+  void ChildrenChangedWithCleanLayout() override;
   void SelectionChanged() final;
   void HandleAriaExpandedChanged() override;
   void HandleActiveDescendantChanged() override;

@@ -95,19 +95,22 @@ enum class ContextAnnotationFlags : uint64_t {
 };
 
 int64_t ContextAnnotationsToFlags(VisitContextAnnotations context_annotations) {
-  return (context_annotations.omnibox_url_copied &
-          static_cast<uint64_t>(ContextAnnotationFlags::kOmniboxUrlCopied)) |
-         (context_annotations.is_existing_part_of_tab_group &
-          static_cast<uint64_t>(
-              ContextAnnotationFlags::kIsExistingPartOfTabGroup)) |
-         (context_annotations.is_placed_in_tab_group &
-          static_cast<uint64_t>(ContextAnnotationFlags::kIsPlacedInTabGroup)) |
-         (context_annotations.is_existing_bookmark &
-          static_cast<uint64_t>(ContextAnnotationFlags::kIsExistingBookmark)) |
-         (context_annotations.is_new_bookmark &
-          static_cast<uint64_t>(ContextAnnotationFlags::kIsNewBookmark)) |
-         (context_annotations.is_ntp_custom_link &
-          static_cast<uint64_t>(ContextAnnotationFlags::kIsNtpCustomLink));
+  int64_t flags = 0;
+  if (context_annotations.omnibox_url_copied)
+    flags |= static_cast<uint64_t>(ContextAnnotationFlags::kOmniboxUrlCopied);
+  if (context_annotations.is_existing_part_of_tab_group) {
+    flags |= static_cast<uint64_t>(
+        ContextAnnotationFlags::kIsExistingPartOfTabGroup);
+  }
+  if (context_annotations.is_placed_in_tab_group)
+    flags |= static_cast<uint64_t>(ContextAnnotationFlags::kIsPlacedInTabGroup);
+  if (context_annotations.is_existing_bookmark)
+    flags |= static_cast<uint64_t>(ContextAnnotationFlags::kIsExistingBookmark);
+  if (context_annotations.is_new_bookmark)
+    flags |= static_cast<uint64_t>(ContextAnnotationFlags::kIsNewBookmark);
+  if (context_annotations.is_ntp_custom_link)
+    flags |= static_cast<uint64_t>(ContextAnnotationFlags::kIsNtpCustomLink);
+  return flags;
 }
 
 VisitContextAnnotations ConstructContextAnnotationsWithFlags(
@@ -148,10 +151,8 @@ AnnotatedVisitRow StatementToAnnotatedVisitRow(
 }
 
 // Like `StatementToAnnotatedVisitRow()` but for multiple rows.
-std::vector<AnnotatedVisitRow> StatementToAnnotatedVisitRowVector(
+std::vector<AnnotatedVisitRow> StatementToAnnotatedVisitRows(
     sql::Statement& statement) {
-  if (!statement.is_valid())
-    return {};
   std::vector<AnnotatedVisitRow> rows;
   while (statement.Step())
     rows.push_back(StatementToAnnotatedVisitRow(statement));
@@ -165,27 +166,47 @@ VisitAnnotationsDatabase::~VisitAnnotationsDatabase() = default;
 
 bool VisitAnnotationsDatabase::InitVisitAnnotationsTables() {
   // Content Annotations table.
-  if (!GetDB().DoesTableExist("content_annotations")) {
-    if (!GetDB().Execute("CREATE TABLE content_annotations ("
-                         "visit_id INTEGER PRIMARY KEY,"
-                         "floc_protected_score DECIMAL(3, 2),"
-                         "categories VARCHAR,"
-                         "page_topics_model_version INTEGER,"
-                         "annotation_flags INTEGER DEFAULT 0 NOT NULL)")) {
-      return false;
-    }
+  if (!GetDB().Execute("CREATE TABLE IF NOT EXISTS content_annotations("
+                       "visit_id INTEGER PRIMARY KEY,"
+                       "floc_protected_score NUMERIC,"
+                       "categories VARCHAR,"
+                       "page_topics_model_version INTEGER,"
+                       "annotation_flags INTEGER NOT NULL)")) {
+    return false;
   }
 
-  if (!GetDB().DoesTableExist("context_annotations")) {
-    // See `AnnotatedVisitRow` and `VisitContextAnnotations` for details about
-    // these fields.
-    if (!GetDB().Execute("CREATE TABLE context_annotations("
-                         "visit_id INTEGER PRIMARY KEY,"
-                         "context_annotation_flags INTEGER DEFAULT 0 NOT NULL,"
-                         "duration_since_last_visit INTEGER,"
-                         "page_end_reason INTEGER)")) {
-      return false;
-    }
+  // See `AnnotatedVisitRow` and `VisitContextAnnotations` for details about
+  // these fields.
+  if (!GetDB().Execute("CREATE TABLE IF NOT EXISTS context_annotations("
+                       "visit_id INTEGER PRIMARY KEY,"
+                       "context_annotation_flags INTEGER NOT NULL,"
+                       "duration_since_last_visit INTEGER,"
+                       "page_end_reason INTEGER)")) {
+    return false;
+  }
+
+  if (!GetDB().Execute("CREATE TABLE IF NOT EXISTS clusters("
+                       "cluster_id INTEGER PRIMARY KEY,"
+                       "score NUMERIC NOT NULL)")) {
+    return false;
+  }
+
+  // Represents the many-to-many relationship of `Cluster`s and `Visit`s.
+  // `score` here is unique to the visit/cluster combination; i.e. the same
+  // visit in another cluster or another visit in the same cluster may have
+  // different scores.
+  if (!GetDB().Execute("CREATE TABLE IF NOT EXISTS clusters_and_visits("
+                       "cluster_id INTEGER NOT NULL,"
+                       "visit_id INTEGER NOT NULL,"
+                       "score NUMERIC NOT NULL,"
+                       "PRIMARY KEY(cluster_id,visit_id))"
+                       "WITHOUT ROWID")) {
+    return false;
+  }
+
+  if (!GetDB().Execute("CREATE INDEX IF NOT EXISTS clusters_for_visit ON "
+                       "clusters_and_visits(visit_id)")) {
+    return false;
   }
 
   return true;
@@ -194,7 +215,9 @@ bool VisitAnnotationsDatabase::InitVisitAnnotationsTables() {
 bool VisitAnnotationsDatabase::DropVisitAnnotationsTables() {
   // Dropping the tables will implicitly delete the indices.
   return GetDB().Execute("DROP TABLE content_annotations") &&
-         GetDB().Execute("DROP TABLE context_annotations");
+         GetDB().Execute("DROP TABLE context_annotations") &&
+         GetDB().Execute("DROP TABLE clusters") &&
+         GetDB().Execute("DROP TABLE clusters_and_visits");
 }
 
 void VisitAnnotationsDatabase::AddContentAnnotationsForVisit(
@@ -203,7 +226,7 @@ void VisitAnnotationsDatabase::AddContentAnnotationsForVisit(
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT INTO content_annotations (" HISTORY_CONTENT_ANNOTATIONS_ROW_FIELDS
-      ") VALUES (?, ?, ?, ?, ?)"));
+      ") VALUES (?,?,?,?,?)"));
   statement.BindInt64(0, visit_id);
   statement.BindDouble(
       1, static_cast<double>(
@@ -227,7 +250,7 @@ void VisitAnnotationsDatabase::AddContextAnnotationsForVisit(
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT INTO context_annotations (" HISTORY_CONTEXT_ANNOTATIONS_ROW_FIELDS
-      ") VALUES (?, ?, ?, ?)"));
+      ") VALUES (?,?,?,?)"));
   statement.BindInt64(0, visit_id);
   statement.BindInt64(1, ContextAnnotationsToFlags(visit_context_annotations));
   statement.BindInt64(
@@ -309,7 +332,7 @@ std::vector<AnnotatedVisitRow> VisitAnnotationsDatabase::GetAnnotatedVisits(
                      "ORDER BY visits.visit_time DESC "
                      "LIMIT ?"));
   statement.BindInt64(0, max_results);
-  return StatementToAnnotatedVisitRowVector(statement);
+  return StatementToAnnotatedVisitRows(statement);
 }
 
 std::vector<AnnotatedVisitRow>
@@ -317,7 +340,7 @@ VisitAnnotationsDatabase::GetAllContextAnnotationsForTesting() {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE, "SELECT" HISTORY_CONTEXT_ANNOTATIONS_ROW_FIELDS
                      "FROM context_annotations"));
-  return StatementToAnnotatedVisitRowVector(statement);
+  return StatementToAnnotatedVisitRows(statement);
 }
 
 void VisitAnnotationsDatabase::DeleteAnnotationsForVisit(VisitID visit_id) {

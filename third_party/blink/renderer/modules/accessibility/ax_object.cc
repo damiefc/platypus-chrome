@@ -1928,7 +1928,11 @@ bool AXObject::IsHovered() const {
 }
 
 bool AXObject::IsLineBreakingObject() const {
-  return false;
+  // Not all AXObjects have an associated node or layout object. They could be
+  // virtual accessibility nodes, for example.
+  //
+  // We assume that most images on the Web are inline.
+  return !IsImage() && ui::IsStructure(RoleValue());
 }
 
 bool AXObject::IsLinked() const {
@@ -2090,9 +2094,10 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded(
       //    "not handle a signal and call ChilldrenChanged() earlier."
       //     << "\nChild: " << ToString(true)
       //     << "\nParent: " << parent->ToString(true);
-      // Defer this ChildrenChanged(), otherwise it can cause reentry into
+      // Defers a ChildrenChanged() on the first included ancestor.
+      // Must defer it, otherwise it can cause reentry into
       // UpdateCachedAttributeValuesIfNeeded() on |this|.
-      AXObjectCache().ChildrenChanged(parent);
+      AXObjectCache().ChildrenChangedOnAncestorOf(const_cast<AXObject*>(this));
     }
   }
 
@@ -2479,6 +2484,16 @@ bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
   // Always pass through Line Breaking objects, this is necessary to
   // detect paragraph edges, which are defined as hard-line breaks.
   if (IsLineBreakingObject())
+    return true;
+
+  // Ruby annotations (i.e. <rt> elements) need to be included because they are
+  // used for calculating an accessible description for the ruby. We explicitly
+  // exclude from the tree any <rp> elements, even though they also have the
+  // kRubyAnnotation role, because such elements provide fallback content for
+  // browsers that do not support ruby. Hence, their contents should not be
+  // included in the accessible description, unless another condition in this
+  // method decides to keep them in the tree for some reason.
+  if (element->HasTagName(html_names::kRtTag))
     return true;
 
   // Preserve SVG grouping elements.
@@ -3743,7 +3758,7 @@ AXObject::InOrderTraversalIterator AXObject::GetInOrderTraversalIterator() {
 }
 
 int AXObject::ChildCountIncludingIgnored() const {
-  return int{ChildrenIncludingIgnored().size()};
+  return static_cast<int>(ChildrenIncludingIgnored().size());
 }
 
 AXObject* AXObject::ChildAtIncludingIgnored(int index) const {
@@ -3976,12 +3991,12 @@ AXObject* AXObject::PreviousInPostOrderIncludingIgnored(
 }
 
 int AXObject::UnignoredChildCount() const {
-  return int{UnignoredChildren().size()};
+  return static_cast<int>(UnignoredChildren().size());
 }
 
 AXObject* AXObject::UnignoredChildAt(int index) const {
   const AXObjectVector unignored_children = UnignoredChildren();
-  if (index < 0 || index >= int{unignored_children.size()})
+  if (index < 0 || index >= static_cast<int>(unignored_children.size()))
     return nullptr;
   return unignored_children[index];
 }
@@ -4185,6 +4200,8 @@ void AXObject::UpdateChildrenIfNecessary() {
         << GetNode() << "  with " << children_.size() << " children";
   }
 #endif
+
+  UpdateCachedAttributeValuesIfNeeded();
 
   AddChildren();
 }
@@ -4556,14 +4573,14 @@ int AXObject::AriaRowCount() const {
   if (!HasAOMPropertyOrARIAAttribute(AOMIntProperty::kRowCount, row_count))
     return 0;
 
-  if (row_count > int{RowCount()})
+  if (row_count > static_cast<int>(RowCount()))
     return row_count;
 
   // Spec says that if all of the rows are present in the DOM, it is
   // not necessary to set this attribute as the user agent can
   // automatically calculate the total number of rows.
   // It returns 0 in order not to set this attribute.
-  if (row_count == int{RowCount()} || row_count != -1)
+  if (row_count == static_cast<int>(RowCount()) || row_count != -1)
     return 0;
 
   // In the spec, -1 explicitly means an unknown number of rows.

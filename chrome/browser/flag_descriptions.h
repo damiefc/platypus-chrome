@@ -836,9 +836,6 @@ extern const char kLiteVideoDownlinkBandwidthKbpsDescription[];
 extern const char kLiteVideoForceOverrideDecisionName[];
 extern const char kLiteVideoForceOverrideDecisionDescription[];
 
-extern const char kLoadMediaRouterComponentExtensionName[];
-extern const char kLoadMediaRouterComponentExtensionDescription[];
-
 extern const char kLogJsConsoleMessagesName[];
 extern const char kLogJsConsoleMessagesDescription[];
 
@@ -985,9 +982,6 @@ extern const char kOmniboxOnFocusSuggestionsContextualWebDescription[];
 extern const char kOmniboxShortBookmarkSuggestionsName[];
 extern const char kOmniboxShortBookmarkSuggestionsDescription[];
 
-extern const char kOmniboxSearchReadyIncognitoName[];
-extern const char kOmniboxSearchReadyIncognitoDescription[];
-
 extern const char kOmniboxSpareRendererName[];
 extern const char kOmniboxSpareRendererDescription[];
 
@@ -1047,6 +1041,9 @@ extern const char kOopRasterizationDDLDescription[];
 
 extern const char kOptimizationGuideModelDownloadingName[];
 extern const char kOptimizationGuideModelDownloadingDescription[];
+
+extern const char kOsSettingsAppNotificationsPageName[];
+extern const char kOsSettingsAppNotificationsPageDescription[];
 
 extern const char kOsSettingsDeepLinkingName[];
 extern const char kOsSettingsDeepLinkingDescription[];
@@ -1267,9 +1264,6 @@ extern const char kSharingPreferVapidDescription[];
 extern const char kSharingSendViaSyncName[];
 extern const char kSharingSendViaSyncDescription[];
 
-extern const char kSharingDeviceExpirationName[];
-extern const char kSharingDeviceExpirationDescription[];
-
 extern const char kShelfHoverPreviewsName[];
 extern const char kShelfHoverPreviewsDescription[];
 
@@ -1290,9 +1284,6 @@ extern const char kSkiaRendererDescription[];
 
 extern const char kHistoryManipulationIntervention[];
 extern const char kHistoryManipulationInterventionDescription[];
-
-extern const char kSilentDebuggerExtensionApiName[];
-extern const char kSilentDebuggerExtensionApiDescription[];
 
 extern const char kStorageAccessAPIName[];
 extern const char kStorageAccessAPIDescription[];
@@ -1391,6 +1382,9 @@ extern const char kTabHoverCardImagesDescription[];
 
 extern const char kTabOutlinesInLowContrastThemesName[];
 extern const char kTabOutlinesInLowContrastThemesDescription[];
+
+extern const char kTabRestoreSubMenusName[];
+extern const char kTabRestoreSubMenusDescription[];
 
 extern const char kTextFragmentColorChangeName[];
 extern const char kTextFragmentColorChangeDescription[];
@@ -1581,6 +1575,9 @@ extern const char kSanitizerApiDescription[];
 
 extern const char kUsePassthroughCommandDecoderName[];
 extern const char kUsePassthroughCommandDecoderDescription[];
+
+extern const char kExtensionWorkflowJustificationName[];
+extern const char kExtensionWorkflowJustificationDescription[];
 
 // Android --------------------------------------------------------------------
 
@@ -1887,8 +1884,20 @@ extern const char kReengagementNotificationDescription[];
 extern const char kRelatedSearchesName[];
 extern const char kRelatedSearchesDescription[];
 
+extern const char kRelatedSearchesAlternateUxName[];
+extern const char kRelatedSearchesAlternateUxDescription[];
+
+extern const char kRelatedSearchesInBarName[];
+extern const char kRelatedSearchesInBarDescription[];
+
+extern const char kRelatedSearchesSimplifiedUxName[];
+extern const char kRelatedSearchesSimplifiedUxDescription[];
+
 extern const char kRelatedSearchesUiName[];
 extern const char kRelatedSearchesUiDescription[];
+
+extern const char kSingleTouchSelectName[];
+extern const char kSingleTouchSelectDescription[];
 
 extern const char kRequestDesktopSiteForTabletsName[];
 extern const char kRequestDesktopSiteForTabletsDescription[];
@@ -2033,6 +2042,12 @@ extern const char kNtpShoppingTasksModuleDescription[];
 
 extern const char kNtpChromeCartModuleName[];
 extern const char kNtpChromeCartModuleDescription[];
+
+extern const char kNtpModulesDragAndDropName[];
+extern const char kNtpModulesDragAndDropDescription[];
+
+extern const char kNtpModulesRedesignedName[];
+extern const char kNtpModulesRedesignedDescription[];
 
 extern const char kEnableReaderModeName[];
 extern const char kEnableReaderModeDescription[];
@@ -2234,6 +2249,9 @@ extern const char kArcRtVcpuQuadCoreDesc[];
 
 extern const char kArcUseHighMemoryDalvikProfileName[];
 extern const char kArcUseHighMemoryDalvikProfileDesc[];
+
+extern const char kArcWebAppShareName[];
+extern const char kArcWebAppShareDescription[];
 
 extern const char kArcEnableUsapName[];
 extern const char kArcEnableUsapDesc[];
@@ -2439,6 +2457,9 @@ extern const char kEnableGoogleAssistantAecDescription[];
 extern const char kEnableHeuristicStylusPalmRejectionName[];
 extern const char kEnableHeuristicStylusPalmRejectionDescription[];
 
+extern const char kEnableInputEventLoggingName[];
+extern const char kEnableInputEventLoggingDescription[];
+
 extern const char kEnableInputInDiagnosticsAppName[];
 extern const char kEnableInputInDiagnosticsAppDescription[];
 
@@ -2595,6 +2616,9 @@ extern const char kFrameThrottleFps30[];
 
 extern const char kFullRestoreName[];
 extern const char kFullRestoreDescription[];
+
+extern const char kHelpAppBackgroundPageName[];
+extern const char kHelpAppBackgroundPageDescription[];
 
 extern const char kHelpAppDiscoverTabName[];
 extern const char kHelpAppDiscoverTabDescription[];

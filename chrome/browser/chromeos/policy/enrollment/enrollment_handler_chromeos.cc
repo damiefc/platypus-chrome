@@ -22,8 +22,8 @@
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/active_directory/active_directory_join_delegate.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
-#include "chrome/browser/chromeos/policy/dm_token_storage.h"
+#include "chrome/browser/chromeos/policy/core/device_cloud_policy_store_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/dm_token_storage.h"
 #include "chrome/browser/chromeos/policy/server_backed_state/server_backed_state_keys_broker.h"
 #include "chrome/browser/policy/enrollment_status.h"
 #include "chrome/browser/profiles/profile.h"
@@ -170,7 +170,7 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     chromeos::attestation::AttestationFlow* attestation_flow,
     std::unique_ptr<CloudPolicyClient> client,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
-    chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
+    ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
     DMAuth dm_auth,
     const std::string& client_id,

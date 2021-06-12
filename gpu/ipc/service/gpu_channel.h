@@ -20,6 +20,7 @@
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/context_result.h"
@@ -63,6 +64,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 
   static std::unique_ptr<GpuChannel> Create(
       GpuChannelManager* gpu_channel_manager,
+      const base::UnguessableToken& channel_token,
       Scheduler* scheduler,
       SyncPointManager* sync_point_manager,
       scoped_refptr<gl::GLShareGroup> share_group,
@@ -179,6 +181,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
 #if defined(OS_ANDROID)
   const CommandBufferStub* GetOneStub() const;
 
+  bool CreateStreamTexture(
+      int32_t stream_id,
+      mojo::PendingAssociatedReceiver<mojom::StreamTexture> receiver);
+
   // Called by StreamTexture to remove the GpuChannel's reference to the
   // StreamTexture.
   void DestroyStreamTexture(int32_t stream_id);
@@ -196,7 +202,6 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
       mojo::PendingAssociatedRemote<mojom::CommandBufferClient> client,
       mojom::GpuChannel::CreateCommandBufferCallback callback);
   void DestroyCommandBuffer(int32_t routing_id);
-  bool CreateStreamTexture(int32_t stream_id);
 
 #if defined(OS_FUCHSIA)
   void RegisterSysmemBufferCollection(const base::UnguessableToken& id,
@@ -210,6 +215,7 @@ class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
  private:
   // Takes ownership of the renderer process handle.
   GpuChannel(GpuChannelManager* gpu_channel_manager,
+             const base::UnguessableToken& channel_token,
              Scheduler* scheduler,
              SyncPointManager* sync_point_manager,
              scoped_refptr<gl::GLShareGroup> share_group,

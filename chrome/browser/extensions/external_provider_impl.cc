@@ -61,9 +61,9 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/extensions/device_local_account_external_policy_loader.h"
 #include "chrome/browser/chromeos/extensions/signin_screen_extensions_external_loader.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_local_account.h"
-#include "chrome/browser/chromeos/policy/device_local_account_policy_service.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/device_local_account.h"
+#include "chrome/browser/chromeos/policy/core/device_local_account_policy_service.h"
 #include "components/arc/arc_util.h"
 #include "extensions/common/constants.h"
 #else
@@ -636,7 +636,7 @@ void ExternalProviderImpl::CreateExternalProviders(
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
   policy::DeviceLocalAccount::Type account_type;
-  if (user && connector->IsEnterpriseManaged() &&
+  if (user && connector->IsDeviceEnterpriseManaged() &&
       policy::IsDeviceLocalAccountUser(user->GetAccountId().GetUserEmail(),
                                        &account_type)) {
     if (account_type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION)
@@ -688,7 +688,7 @@ void ExternalProviderImpl::CreateExternalProviders(
           g_browser_process->platform_part()
               ->browser_policy_connector_chromeos();
       ManifestLocation location = ManifestLocation::kExternalPref;
-      if (connector && connector->IsEnterpriseManaged())
+      if (connector && connector->IsDeviceEnterpriseManaged())
         location = ManifestLocation::kExternalPolicy;
 
       auto kiosk_app_provider = std::make_unique<ExternalProviderImpl>(

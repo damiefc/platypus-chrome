@@ -189,7 +189,7 @@ class LocalPrinterHandlerDefaultTestBase : public testing::Test {
 // Testing class to cover `LocalPrinterHandlerDefault` handling using either a
 // local task runner or a service.  Makes no attempt to cover fallback when
 // using a service, which is handled separately by
-// `LocalPrinterHandlerDefaultTestFallback`
+// `LocalPrinterHandlerDefaultTestService`
 class LocalPrinterHandlerDefaultTestProcess
     : public LocalPrinterHandlerDefaultTestBase,
       public testing::WithParamInterface<bool> {
@@ -206,16 +206,22 @@ class LocalPrinterHandlerDefaultTestProcess
 };
 
 // Testing class to cover `LocalPrinterHandlerDefault` handling using only a
-// service, and to check different behavior for whether fallback is enabled.
-class LocalPrinterHandlerDefaultTestFallback
+// service.  This can check different behavior for whether fallback is enabled
+// as well as Mojom data validation conditions.
+class LocalPrinterHandlerDefaultTestService
     : public LocalPrinterHandlerDefaultTestBase {
  public:
-  LocalPrinterHandlerDefaultTestFallback() = default;
-  LocalPrinterHandlerDefaultTestFallback(
-      const LocalPrinterHandlerDefaultTestFallback&) = delete;
-  LocalPrinterHandlerDefaultTestFallback& operator=(
-      const LocalPrinterHandlerDefaultTestFallback&) = delete;
-  ~LocalPrinterHandlerDefaultTestFallback() override = default;
+  LocalPrinterHandlerDefaultTestService() = default;
+  LocalPrinterHandlerDefaultTestService(
+      const LocalPrinterHandlerDefaultTestService&) = delete;
+  LocalPrinterHandlerDefaultTestService& operator=(
+      const LocalPrinterHandlerDefaultTestService&) = delete;
+  ~LocalPrinterHandlerDefaultTestService() override = default;
+
+  void AddInvalidDataPrinter(const std::string& id) {
+    sandboxed_print_backend()->AddInvalidDataPrinter(id);
+    unsandboxed_print_backend()->AddInvalidDataPrinter(id);
+  }
 
   bool UseService() override { return true; }
   bool SupportFallback() override { return true; }
@@ -325,6 +331,35 @@ TEST_P(LocalPrinterHandlerDefaultTestProcess, GetPrintersNoneRegistered) {
   EXPECT_FALSE(printers);
 }
 
+// Tests that enumerating printers fails when there is invalid printer data.
+TEST_F(LocalPrinterHandlerDefaultTestService,
+       GetPrintersInvalidPrinterDataFails) {
+  AddPrinter("printer1", "default1", "description1", /*is_default=*/true,
+             /*requires_elevated_permissions=*/false);
+  AddInvalidDataPrinter("printer2");
+
+  size_t call_count = 0;
+  std::unique_ptr<base::ListValue> printers;
+  bool is_done = false;
+
+  local_printer_handler()->StartGetPrinters(
+      base::BindRepeating(&RecordPrinterList, std::ref(call_count),
+                          std::ref(printers)),
+      base::BindOnce(&RecordPrintersDone, std::ref(is_done)));
+
+  RunUntilIdle();
+
+  // Invalid data in even one printer causes entire list to be dropped.
+  // TODO(crbug.com/1214139) Invalid data causes the Mojom message to fail
+  // validation and thus be dropped, resulting in no callback for
+  // `EnumeratePrinters()` being made.  Testing infrastructure automatically
+  // recovers so control returns here, with `printers` unchanged.
+  // This test should be updated to show that there were no printers
+  // provided once service disconnects are better handled and a proper callback
+  // occurs.
+  EXPECT_FALSE(is_done);
+}
+
 // Tests that fetching capabilities for an existing installed printer is
 // successful.
 TEST_P(LocalPrinterHandlerDefaultTestProcess, StartGetCapabilityValidPrinter) {
@@ -373,7 +408,7 @@ TEST_P(LocalPrinterHandlerDefaultTestProcess, StartGetCapabilityAccessDenied) {
 
 // Tests that fetching capabilities can eventually succeed with fallback
 // processing when a printer requires elevated permissions.
-TEST_F(LocalPrinterHandlerDefaultTestFallback,
+TEST_F(LocalPrinterHandlerDefaultTestService,
        StartGetCapabilityElevatedPermissionsSucceeds) {
   AddPrinter("printer1", "default1", "description1", /*is_default=*/true,
              /*requires_elevated_permissions=*/true);
@@ -395,6 +430,21 @@ TEST_F(LocalPrinterHandlerDefaultTestFallback,
   // Verify that this printer now shows up as requiring elevated privileges.
   EXPECT_TRUE(PrintBackendServiceManager::GetInstance()
                   .PrinterDriverRequiresElevatedPrivilege("printer1"));
+}
+
+// Tests that fetching capabilities fails when there is invalid printer data.
+TEST_F(LocalPrinterHandlerDefaultTestService,
+       StartGetCapabilityInvalidPrinterDataFails) {
+  AddInvalidDataPrinter("printer1");
+
+  base::Value fetched_caps("dummy");
+  local_printer_handler()->StartGetCapability(
+      /*destination_id=*/"printer1",
+      base::BindOnce(&RecordGetCapability, std::ref(fetched_caps)));
+
+  RunUntilIdle();
+
+  EXPECT_TRUE(fetched_caps.is_none());
 }
 
 }  // namespace printing

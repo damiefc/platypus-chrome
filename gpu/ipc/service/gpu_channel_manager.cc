@@ -32,7 +32,6 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
-#include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
@@ -420,18 +419,20 @@ GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
   return it != gpu_channels_.end() ? it->second.get() : nullptr;
 }
 
-GpuChannel* GpuChannelManager::EstablishChannel(int client_id,
-                                                uint64_t client_tracing_id,
-                                                bool is_gpu_host,
-                                                bool cache_shaders_on_disk) {
+GpuChannel* GpuChannelManager::EstablishChannel(
+    const base::UnguessableToken& channel_token,
+    int client_id,
+    uint64_t client_tracing_id,
+    bool is_gpu_host,
+    bool cache_shaders_on_disk) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (gr_shader_cache_ && cache_shaders_on_disk)
     gr_shader_cache_->CacheClientIdOnDisk(client_id);
 
   std::unique_ptr<GpuChannel> gpu_channel = GpuChannel::Create(
-      this, scheduler_, sync_point_manager_, share_group_, task_runner_,
-      io_task_runner_, client_id, client_tracing_id, is_gpu_host,
+      this, channel_token, scheduler_, sync_point_manager_, share_group_,
+      task_runner_, io_task_runner_, client_id, client_tracing_id, is_gpu_host,
       image_decode_accelerator_worker_);
 
   if (!gpu_channel)
@@ -492,7 +493,6 @@ void GpuChannelManager::LoseAllContexts() {
                          base::BindOnce(&GpuChannelManager::DestroyAllChannels,
                                         weak_factory_.GetWeakPtr()));
   if (shared_context_state_) {
-    gr_cache_controller_.reset();
     shared_context_state_->MarkContextLost();
     shared_context_state_.reset();
   }
@@ -633,7 +633,6 @@ void GpuChannelManager::OnBackgroundCleanup() {
     program_cache_->Trim(0u);
 
   if (shared_context_state_) {
-    gr_cache_controller_.reset();
     shared_context_state_->MarkContextLost();
     shared_context_state_.reset();
   }
@@ -815,9 +814,7 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
       return nullptr;
     }
   }
-
   shared_context_state_ = std::move(shared_context_state);
-  gr_cache_controller_.emplace(shared_context_state_.get(), task_runner_);
 
   *result = ContextResult::kSuccess;
   return shared_context_state_;
@@ -870,8 +867,7 @@ void GpuChannelManager::OnContextLost(bool synthetic_loss) {
 void GpuChannelManager::ScheduleGrContextCleanup() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (gr_cache_controller_)
-    gr_cache_controller_->ScheduleGrContextCleanup();
+  shared_context_state_->ScheduleGrContextCleanup();
 }
 
 void GpuChannelManager::StoreShader(const std::string& key,

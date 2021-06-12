@@ -2313,8 +2313,7 @@ sk_sp<SkColorFilter> SkiaRenderer::GetColorSpaceConversionFilter(
   sk_sp<SkRuntimeEffect>& effect = color_filter_cache_[dst][adjusted_src];
   if (!effect) {
     std::unique_ptr<gfx::ColorTransform> transform =
-        gfx::ColorTransform::NewColorTransform(
-            adjusted_src, dst, gfx::ColorTransform::Intent::INTENT_PERCEPTUAL);
+        gfx::ColorTransform::NewColorTransform(adjusted_src, dst);
 
     const char* hdr = R"(
 uniform half offset;
@@ -2657,6 +2656,9 @@ void SkiaRenderer::DidChangeVisibility() {
 }
 
 void SkiaRenderer::FinishDrawingQuadList() {
+  if (!current_canvas_)
+    return;
+
   if (!batched_quads_.empty())
     FlushBatchedQuads();
 

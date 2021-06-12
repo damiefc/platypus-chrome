@@ -2057,7 +2057,6 @@ public class AwAutofillTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @FlakyTest(message = "crbug.com/1033179")
     public void testPageScrollTriggerViewExitAndEnter() throws Throwable {
         final String data = "<html><head></head><body><form action='a.html' name='formname'>"
                 + "<input type='text' id='text1' name='username'"
@@ -2076,6 +2075,7 @@ public class AwAutofillTest {
         // Moved view, the position change trigger additional AUTOFILL_VIEW_EXITED and
         // AUTOFILL_VIEW_ENTERED.
         scrollToBottom();
+        pollJavascriptResultNotEqualTo("document.body.scrollTop;", "0");
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
         List<Integer> expectedValues = new ArrayList<>();
 
@@ -2906,6 +2906,16 @@ public class AwAutofillTest {
         AwActivityTestRule.pollInstrumentationThread(() -> {
             try {
                 return expectedResult.equals(executeJavaScriptAndWaitForResult(script));
+            } catch (Throwable e) {
+                return false;
+            }
+        });
+    }
+
+    private void pollJavascriptResultNotEqualTo(String script, String result) throws Throwable {
+        AwActivityTestRule.pollInstrumentationThread(() -> {
+            try {
+                return !result.equals(executeJavaScriptAndWaitForResult(script));
             } catch (Throwable e) {
                 return false;
             }

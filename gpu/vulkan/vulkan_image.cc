@@ -198,7 +198,8 @@ bool VulkanImage::Initialize(VulkanDeviceQueue* device_queue,
       .flags = flags_,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = format_,
-      .extent = {size.width(), size.height(), 1},
+      .extent = {static_cast<uint32_t>(size.width()),
+                 static_cast<uint32_t>(size.height()), 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -302,7 +303,7 @@ bool VulkanImage::InitializeWithExternalMemory(
     void* memory_allocation_info_next) {
 #if defined(OS_FUCHSIA)
   constexpr auto kHandleType =
-      VK_EXTERNAL_MEMORY_HANDLE_TYPE_TEMP_ZIRCON_VMO_BIT_FUCHSIA;
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_ZIRCON_VMO_BIT_FUCHSIA;
 #elif defined(OS_WIN)
   constexpr auto kHandleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 #else

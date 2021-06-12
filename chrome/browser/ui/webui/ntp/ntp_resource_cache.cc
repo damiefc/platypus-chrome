@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/webui/ntp/cookie_controls_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -55,7 +56,7 @@
 #include "ui/native_theme/native_theme.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #endif
 
@@ -293,7 +294,11 @@ void NTPResourceCache::CreateNewTabIncognitoHTML() {
   replacements["incognitoTabFeatures"] =
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_NOT_SAVED);
   replacements["learnMoreLink"] = kLearnMoreIncognitoUrl;
-  replacements["title"] = l10n_util::GetStringUTF8(IDS_NEW_TAB_TITLE);
+  replacements["title"] = l10n_util::GetStringUTF8(
+      base::FeatureList::IsEnabled(
+          features::kUpdateHistoryEntryPointsInIncognito)
+          ? IDS_NEW_INCOGNITO_TAB_TITLE
+          : IDS_NEW_TAB_TITLE);
   replacements["cookieControlsTitle"] =
       l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_THIRD_PARTY_COOKIE);
   replacements["cookieControlsDescription"] =
@@ -380,7 +385,7 @@ scoped_refptr<base::RefCountedString> NTPResourceCache::CreateNewTabGuestHTML(
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
 
-  if (connector->IsEnterpriseManaged()) {
+  if (connector->IsDeviceEnterpriseManaged()) {
     localized_strings.SetString("enterpriseInfoVisible", "true");
     localized_strings.SetString("enterpriseLearnMore",
                                 l10n_util::GetStringUTF16(IDS_LEARN_MORE));

@@ -7,6 +7,11 @@ package org.chromium.chrome.browser.feed;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
@@ -49,6 +54,7 @@ import org.chromium.chrome.browser.ntp.snippets.SectionHeaderListProperties;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -56,6 +62,8 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
+import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger.SurfaceType;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
@@ -77,7 +85,11 @@ import org.chromium.ui.base.WindowAndroid;
 @Config(manifest = Config.NONE)
 @Features.DisableFeatures({ChromeFeatureList.ENHANCED_PROTECTION_PROMO_CARD,
         ChromeFeatureList.WEB_FEED, ChromeFeatureList.INTEREST_FEED_V2_AUTOPLAY})
+@Features.EnableFeatures({ChromeFeatureList.FEED_RELIABILITY_LOGGING})
 public class FeedSurfaceCoordinatorTest {
+    private static final @SurfaceType int SURFACE_TYPE = SurfaceType.NEW_TAB_PAGE;
+    private static final long SURFACE_CREATION_TIME_NS = 1234L;
+
     private class TestLifecycleManager extends FeedSurfaceLifecycleManager {
         public TestLifecycleManager(Activity activity, FeedSurfaceCoordinator coordinator) {
             super(activity, coordinator);
@@ -140,6 +152,8 @@ public class FeedSurfaceCoordinatorTest {
     private WebFeedBridge.Natives mWebFeedBridgeJniMock;
     @Mock
     private FeedSurfaceScopeDependencyProvider.Natives mSurfaceScopeJniMock;
+    @Mock
+    private FeedReliabilityLoggingBridge.Natives mFeedReliabilityLoggingBridgeJniMock;
 
     // Mocked xSurface setup.
     @Mock
@@ -174,6 +188,10 @@ public class FeedSurfaceCoordinatorTest {
     private Resources mResources;
     @Mock
     private RecyclerView.Adapter mAdapter;
+    @Mock
+    private FeedLaunchReliabilityLogger mLaunchReliabilityLogger;
+    @Mock
+    private PrivacyPreferencesManagerImpl mPrivacyPreferencesManager;
 
     @Rule
     public final MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -185,6 +203,8 @@ public class FeedSurfaceCoordinatorTest {
         mocker.mock(FeedServiceBridgeJni.TEST_HOOKS, mFeedServiceBridgeJniMock);
         mocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
         mocker.mock(FeedSurfaceScopeDependencyProviderJni.TEST_HOOKS, mSurfaceScopeJniMock);
+        mocker.mock(FeedReliabilityLoggingBridge.getTestHooksForTesting(),
+                mFeedReliabilityLoggingBridgeJniMock);
 
         when(mFeedServiceBridgeJniMock.getLoadMoreTriggerLookahead()).thenReturn(5);
 
@@ -201,6 +221,7 @@ public class FeedSurfaceCoordinatorTest {
         when(mPrefService.getBoolean(Pref.ENABLE_SNIPPETS)).thenReturn(true);
         when(mPrefService.getBoolean(Pref.ARTICLES_LIST_VISIBLE)).thenReturn(true);
         TemplateUrlServiceFactory.setInstanceForTesting(mUrlService);
+        when(mPrivacyPreferencesManager.isMetricsReportingEnabled()).thenReturn(true);
 
         // Resources set up.
         when(mSectionHeaderView.getResources()).thenReturn(mResources);
@@ -216,12 +237,10 @@ public class FeedSurfaceCoordinatorTest {
                 .thenReturn(mSurfaceScope);
         when(mSurfaceScope.provideListRenderer()).thenReturn(mRenderer);
         when(mRenderer.bind(mContentManagerCaptor.capture())).thenReturn(mRecyclerView);
+        when(mSurfaceScope.getFeedLaunchReliabilityLogger()).thenReturn(mLaunchReliabilityLogger);
         AppHooksImpl.setInstanceForTesting(mApphooks);
 
-        mCoordinator = new FeedSurfaceCoordinator(mActivity, mSnackbarManager, mWindowAndroid,
-                mSnapHelper, null, mSectionHeaderView, false, new TestSurfaceDelegate(),
-                mPageNavigationDelegate, mProfileMock, false, mBottomSheetController,
-                mShareDelegateSupplier, null, mTabModelSelector, NewTabPageLaunchOrigin.UNKNOWN);
+        mCoordinator = createCoordinator();
 
         mLayoutManager = new FakeLinearLayoutManager(mActivity);
         mRecyclerView.setLayoutManager(mLayoutManager);
@@ -298,11 +317,42 @@ public class FeedSurfaceCoordinatorTest {
                 mCoordinator.getTabIdFromLaunchOrigin(NewTabPageLaunchOrigin.UNKNOWN));
     }
 
+    @Test
+    public void testDisableReliabilityLogging_metricsReportingDisabled() {
+        reset(mLaunchReliabilityLogger);
+        mCoordinator.destroy();
+
+        when(mPrivacyPreferencesManager.isMetricsReportingEnabled()).thenReturn(false);
+        mCoordinator = createCoordinator();
+
+        verify(mLaunchReliabilityLogger, never()).logUiStarting(anyInt(), anyLong());
+    }
+
+    @Test
+    @Features.DisableFeatures({ChromeFeatureList.FEED_RELIABILITY_LOGGING})
+    public void testDisableReliabilityLogging_featureDisabled() {
+        verify(mLaunchReliabilityLogger, never()).logUiStarting(anyInt(), anyLong());
+    }
+
+    @Test
+    public void testLogUiStarting() {
+        verify(mLaunchReliabilityLogger, times(1))
+                .logUiStarting(SURFACE_TYPE, SURFACE_CREATION_TIME_NS);
+    }
+
     private boolean hasStreamBound() {
         if (mCoordinator.getMediatorForTesting().getCurrentStream() == null) {
             return false;
         }
         return ((FeedStream) mCoordinator.getMediatorForTesting().getCurrentStream())
                 .getBoundStatusForTest();
+    }
+
+    private FeedSurfaceCoordinator createCoordinator() {
+        return new FeedSurfaceCoordinator(mActivity, mSnackbarManager, mWindowAndroid, mSnapHelper,
+                null, mSectionHeaderView, false, new TestSurfaceDelegate(), mPageNavigationDelegate,
+                mProfileMock, false, mBottomSheetController, mShareDelegateSupplier, null,
+                mTabModelSelector, NewTabPageLaunchOrigin.UNKNOWN, mPrivacyPreferencesManager,
+                new FeedLaunchReliabilityLoggingState(SURFACE_TYPE, SURFACE_CREATION_TIME_NS));
     }
 }

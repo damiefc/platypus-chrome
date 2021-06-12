@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +48,7 @@ import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.MetricsUtils;
+import org.chromium.chrome.browser.feed.FeedReliabilityLoggingBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
 import org.chromium.chrome.browser.feed.NtpListContentManager;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
@@ -57,6 +59,7 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
+import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
@@ -93,6 +96,8 @@ public class FeedStreamTest {
     private FeedStream.Natives mFeedStreamJniMock;
     @Mock
     private FeedServiceBridge.Natives mFeedServiceBridgeJniMock;
+    @Mock
+    private FeedReliabilityLoggingBridge.Natives mFeedReliabilityLoggingBridgeJniMock;
 
     @Mock
     private SnackbarManager mSnackbarManager;
@@ -118,6 +123,8 @@ public class FeedStreamTest {
     private SurfaceScope mSurfaceScope;
     @Mock
     private RecyclerView.Adapter mAdapter;
+    @Mock
+    private FeedLaunchReliabilityLogger mLaunchReliabilityLogger;
 
     @Captor
     private ArgumentCaptor<Map<String, String>> mMapCaptor;
@@ -136,6 +143,8 @@ public class FeedStreamTest {
 
         mocker.mock(FeedStreamJni.TEST_HOOKS, mFeedStreamJniMock);
         mocker.mock(FeedServiceBridge.getTestHooksForTesting(), mFeedServiceBridgeJniMock);
+        mocker.mock(FeedReliabilityLoggingBridge.getTestHooksForTesting(),
+                mFeedReliabilityLoggingBridgeJniMock);
         Profile.setLastUsedProfileForTesting(mProfileMock);
 
         when(mFeedServiceBridgeJniMock.getLoadMoreTriggerLookahead())
@@ -160,7 +169,7 @@ public class FeedStreamTest {
     public void testBindUnbind_keepsHeaderViews() {
         // Have header content.
         createHeaderContent(3);
-        mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer);
+        bindToView();
 
         // Add feed content.
         FeedUiProto.StreamUpdate update =
@@ -182,7 +191,7 @@ public class FeedStreamTest {
     public void testBindUnbind_HeaderViewCountChangeAfterBind() {
         // Have header content.
         createHeaderContent(3);
-        mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer);
+        bindToView();
 
         // Add feed content.
         FeedUiProto.StreamUpdate update =
@@ -214,6 +223,7 @@ public class FeedStreamTest {
         verify(mFeedStreamJniMock).surfaceOpened(anyLong(), any(FeedStream.class));
         // Set handlers in contentmanager.
         assertEquals(2, mContentManager.getContextValues(0).size());
+        verify(mLaunchReliabilityLogger, times(1)).logFeedReloading(anyLong());
     }
 
     @Test
@@ -676,6 +686,7 @@ public class FeedStreamTest {
     }
 
     void bindToView() {
-        mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer);
+        mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer,
+                mLaunchReliabilityLogger);
     }
 }

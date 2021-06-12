@@ -30,6 +30,7 @@ mojom("mojom") {
     "metrics_reporting.mojom",
     "native_theme.mojom",
     "notification.mojom",
+    "power.mojom",
     "prefs.mojom",
     "remoting.mojom",
     "screen_manager.mojom",
@@ -39,6 +40,7 @@ mojom("mojom") {
     "test_controller.mojom",
     "url_handler.mojom",
     "video_capture.mojom",
+    "web_page_info.mojom",
   ]
   disable_variants = true
 

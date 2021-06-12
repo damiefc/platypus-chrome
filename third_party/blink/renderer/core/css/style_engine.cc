@@ -78,6 +78,7 @@
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -2020,30 +2021,40 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
 
   DCHECK(container.GetLayoutObject()) << "Containers must have a LayoutObject";
   const ComputedStyle& style = container.GetLayoutObject()->StyleRef();
+  DCHECK(style.IsContainerForContainerQueries());
   WritingMode writing_mode = style.GetWritingMode();
-  PhysicalSize physical_size = ToPhysicalSize(logical_size, writing_mode);
+  PhysicalSize physical_size = AdjustForAbsoluteZoom::AdjustPhysicalSize(
+      ToPhysicalSize(logical_size, writing_mode), style);
   PhysicalAxes physical_axes = ToPhysicalAxes(contained_axes, writing_mode);
 
-  StyleRecalcChange::Propagate propagate =
-      StyleRecalcChange::kRecalcContainerQueryDependent;
+  StyleRecalcChange change;
 
-  if (auto* evaluator = container.GetContainerQueryEvaluator()) {
-    auto change = evaluator->ContainerChanged(physical_size, physical_axes);
-    if (change == ContainerQueryEvaluator::Change::kNone)
+  auto* evaluator = container.GetContainerQueryEvaluator();
+  DCHECK(evaluator);
+
+  switch (evaluator->ContainerChanged(physical_size, physical_axes)) {
+    case ContainerQueryEvaluator::Change::kNone:
       return;
-    if (change == ContainerQueryEvaluator::Change::kNamed)
-      propagate = StyleRecalcChange::kRecalcDescendantContainerQueryDependent;
-  } else {
-    container.SetContainerQueryEvaluator(
-        MakeGarbageCollected<ContainerQueryEvaluator>(physical_size,
-                                                      physical_axes));
-    if (!style.ContainerName().IsNull())
-      propagate = StyleRecalcChange::kRecalcDescendantContainerQueryDependent;
+    case ContainerQueryEvaluator::Change::kUnnamed:
+      change = change.ForceRecalcContainer();
+      break;
+    case ContainerQueryEvaluator::Change::kNamed:
+      change = change.ForceRecalcDescendantContainers();
+      break;
   }
+
+  // The container node must not need recalc at this point.
+  DCHECK(!StyleRecalcChange().ShouldRecalcStyleFor(container));
+
+  // If the container itself depends on an outer container, then its
+  // DependsOnContainerQueries flag will be set, and we would recalc its
+  // style (due to ForceRecalcContainer/ForceRecalcDescendantContainers).
+  // This is not necessary, hence we suppress recalc for this element.
+  change = change.SuppressRecalc();
 
   NthIndexCache nth_index_cache(GetDocument());
   style_recalc_root_.Update(nullptr, &container);
-  RecalcStyle({propagate}, StyleRecalcContext());
+  RecalcStyle(change, StyleRecalcContext());
 
   // Nodes are marked for whitespace reattachment for DOM removal only. This set
   // should have been cleared before layout.

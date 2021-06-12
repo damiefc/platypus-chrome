@@ -15,11 +15,13 @@
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/bubble/bubble_utils.h"
 #include "ash/bubble/simple_grid_layout.h"
+#include "ash/public/cpp/style/color_provider.h"
 #include "base/check.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
+#include "ui/views/controls/separator.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -78,15 +80,21 @@ AppListBubbleAppsPage::AppListBubbleAppsPage(
   recent_apps_ = scroll_contents->AddChildView(
       std::make_unique<RecentAppsView>(view_delegate));
 
+  // Horizontal separator.
+  auto* separator =
+      scroll_contents->AddChildView(std::make_unique<views::Separator>());
+  separator->SetColor(ColorProvider::Get()->GetContentLayerColor(
+      ColorProvider::ContentLayerType::kSeparatorColor));
+
   // All apps section.
-  auto* apps_grid =
+  scrollable_apps_grid_view_ =
       scroll_contents->AddChildView(std::make_unique<ScrollableAppsGridView>(
           view_delegate, /*folder_delegate=*/nullptr));
-  apps_grid->Init();
+  scrollable_apps_grid_view_->Init();
   AppListModel* model = view_delegate->GetModel();
-  apps_grid->SetModel(model);
-  apps_grid->SetItemList(model->top_level_item_list());
-  apps_grid->ResetForShowApps();
+  scrollable_apps_grid_view_->SetModel(model);
+  scrollable_apps_grid_view_->SetItemList(model->top_level_item_list());
+  scrollable_apps_grid_view_->ResetForShowApps();
 
   scroll->SetContents(std::move(scroll_contents));
 }

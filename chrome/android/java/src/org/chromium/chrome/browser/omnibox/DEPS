@@ -4,8 +4,6 @@ include_rules = [
   "-chrome/android/java/src/org/chromium/chrome/browser",
   "+chrome/android/java/src/org/chromium/chrome/browser/omnibox",
 
-  "+chrome/android/java/src/org/chromium/chrome/browser/WarmupManager.java",
-
   "+base/android/java/src/org/chromium/base",
   "+chrome/browser/feature_engagement",
   "+chrome/browser/flags",
@@ -21,6 +19,7 @@ include_rules = [
   "+chrome/browser/ui/android",
   "+chrome/browser/user_education",
   "+components/browser_ui/settings/android",
+  "+components/browser_ui/share/android",
   "+components/embedder_support/android",
   "+components/feature_engagement/public/android",
   "+components/omnibox/browser/android",

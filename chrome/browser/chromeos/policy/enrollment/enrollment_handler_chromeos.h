@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_validator.h"
+#include "chrome/browser/chromeos/policy/core/device_cloud_policy_validator.h"
 #include "chrome/browser/chromeos/policy/enrollment/device_cloud_policy_initializer.h"
 #include "chrome/browser/chromeos/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/policy/device_account_initializer.h"
@@ -33,16 +33,13 @@ class SequencedTaskRunner;
 }
 
 namespace chromeos {
-
-class ActiveDirectoryJoinDelegate;
-
 namespace attestation {
 class AttestationFlow;
 }
 }  // namespace chromeos
 
 namespace policy {
-
+class ActiveDirectoryJoinDelegate;
 class DeviceCloudPolicyStoreChromeOS;
 class DMTokenStorage;
 class ServerBackedStateKeysBroker;
@@ -73,7 +70,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
       chromeos::attestation::AttestationFlow* attestation_flow,
       std::unique_ptr<CloudPolicyClient> client,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner,
-      chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
+      ActiveDirectoryJoinDelegate* ad_join_delegate,
       const EnrollmentConfig& enrollment_config,
       DMAuth dm_auth,
       const std::string& client_id,
@@ -215,7 +212,7 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   chromeos::attestation::AttestationFlow* attestation_flow_;
   std::unique_ptr<CloudPolicyClient> client_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
-  chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
+  ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
   std::unique_ptr<DeviceAccountInitializer> device_account_initializer_;
   std::unique_ptr<policy::DMTokenStorage> dm_token_storage_;
 

@@ -434,10 +434,7 @@ void CanvasRenderingContext2D::clearRect(double x,
   }
 }
 
-void CanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
-  if (dirty_rect.isEmpty())
-    return;
-
+void CanvasRenderingContext2D::DidDraw2D(const SkIRect& dirty_rect) {
   CanvasRenderingContext::DidDraw(dirty_rect);
 }
 
@@ -1148,10 +1145,10 @@ CanvasRenderingContext2D::getContextAttributes() const {
   CanvasRenderingContext2DSettings* settings =
       CanvasRenderingContext2DSettings::Create();
   settings->setAlpha(CreationAttributes().alpha);
-  settings->setColorSpace(GetCanvas2DColorParams().GetColorSpaceAsString());
-  if (RuntimeEnabledFeatures::CanvasColorManagementEnabled()) {
+  if (RuntimeEnabledFeatures::CanvasColorManagementEnabled())
+    settings->setColorSpace(GetCanvas2DColorParams().GetColorSpaceAsString());
+  if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled())
     settings->setPixelFormat(GetCanvas2DColorParams().GetPixelFormatAsString());
-  }
   settings->setDesynchronized(Host()->LowLatencyEnabled());
   if (RuntimeEnabledFeatures::NewCanvas2DAPIEnabled())
     settings->setWillReadFrequently(CreationAttributes().will_read_frequently);

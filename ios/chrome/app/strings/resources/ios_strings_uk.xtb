@@ -101,7 +101,6 @@
 <translation id="1923342640370224680">Остання година</translation>
 <translation id="1941314575388338491">Двічі торкніться, щоб скопіювати.</translation>
 <translation id="1952172573699511566">Якщо можливо, текст на веб-сайтах відображатиметься вибраною мовою.</translation>
-<translation id="1952728750904661634">Увійти в керований обліковий запис</translation>
 <translation id="1965935827552890526">Завершіть те, що ви робили в іншому відкритому вікні Chrome.</translation>
 <translation id="1973912524893600642">Зберігати дані</translation>
 <translation id="1974060860693918893">Розширені</translation>
@@ -111,7 +110,6 @@
 <translation id="2073572773299281212">У мережі <ph name="DAYS" /> дн. тому</translation>
 <translation id="2074131957428911366">Ви можете будь-коли вибрати дані для синхронізації в <ph name="BEGIN_LINK" />налаштуваннях<ph name="END_LINK" />.</translation>
 <translation id="2079545284768500474">Відмінити</translation>
-<translation id="2086623437239112659">Збережені дані для входу застаріли.</translation>
 <translation id="209018056901015185">Повна версія сайту</translation>
 <translation id="2103075008456228677">Відкрити history.google.com</translation>
 <translation id="2116625576999540962">Переміщено елементів: <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /></translation>
@@ -119,7 +117,6 @@
 <translation id="214201757571129614">Увійти…</translation>
 <translation id="2149973817440762519">Редагувати закладку</translation>
 <translation id="2175927920773552910">QR-код</translation>
-<translation id="2198757192731523470">Ваша історія може допомогти нам персоналізувати Пошук, оголошення й інші сервіси Google.</translation>
 <translation id="2218443599109088993">Віддалити</translation>
 <translation id="2230173723195178503">Веб-сторінку завантажено</translation>
 <translation id="2239626343334228536">Очищення даних веб-перегляду…</translation>
@@ -300,7 +297,6 @@
 <translation id="4042870976416480368">Знайти на сторінці</translation>
 <translation id="4049507953662678203">Переконайтеся, що з’єднання з мережею встановлено, і повторіть спробу.</translation>
 <translation id="4079195788735381731">Адміністратор організації вийшов із вашого облікового запису</translation>
-<translation id="4082688844002261427">Указуйте, як використовувати історію веб-перегляду для персоналізації Пошуку, оголошень тощо</translation>
 <translation id="408404951701638773">Тепер до рядка пошуку ще легше отримувати доступ</translation>
 <translation id="411254640334432676">Не завантажено.</translation>
 <translation id="4112644173421521737">Пошук</translation>
@@ -409,6 +405,7 @@
 <translation id="5197255632782567636">Інтернет</translation>
 <translation id="5210365745912300556">Закрити вкладку</translation>
 <translation id="5228579091201413441">Увімкнути синхронізацію</translation>
+<translation id="5232485538978018676">Увійти в керований обліковий запис</translation>
 <translation id="5234764350956374838">Закрити</translation>
 <translation id="5245322853195994030">Скасувати синхронізацію</translation>
 <translation id="5271549068863921519">Зберегти пароль</translation>
@@ -454,7 +451,6 @@
 <translation id="5738887413654608789">Ви зможете знаходити відповідні веб-сторінки на основі об’єктів поблизу.</translation>
 <translation id="5758631781033351321">Тут відображатиметься ваш список читання</translation>
 <translation id="5782227691023083829">Виконується переклад сторінки...</translation>
-<translation id="5797070761912323120">Google може використовувати вашу історію, щоб персоналізувати Пошук, оголошення й інші сервіси Google</translation>
 <translation id="5803566855766646066">Відхилити цю нову картку?</translation>
 <translation id="5812974770859303494">Додати в…</translation>
 <translation id="5816228676161003208">Ви зможете швидше шукати голосом.</translation>
@@ -651,6 +647,7 @@
 <translation id="7409985198648820906">Непрочитаних статей: <ph name="UNREAD_COUNT" />.</translation>
 <translation id="7412027924265291969">Продовжити</translation>
 <translation id="7425346204213733349">Зміни в закладках, історії, паролях та інших налаштуваннях більше не синхронізуватимуться з вашим обліковим записом Google. Однак наявні дані залишаться у вашому обліковому записі.</translation>
+<translation id="7431991332293347422">Указуйте, як використовувати історію веб-перегляду для персоналізації Пошуку тощо</translation>
 <translation id="7435356471928173109">Вимкнено адміністратором</translation>
 <translation id="7454057999980797137">Область</translation>
 <translation id="7456847797759667638">Відкрити розташування...</translation>
@@ -695,7 +692,6 @@
 <translation id="7887198238286927132">Щоб захистити вашу конфіденційність, Chrome не буде автоматично заповнювати це поле.</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">Експортувати паролі…</translation>
-<translation id="7947953824732555851">Прийняти й увійти</translation>
 <translation id="794799177247607889">Припинити ведення журналів</translation>
 <translation id="7953440832920792856">{COUNT,plural, =0{Немає зламаних паролів}=1{{COUNT} зламаний пароль}one{{COUNT} зламаний пароль}few{{COUNT} зламані паролі}many{{COUNT} зламаних паролів}other{{COUNT} зламаного пароля}}</translation>
 <translation id="7961015016161918242">Ніколи</translation>
@@ -726,6 +722,7 @@
 <translation id="8206354486702514201">Це налаштування застосовується вашим адміністратором.</translation>
 <translation id="8225985093977202398">Кешовані зображення й файли</translation>
 <translation id="8261506727792406068">Видалити</translation>
+<translation id="8271720166617117963">Прийняти й увійти</translation>
 <translation id="8281781826761538115">За умовчанням – <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8281886186245836920">Пропустити</translation>
 <translation id="8283172974887967105">Так…</translation>

@@ -330,6 +330,10 @@
     },
     {
       name: "CanvasColorManagement",
+      status: "stable",
+    },
+    {
+      name: "CanvasColorManagementV2",
       status: "experimental",
     },
     {
@@ -371,6 +375,10 @@
     },
     {
       name: "ClipboardSvg",
+      status: "experimental",
+    },
+    {
+      name: "CLSScrollAnchoring",
       status: "experimental",
     },
     {
@@ -836,12 +844,8 @@
       status: "stable",
     },
     {
-      name: "EncryptedMediaEncryptionSchemeQuery",
-      status: "stable",
-    },
-    {
-      name: "EncryptedMediaHdcpPolicyCheck",
-      status: "stable",
+      name: "EncryptedMediaSessionClosedReason",
+      status: "test",
     },
     {
       name: "EnterKeyHintAttribute",
@@ -1160,7 +1164,7 @@
     {
       name: "LayoutNGGrid",
       depends_on: ["LayoutNG"],
-      status: "test",
+      status: "stable",
     },
     {
       name: "LayoutNGLayoutOverflowRecalc",
@@ -1214,10 +1218,6 @@
     {
       name: "ManagedConfiguration",
       status: "stable",
-    },
-    {
-      name: "ManagedInterface",
-      "implied_by": ["DeviceAttributes", "ManagedConfiguration"],
     },
     {
       name: "MathMLCore",
@@ -2196,6 +2196,10 @@
     {
       name:"WebAppsLockScreen",
       status:"experimental",
+    },
+    {
+      name: "WebAppTabStrip",
+      status: "experimental",
     },
     {
       // This flag enables the Manifest parser to handle URL Handlers.

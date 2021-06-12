@@ -32,6 +32,7 @@
 #include "chrome/browser/ash/crosapi/message_center_ash.h"
 #include "chrome/browser/ash/crosapi/metrics_reporting_ash.h"
 #include "chrome/browser/ash/crosapi/native_theme_service_ash.h"
+#include "chrome/browser/ash/crosapi/power_ash.h"
 #include "chrome/browser/ash/crosapi/prefs_ash.h"
 #include "chrome/browser/ash/crosapi/remoting_ash.h"
 #include "chrome/browser/ash/crosapi/screen_manager_ash.h"
@@ -41,6 +42,7 @@
 #include "chrome/browser/ash/crosapi/test_controller_ash.h"
 #include "chrome/browser/ash/crosapi/url_handler_ash.h"
 #include "chrome/browser/ash/crosapi/video_capture_device_factory_ash.h"
+#include "chrome/browser/ash/crosapi/web_page_info_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -106,6 +108,7 @@ CrosapiAsh::CrosapiAsh()
       metrics_reporting_ash_(std::make_unique<MetricsReportingAsh>(
           g_browser_process->local_state())),
       native_theme_service_ash_(std::make_unique<NativeThemeServiceAsh>()),
+      power_ash_(std::make_unique<PowerAsh>()),
       prefs_ash_(
           std::make_unique<PrefsAsh>(g_browser_process->profile_manager(),
                                      g_browser_process->local_state())),
@@ -113,6 +116,7 @@ CrosapiAsh::CrosapiAsh()
       screen_manager_ash_(std::make_unique<ScreenManagerAsh>()),
       select_file_ash_(std::make_unique<SelectFileAsh>()),
       system_display_ash_(std::make_unique<SystemDisplayAsh>()),
+      web_page_info_factory_ash_(std::make_unique<WebPageInfoFactoryAsh>()),
       task_manager_ash_(std::make_unique<TaskManagerAsh>()),
       test_controller_ash_(std::make_unique<TestControllerAsh>()),
       url_handler_ash_(std::make_unique<UrlHandlerAsh>()),
@@ -271,6 +275,11 @@ void CrosapiAsh::BindTestController(
   test_controller_ash_->BindReceiver(std::move(receiver));
 }
 
+void CrosapiAsh::BindWebPageInfoFactory(
+    mojo::PendingReceiver<mojom::WebPageInfoFactory> receiver) {
+  web_page_info_factory_ash_->BindReceiver(std::move(receiver));
+}
+
 void CrosapiAsh::BindClipboard(
     mojo::PendingReceiver<mojom::Clipboard> receiver) {
   clipboard_ash_->BindReceiver(std::move(receiver));
@@ -300,6 +309,10 @@ void CrosapiAsh::BindSensorHalClient(
     mojo::PendingRemote<chromeos::sensors::mojom::SensorHalClient> remote) {
   chromeos::sensors::SensorHalDispatcher::GetInstance()->RegisterClient(
       std::move(remote));
+}
+
+void CrosapiAsh::BindPower(mojo::PendingReceiver<mojom::Power> receiver) {
+  power_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindPrefs(mojo::PendingReceiver<mojom::Prefs> receiver) {

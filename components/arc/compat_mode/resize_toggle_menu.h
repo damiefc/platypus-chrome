@@ -9,16 +9,20 @@
 
 #include "base/callback_forward.h"
 #include "base/scoped_multi_source_observation.h"
+#include "components/arc/compat_mode/resize_util.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
 namespace gfx {
 class Rect;
+struct VectorIcon;
 }  // namespace gfx
 
 namespace views {
 class BubbleDialogDelegateView;
-class Button;
+class ImageView;
+class Label;
 }  // namespace views
 
 namespace arc {
@@ -27,11 +31,31 @@ class ArcResizeLockPrefDelegate;
 
 class ResizeToggleMenu : public views::WidgetObserver {
  public:
-  enum class CommandId {
-    kResizePhone,
-    kResizeTablet,
-    kResizeDesktop,
-    kOpenSettings,
+  class MenuButtonView : public views::Button {
+   public:
+    MenuButtonView(PressedCallback callback,
+                   const gfx::VectorIcon& icon,
+                   int title_string_id);
+    MenuButtonView(const MenuButtonView&) = delete;
+    MenuButtonView& operator=(const MenuButtonView&) = delete;
+    ~MenuButtonView() override;
+
+    void SetSelected(bool is_selected);
+
+   private:
+    // views::View:
+    void Layout() override;
+    void OnThemeChanged() override;
+
+    void UpdateColors();
+    void UpdateState();
+
+    // Owned by views hierarchy.
+    views::ImageView* icon_view_{nullptr};
+    views::Label* title_{nullptr};
+
+    const gfx::VectorIcon& icon_;
+    bool is_selected_{false};
   };
 
   ResizeToggleMenu(views::Widget* widget,
@@ -48,14 +72,16 @@ class ResizeToggleMenu : public views::WidgetObserver {
  private:
   friend class ResizeToggleMenuTest;
 
-  void ExecuteCommand(CommandId command_id);
+  void UpdateSelectedButton();
+
+  void ExecuteCommand(ResizeCompatMode mode);
 
   gfx::Rect GetAnchorRect() const;
 
   std::unique_ptr<views::BubbleDialogDelegateView> MakeBubbleDelegateView(
       views::Widget* parent,
       gfx::Rect anchor_rect,
-      base::RepeatingCallback<void(CommandId)> command_handler);
+      base::RepeatingCallback<void(ResizeCompatMode)> command_handler);
 
   views::Widget* widget_;
 
@@ -66,9 +92,9 @@ class ResizeToggleMenu : public views::WidgetObserver {
 
   // Store only for testing.
   views::Widget* bubble_widget_{nullptr};
-  views::Button* phone_button_{nullptr};
-  views::Button* tablet_button_{nullptr};
-  views::Button* desktop_button_{nullptr};
+  MenuButtonView* phone_button_{nullptr};
+  MenuButtonView* tablet_button_{nullptr};
+  MenuButtonView* resizable_button_{nullptr};
 };
 
 }  // namespace arc

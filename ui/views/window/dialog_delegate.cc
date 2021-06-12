@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -35,6 +36,9 @@
 
 namespace views {
 
+// Debug information for https://crbug.com/1215247.
+int g_instance_count = 0;
+
 ////////////////////////////////////////////////////////////////////////////////
 // DialogDelegate::Params:
 DialogDelegate::Params::Params() = default;
@@ -44,6 +48,8 @@ DialogDelegate::Params::~Params() = default;
 // DialogDelegate:
 
 DialogDelegate::DialogDelegate() {
+  ++g_instance_count;
+
   WidgetDelegate::RegisterWindowWillCloseCallback(
       base::BindOnce(&DialogDelegate::WindowWillClose, base::Unretained(this)));
   UMA_HISTOGRAM_BOOLEAN("Dialog.DialogDelegate.Create", true);
@@ -66,7 +72,7 @@ Widget* DialogDelegate::CreateDialogWidget(
     std::unique_ptr<WidgetDelegate> delegate,
     gfx::NativeWindow context,
     gfx::NativeView parent) {
-  DCHECK(delegate->owned_by_widget());
+  CHECK(delegate->owned_by_widget());
   return CreateDialogWidget(delegate.release(), context, parent);
 }
 
@@ -148,21 +154,21 @@ bool DialogDelegate::IsDialogButtonEnabled(ui::DialogButton button) const {
 }
 
 bool DialogDelegate::Cancel() {
-  DCHECK(!already_started_close_);
+  CHECK(!already_started_close_);
   if (cancel_callback_)
     RunCloseCallback(std::move(cancel_callback_));
   return true;
 }
 
 bool DialogDelegate::Accept() {
-  DCHECK(!already_started_close_);
+  CHECK(!already_started_close_);
   if (accept_callback_)
     RunCloseCallback(std::move(accept_callback_));
   return true;
 }
 
 void DialogDelegate::RunCloseCallback(base::OnceClosure callback) {
-  DCHECK(!already_started_close_);
+  CHECK(!already_started_close_);
   already_started_close_ = true;
   std::move(callback).Run();
 }
@@ -220,7 +226,7 @@ void DialogDelegate::WindowWillClose() {
     return;
 
   // This is set here instead of before the invocations of Accept()/Cancel() so
-  // that those methods can DCHECK that !already_started_close_. Otherwise,
+  // that those methods can CHECK that !already_started_close_. Otherwise,
   // client code could (eg) call Accept() from inside the cancel callback, which
   // could lead to multiple callbacks being delivered from this class.
   already_started_close_ = true;
@@ -382,9 +388,25 @@ void DialogDelegate::SetButtonRowInsets(const gfx::Insets& insets) {
 }
 
 void DialogDelegate::AcceptDialog() {
-  DCHECK(IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
+  // https://crbug.com/1215247 is a crash in this function, possibly a
+  // use-after-free on `this`. Empirically the steady state instance count with
+  // no dialogs open is 0. If it's still 0, someone deleted `this` before
+  // calling AcceptDialog().
+  CHECK_GT(g_instance_count, 0);
+
+  // This line might trigger a crash if `this` is deleted.
+  Widget* widget = GetWidget();
+
+  // Copy the dialog widget name onto the stack so it appears in crash dumps.
+  DEBUG_ALIAS_FOR_CSTR(last_widget_name, widget->GetName().c_str(), 64);
+
+  CHECK(IsDialogButtonEnabled(ui::DIALOG_BUTTON_OK));
   if (already_started_close_ || !Accept())
     return;
+
+  // Check for Accept() deleting `this` but returning false.
+  // https://crbug.com/1215247
+  CHECK_GT(g_instance_count, 0);
 
   already_started_close_ = true;
   GetWidget()->CloseWithReason(
@@ -392,7 +414,7 @@ void DialogDelegate::AcceptDialog() {
 }
 
 void DialogDelegate::CancelDialog() {
-  // Note: don't DCHECK(IsDialogButtonEnabled(ui::DIALOG_BUTTON_CANCEL)) here;
+  // Note: don't CHECK(IsDialogButtonEnabled(ui::DIALOG_BUTTON_CANCEL)) here;
   // CancelDialog() is *always* reachable via Esc closing the dialog, even if
   // the cancel button is disabled or there is no cancel button at all.
   if (already_started_close_ || !Cancel())
@@ -406,6 +428,7 @@ void DialogDelegate::CancelDialog() {
 DialogDelegate::~DialogDelegate() {
   UMA_HISTOGRAM_LONG_TIMES("Dialog.DialogDelegate.Duration",
                            base::TimeTicks::Now() - creation_time_);
+  --g_instance_count;
 }
 
 ax::mojom::Role DialogDelegate::GetAccessibleWindowRole() {

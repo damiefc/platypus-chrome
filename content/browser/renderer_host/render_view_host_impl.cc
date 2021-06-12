@@ -414,6 +414,7 @@ bool RenderViewHostImpl::CreateRenderView(
   } else {
     main_rfph =
         RenderFrameProxyHost::FromID(GetProcess()->GetID(), proxy_route_id);
+    DCHECK(main_rfph);
   }
   const FrameTreeNode* const frame_tree_node =
       main_rfh ? main_rfh->frame_tree_node() : main_rfph->frame_tree_node();
@@ -475,6 +476,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params->hidden = frame_tree_->delegate()->IsHidden();
   params->never_composited = delegate_->IsNeverComposited();
   params->window_was_created_with_opener = window_was_created_with_opener;
+  params->base_background_color = delegate_->GetBaseBackgroundColor();
 
   bool is_portal = delegate_->IsPortal();
   bool is_guest_view = delegate_->IsGuest();

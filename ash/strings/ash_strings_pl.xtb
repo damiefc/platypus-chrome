@@ -61,6 +61,7 @@ Oto kilka rzeczy, które możesz wypróbować na początek.</translation>
 <translation id="1341651618736211726">Rozwiń menu</translation>
 <translation id="1346748346194534595">W prawo</translation>
 <translation id="1351937230027495976">Zwiń menu</translation>
+<translation id="1383597849754832576">Nie udało się pobrać plików z mową. Spróbuj później.</translation>
 <translation id="1383876407941801731">Szukaj</translation>
 <translation id="1391102559483454063">Włączono</translation>
 <translation id="1407069428457324124">Ciemny motyw</translation>
@@ -130,8 +131,8 @@ Oto kilka rzeczy, które możesz wypróbować na początek.</translation>
 <translation id="1972950159383891558">Cześć <ph name="USERNAME" />,</translation>
 <translation id="1978498689038657292">Wprowadzanie tekstu</translation>
 <translation id="1989113344093894667">Nie można przechwytywać treści</translation>
+<translation id="1990046457226896323">Pliki z mową zostały pobrane</translation>
 <translation id="1993072747612765854">Więcej informacji o najnowszej aktualizacji <ph name="SYSTEM_APP_NAME" /></translation>
-<translation id="1995660704900986789">Wyłącz</translation>
 <translation id="1998100899771863792">Bieżące biurko</translation>
 <translation id="2016340657076538683">Wpisz wiadomość</translation>
 <translation id="2018630726571919839">Opowiedz mi kawał</translation>
@@ -316,6 +317,7 @@ Oto kilka rzeczy, które możesz wypróbować na początek.</translation>
 <translation id="3510164367642747937">Podświetlaj wskaźnik myszy</translation>
 <translation id="3513798432020909783">Kontem zarządza <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3552189655002856821">Wi-Fi jest wyłączone</translation>
+<translation id="3560866052109807830">Narzędzia do rysowania znaczników</translation>
 <translation id="3563775809269155755">Włącz hotspot</translation>
 <translation id="3571734092741541777">Konfiguruj</translation>
 <translation id="3573179567135747900">Zmień z powrotem na „<ph name="FROM_LOCALE" />” (wymaga ponownego uruchomienia)</translation>
@@ -410,6 +412,7 @@ Oto kilka rzeczy, które możesz wypróbować na początek.</translation>
 <translation id="4274537685965975248">Skrót klawiszowy Ctrl + Alt + strzałka w dół został zmieniony. Aby użyć klawisza End, naciśnij klawisz <ph name="LAUNCHER_KEY_NAME" /> + strzałka w prawo.</translation>
 <translation id="4279490309300973883">Odbicie lustrzane</translation>
 <translation id="4285498937028063278">Odepnij</translation>
+<translation id="429402653707266969">Przełącz lokalizację paska narzędzi</translation>
 <translation id="4294319844246081198">Dzień dobry <ph name="GIVEN_NAME" />,</translation>
 <translation id="4296136865091727875">Wyczyść wszystkie powiadomienia (<ph name="COUNT" />)</translation>
 <translation id="4302592941791324970">Brak dostępu</translation>
@@ -437,6 +440,7 @@ Oto kilka rzeczy, które możesz wypróbować na początek.</translation>
 <translation id="4451374464530248585">Skrót klawiszowy Alt + strzałka w dół został zmieniony. Aby użyć klawisza Page Down, naciśnij klawisz <ph name="LAUNCHER_KEY_NAME" /> + strzałka w dół.</translation>
 <translation id="445864333228800152">Dobry wieczór,</translation>
 <translation id="4458688154122353284">Zatrzymaj nagrywanie ekranu</translation>
+<translation id="4471354919263203780">Pobieram pliki rozpoznawania mowy... <ph name="PERCENT" />%</translation>
 <translation id="4472575034687746823">Rozpocznij</translation>
 <translation id="4477350412780666475">Następny utwór</translation>
 <translation id="4477892968187500306">Na tym urządzeniu mogą być zainstalowane aplikacje niezweryfikowane przez Google.</translation>

@@ -237,6 +237,11 @@
     "expiry_milestone": 92
   },
   {
+    "name": "arc-web-app-share",
+    "owners": [ "tsergeant", "chromeos-apps-foundation-team@google.com" ],
+    "expiry_milestone": 95
+  },
+  {
     "name": "ash-debug-shortcuts",
     "owners": [ "//ash/OWNERS" ],
     // Used by developers for debugging and to dump extra information to logs
@@ -478,7 +483,7 @@
   {
     "name": "calculate-native-win-occlusion",
     "owners": [ "davidbienvenu", "fdoray" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 96
   },
   {
     "name": "camera-system-web-app",
@@ -1753,6 +1758,11 @@
     "expiry_milestone": -1
   },
   {
+    "name": "enable-extended-sync-promos-capability",
+    "owners": ["fernandex", "msarda"],
+    "expiry_milestone": 100
+  },
+  {
     "name": "enable-fenced-frames",
     "owners": [ "dom", "shivanisha", "chrome-fenced-frames@google.com" ],
     "expiry_milestone": 100
@@ -1902,6 +1912,12 @@
     "name": "enable-inline-update-flow",
     "owners": [ "nyquist", "dtrainor" ],
     "expiry_milestone": 83
+  },
+  {
+    "name": "enable-input-event-logging",
+    "owners": [ "hcutts", "chromeos-tango@google.com" ],
+    // Used to attach input device debugging information to feedback reports.
+    "expiry_milestone": -1
   },
   {
     "name": "enable-input-in-diagnostics-app",
@@ -2331,7 +2347,7 @@
   {
     "name": "enable-show-date-in-tray",
     "owners": [ "leandre" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 96
   },
   {
     "name": "enable-sign-in-profile-creation",
@@ -2817,6 +2833,11 @@
     "expiry_milestone": 86
   },
   {
+    "name": "extension-workflow-justification",
+    "owners": [ "igorruvinov", "zmin" ],
+    "expiry_milestone": 100
+  },
+  {
     "name": "extensions-on-chrome-urls",
     "owners": [ "//extensions/OWNERS" ],
     // This enables the use of extensions on chrome:// URLs. This is useful for
@@ -2931,6 +2952,11 @@
   {
     "name": "force-control-face-ae",
     "owners": [ "chromeos-camera-eng@google.com" ],
+    "expiry_milestone": 100
+  },
+  {
+    "name": "force-disable-extended-sync-promos",
+    "owners": ["fernandex", "msarda"],
     "expiry_milestone": 100
   },
   {
@@ -3111,6 +3137,11 @@
     "expiry_milestone": 97
   },
   {
+    "name": "help-app-background-page",
+    "owners": [ "//chromeos/components/help_app_ui/OWNERS" ],
+    "expiry_milestone": 97
+  },
+  {
     "name": "help-app-discover-tab",
     "owners": [ "//chromeos/components/help_app_ui/OWNERS" ],
     "expiry_milestone": 97
@@ -3245,7 +3276,7 @@
   {
     "name": "intent-picker-pwa-persistence",
     "owners": [ "chromeos-apps-foundation-team@google.com" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 95
   },
   {
     "name": "interest-feed-notice-card-auto-dismiss",
@@ -3748,6 +3779,16 @@
     "expiry_milestone": 96
   },
   {
+    "name": "ntp-modules-drag-and-drop",
+    "owners": [ "lydialam", "mahmadi", "tiborg"],
+    "expiry_milestone": 96
+  },
+  {
+    "name": "ntp-modules-redesigned",
+    "owners": [ "doei", "mahmadi", "tiborg" ],
+    "expiry_milestone": 96
+  },
+  {
     "name": "ntp-recipe-tasks-module",
     "owners": [ "mahmadi", "tiborg" ],
     "expiry_milestone": 96
@@ -3940,7 +3981,7 @@
   {
     "name": "omnibox-on-focus-suggestions-contextual-web",
     "owners": [ "tommycli", "chrome-omnibox-team@google.com" ],
-    "expiry_milestone": 90
+    "expiry_milestone": 95
   },
   {
     "name": "omnibox-pedals-batch2",
@@ -4056,6 +4097,11 @@
     "name": "optimization-guide-model-downloading",
     "owners": [ "mcrouse", "chrome-intelligence-core@google.com" ],
     "expiry_milestone": 95
+  },
+  {
+    "name": "os-settings-app-notifications-page",
+    "owners": ["hsuregan"],
+    "expiry_milestone": 99
   },
   {
     "name": "os-settings-deep-linking",
@@ -4450,12 +4496,27 @@
   },
   {
     "name": "related-searches",
-    "owners": [ "ayman", "donnd" ],
+    "owners": [ "donnd", "related-searches-vteam@google.com" ],
+    "expiry_milestone": 97
+  },
+  {
+    "name": "related-searches-alternate-ux",
+    "owners": [ "donnd", "related-searches-vteam@google.com" ],
+    "expiry_milestone": 97
+  },
+  {
+    "name": "related-searches-in-bar",
+    "owners": [ "donnd", "related-searches-vteam@google.com" ],
+    "expiry_milestone": 97
+  },
+  {
+    "name": "related-searches-simplified-ux",
+    "owners": [ "donnd", "related-searches-vteam@google.com" ],
     "expiry_milestone": 97
   },
   {
     "name": "related-searches-ui",
-    "owners": [ "ayman", "donnd" ],
+    "owners": [ "donnd", "related-searches-vteam@google.com" ],
     "expiry_milestone": 97
   },
   {
@@ -4469,26 +4530,6 @@
     // This is required by test teams to verify functionality on dev/beta
     // channels on devices which have no access to commandline flags.
     "expiry_milestone": -1
-  },
-  {
-    "name": "remote-copy-image-notification",
-    "owners": [ "//chrome/browser/sharing/OWNERS" ],
-    "expiry_milestone": 90
-  },
-  {
-    "name": "remote-copy-persistent-notification",
-    "owners": [ "//chrome/browser/sharing/OWNERS" ],
-    "expiry_milestone": 90
-  },
-  {
-    "name": "remote-copy-progress-notification",
-    "owners": [ "//chrome/browser/sharing/OWNERS" ],
-    "expiry_milestone": 90
-  },
-  {
-    "name": "remote-copy-receiver",
-    "owners": [ "//chrome/browser/sharing/OWNERS" ],
-    "expiry_milestone": 90
   },
   {
     "name": "report-feed-user-actions",
@@ -4623,12 +4664,12 @@
   {
     "name": "scrollable-tabstrip",
     "owners": [ "chrome-desktop-ui-sea@google.com", "tbergquist" ],
-    "expiry_milestone": 93
+    "expiry_milestone": 95
   },
   {
     "name": "scrollable-tabstrip-buttons",
     "owners": [ "chrome-desktop-ui-sea@google.com", "tbergquist" ],
-    "expiry_milestone": 93
+    "expiry_milestone": 95
   },
   {
     "name": "sct-auditing",
@@ -4733,11 +4774,6 @@
     "expiry_milestone": 94
   },
   {
-    "name": "sharing-device-expiration",
-    "owners": [ "//chrome/browser/sharing/OWNERS" ],
-    "expiry_milestone": 86
-  },
-  {
     "name": "sharing-hub-desktop-app-menu",
     "owners": [ "kristipark", "chrome-sharing-eng@google.com" ],
     "expiry_milestone": 94
@@ -4824,14 +4860,14 @@
     "expiry_milestone" : 96
   },
   {
-    "name": "silent-debugger-extension-api",
-    "owners": [ "//extensions/OWNERS" ],
-    "expiry_milestone": 77
-  },
-  {
     "name": "simplify-sign-out-ios",
     "owners": [ "jlebel", "msarda", "fernandex" ],
     "expiry_milestone": 95
+  },
+  {
+    "name": "single-touch-select",
+    "owners": [ "donnd", "contextual-search-eng@google.com" ],
+    "expiry_milestone": 97
   },
   {
     "_comment1": "Shipping some form of Site Isolation to Android is tracked",
@@ -4933,17 +4969,17 @@
   {
     "name": "tab-groups-auto-create",
     "owners": [ "chrome-desktop-ui-sea@google.com", "cyan" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 95
   },
   {
     "name": "tab-groups-collapse-freezing",
     "owners": [ "chrome-desktop-ui-sea@google.com", "cyan" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 95
   },
   {
     "name": "tab-groups-feedback",
     "owners": [ "chrome-desktop-ui-sea@google.com", "cyan" ],
-    "expiry_milestone": 92
+    "expiry_milestone": 95
   },
   {
     "name": "tab-groups-new-badge-promo",
@@ -4959,6 +4995,11 @@
     "name": "tab-outlines-in-low-contrast-themes",
     "owners": [ "dfried" ],
     "expiry_milestone": 82
+  },
+  {
+    "name": "tab-restore-sub-menus",
+    "owners": [ "emshack", "chrome-desktop-ui-sea" ],
+    "expiry_milestone": 99
   },
   {
     "name": "tabgrid-context-menu-ios",

@@ -26,7 +26,6 @@ component("ash") {
     ":*",
     "//ash/app_list:*",
     "//chrome/test:browser_tests",
-    "//chrome/test:unit_tests",
     "//components/exo:*",
     "//components/exo/wayland:*",
   ]
@@ -450,8 +449,6 @@ component("ash") {
     "display/window_tree_host_manager.h",
     "drag_drop/drag_drop_controller.cc",
     "drag_drop/drag_drop_controller.h",
-    "drag_drop/drag_drop_tracker.cc",
-    "drag_drop/drag_drop_tracker.h",
     "drag_drop/drag_image_view.cc",
     "drag_drop/drag_image_view.h",
     "drag_drop/tab_drag_drop_delegate.cc",
@@ -1033,6 +1030,7 @@ component("ash") {
     "system/holding_space/holding_space_tray_icon_preview.h",
     "system/holding_space/holding_space_util.cc",
     "system/holding_space/holding_space_util.h",
+    "system/holding_space/holding_space_view_builder.h",
     "system/holding_space/holding_space_view_delegate.cc",
     "system/holding_space/holding_space_view_delegate.h",
     "system/holding_space/pinned_files_bubble.cc",
@@ -1822,6 +1820,7 @@ component("ash") {
     "//ui/wm",
   ]
   deps = [
+    "//ash/ambient/proto",
     "//ash/app_list",
     "//ash/app_menu",
     "//ash/assistant/model",
@@ -2125,7 +2124,6 @@ test("ash_unittests") {
     "display/unified_mouse_warp_controller_unittest.cc",
     "display/window_tree_host_manager_unittest.cc",
     "drag_drop/drag_drop_controller_unittest.cc",
-    "drag_drop/drag_drop_tracker_unittest.cc",
     "drag_drop/drag_drop_unittest.cc",
     "drag_drop/drag_image_view_unittest.cc",
     "drag_drop/tab_drag_drop_delegate_unittest.cc",
@@ -2455,6 +2453,7 @@ test("ash_unittests") {
   deps = [
     ":ash",
     ":test_support",
+    "//ash/ambient/proto",
     "//ash/app_list",
     "//ash/app_list:test_support",
     "//ash/app_list:unit_tests",
@@ -2652,7 +2651,6 @@ static_library("test_support") {
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//chrome/test:test_support_unit",
-    "//chrome/test:unit_tests",
     "//components/exo:*",
     "//components/exo/wayland:*",
     "//ash/public/cpp/external_arc:*",
@@ -2837,6 +2835,7 @@ static_library("test_support") {
   ]
   deps = [
     "//ash",
+    "//ash/ambient/proto",
     "//ash/app_list",
     "//ash/app_list:test_support",
     "//ash/app_menu",

@@ -439,7 +439,8 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
   if (self.isSyncDisabledByAdministrator) {
     type = SyncDisabledByAdministratorErrorItemType;
     hasError = YES;
-  } else if (self.isAuthenticated && self.syncSetupService->IsSyncEnabled()) {
+  } else if (self.isAuthenticated &&
+             self.syncSetupService->CanSyncFeatureStart()) {
     switch (self.syncSetupService->GetSyncServiceState()) {
       case SyncSetupService::kSyncServiceUnrecoverableError:
         type = RestartAuthenticationFlowErrorItemType;
@@ -678,7 +679,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 - (BOOL)isSyncEnabled {
   // Sync is not active when |syncSetupService->IsFirstSetupComplete()| is
   // false. Show sync being turned off in the UI in this cases.
-  return self.syncSetupService->IsSyncEnabled() &&
+  return self.syncSetupService->CanSyncFeatureStart() &&
          (self.syncSetupService->IsFirstSetupComplete() ||
           self.mode == GoogleServicesSettingsModeAdvancedSigninSettings);
 }
@@ -954,7 +955,9 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 
 #pragma mark - GoogleServicesSettingsServiceDelegate
 
-- (void)toggleSwitchItem:(TableViewItem*)item withValue:(BOOL)value {
+- (void)toggleSwitchItem:(TableViewItem*)item
+               withValue:(BOOL)value
+              targetRect:(CGRect)targetRect {
   SyncSwitchItem* syncSwitchItem = base::mac::ObjCCast<SyncSwitchItem>(item);
   syncSwitchItem.on = value;
   ItemType type = static_cast<ItemType>(item.type);
@@ -962,10 +965,15 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
     case AllowChromeSigninItemType: {
       if (self.isAuthenticated) {
         __weak GoogleServicesSettingsMediator* weakSelf = self;
-        [self.commandHandler showSignOut:^(BOOL success) {
-          weakSelf.allowChromeSigninPreference.value = success ? value : !value;
-          [weakSelf updateNonPersonalizedSectionWithNotification:YES];
-        }];
+        [self.commandHandler
+            showSignOutFromTargetRect:targetRect
+                           completion:^(BOOL success) {
+                             weakSelf.allowChromeSigninPreference.value =
+                                 success ? value : !value;
+                             [weakSelf
+                                 updateNonPersonalizedSectionWithNotification:
+                                     YES];
+                           }];
       } else {
         self.allowChromeSigninPreference.value = value;
       }

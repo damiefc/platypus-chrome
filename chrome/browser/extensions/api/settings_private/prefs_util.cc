@@ -71,7 +71,7 @@
 #include "chrome/browser/ash/settings/supervised_user_cros_settings_provider.h"
 #include "chrome/browser/ash/system/timezone_util.h"
 #include "chrome/browser/chromeos/full_restore/full_restore_prefs.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/extensions/api/settings_private/chromeos_resolve_time_zone_by_geolocation_method_short.h"
 #include "chrome/browser/extensions/api/settings_private/chromeos_resolve_time_zone_by_geolocation_on_off.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
@@ -1130,7 +1130,7 @@ bool PrefsUtil::IsPrefTypeURL(const std::string& pref_name) {
 bool PrefsUtil::IsPrefEnterpriseManaged(const std::string& pref_name) {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (!connector->IsEnterpriseManaged())
+  if (!connector->IsDeviceEnterpriseManaged())
     return false;
   if (IsPrivilegedCrosSetting(pref_name))
     return true;

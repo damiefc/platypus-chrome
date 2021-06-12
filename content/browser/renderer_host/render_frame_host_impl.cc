@@ -2886,6 +2886,8 @@ bool RenderFrameHostImpl::CreateRenderFrame(
   params->frame_owner_properties =
       frame_tree_node()->frame_owner_properties().Clone();
 
+  // TOOD(https://crbug.com/1215096): Make this use
+  // is_on_initial_empty_document_or_subsequent_empty_documents() instead.
   params->has_committed_real_load =
       frame_tree_node()->has_committed_real_load();
 
@@ -4272,7 +4274,7 @@ void RenderFrameHostImpl::RunJavaScriptDialog(
   // This happens when the RenderFrameHost is pending deletion or in the
   // back-forward cache.
   if (lifecycle_state() != LifecycleStateImpl::kActive) {
-    std::move(ipc_response_callback).Run(true, std::u16string());
+    std::move(ipc_response_callback).Run(false, std::u16string());
     return;
   }
 
@@ -5111,6 +5113,21 @@ void RenderFrameHostImpl::GoToEntryAtOffset(int32_t offset,
       frame_tree_->controller().GoToOffset(offset);
     }
   }
+}
+
+void RenderFrameHostImpl::NavigateToAppHistoryKey(const std::string& key,
+                                                  bool has_user_gesture) {
+  // Non-user initiated navigations coming from the renderer should be ignored
+  // if there is an ongoing browser-initiated navigation.
+  // See https://crbug.com/879965.
+  // TODO(arthursonzogni): See if this should check for ongoing navigations in
+  // the frame(s) affected by the session history navigation, rather than just
+  // the main frame.
+  if (Navigator::ShouldIgnoreIncomingRendererRequest(
+          frame_tree_->root()->navigation_request(), has_user_gesture)) {
+    return;
+  }
+  frame_tree_->controller().NavigateToAppHistoryKey(frame_tree_node(), key);
 }
 
 void RenderFrameHostImpl::HandleAccessibilityFindInPageResult(
@@ -9513,14 +9530,18 @@ bool RenderFrameHostImpl::DidCommitNavigationInternal(
 
   // A matching NavigationRequest should have been found, unless in a few very
   // specific cases:
-  // 1) This was a renderer-initiated navigation to the initial empty
-  // document.
+  // 1) This was a synchronous about:blank navigation triggered by browsing
+  // context creation.
   // 2) This was a renderer-initiated same-document navigation.
   // In these cases, we will create a NavigationRequest by calling
   // CreateNavigationRequestForCommit() further down.
   // TODO(https://crbug.com/1131832): Make these navigation go through a
   // separate path that does not send
   // FrameHostMsg_DidCommitProvisionalLoad_Params at all.
+  // TODO(https://crbug.com/1215096): Tighten the checks for case 1 so that only
+  // the synchronous about:blank commit can actually go through (e.g. check
+  // if the frame's initial empty document state, instead of checking the
+  // less-accurate `has_committed_real_load`).
   const bool is_initial_empty_commit = IsInitialEmptyCommit(
       params->url, frame_tree_node_->has_committed_real_load());
   if (!navigation_request && !is_initial_empty_commit &&
@@ -10667,7 +10688,9 @@ bool CalculateShouldReplaceCurrentEntry(
     if (!will_be_classified_as_back_forward_navigation && !is_reload) {
       // Non-back-forward/reload navigations on a subframe's initial empty
       // document will result in replacement.
-      result |= (!node->IsMainFrame() && !node->has_committed_real_load());
+      result |=
+          (!node->IsMainFrame() &&
+           node->is_on_initial_empty_document_or_subsequent_empty_documents());
     }
   }
 
@@ -10939,6 +10962,10 @@ void RenderFrameHostImpl::
 
   SCOPED_CRASH_KEY_BOOL("VerifyDidCommit", "committed_real_load",
                         frame_tree_node_->has_committed_real_load());
+  SCOPED_CRASH_KEY_BOOL(
+      "VerifyDidCommit", "on_initial_empty_doc",
+      frame_tree_node_
+          ->is_on_initial_empty_document_or_subsequent_empty_documents());
 
   SCOPED_CRASH_KEY_STRING256("VerifyDidCommit", "last_committed_url",
                              GetLastCommittedURL().spec());

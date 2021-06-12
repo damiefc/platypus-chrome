@@ -69,8 +69,7 @@ DatabaseImpl::~DatabaseImpl() {
                                         connection_.get());
   if (!status.ok()) {
     indexed_db_context_->GetIDBFactory()->OnDatabaseError(
-        // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-        storage_key_.origin(), status, "Error during rollbacks.");
+        storage_key_, status, "Error during rollbacks.");
   }
 }
 
@@ -130,9 +129,7 @@ void DatabaseImpl::CreateTransaction(
   connection_->database()->RegisterAndScheduleTransaction(transaction);
 
   dispatcher_host_->CreateAndBindTransactionImpl(
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      std::move(transaction_receiver), storage_key_.origin(),
-      transaction->AsWeakPtr());
+      std::move(transaction_receiver), storage_key_, transaction->AsWeakPtr());
 }
 
 void DatabaseImpl::Close() {
@@ -145,8 +142,7 @@ void DatabaseImpl::Close() {
 
   if (!status.ok()) {
     indexed_db_context_->GetIDBFactory()->OnDatabaseError(
-        // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-        storage_key_.origin(), status, "Error during rollbacks.");
+        storage_key_, status, "Error during rollbacks.");
   }
 }
 
@@ -359,11 +355,10 @@ void DatabaseImpl::OpenCursor(
       key_only ? indexed_db::CURSOR_KEY_ONLY : indexed_db::CURSOR_KEY_AND_VALUE;
   params->task_type = task_type;
   params->callback = std::move(aborting_callback);
-  transaction->ScheduleTask(BindWeakOperation(
-      &IndexedDBDatabase::OpenCursorOperation,
-      connection_->database()->AsWeakPtr(), std::move(params),
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      storage_key_.origin(), dispatcher_host_->AsWeakPtr()));
+  transaction->ScheduleTask(
+      BindWeakOperation(&IndexedDBDatabase::OpenCursorOperation,
+                        connection_->database()->AsWeakPtr(), std::move(params),
+                        storage_key_, dispatcher_host_->AsWeakPtr()));
 }
 
 void DatabaseImpl::Count(
@@ -375,9 +370,8 @@ void DatabaseImpl::Count(
         pending_callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto callbacks = base::MakeRefCounted<IndexedDBCallbacks>(
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      dispatcher_host_->AsWeakPtr(), storage_key_.origin(),
-      std::move(pending_callbacks), idb_runner_);
+      dispatcher_host_->AsWeakPtr(), storage_key_, std::move(pending_callbacks),
+      idb_runner_);
   if (!connection_->IsConnected())
     return;
 
@@ -401,9 +395,8 @@ void DatabaseImpl::DeleteRange(
         pending_callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto callbacks = base::MakeRefCounted<IndexedDBCallbacks>(
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      dispatcher_host_->AsWeakPtr(), storage_key_.origin(),
-      std::move(pending_callbacks), idb_runner_);
+      dispatcher_host_->AsWeakPtr(), storage_key_, std::move(pending_callbacks),
+      idb_runner_);
   if (!connection_->IsConnected())
     return;
 
@@ -425,9 +418,8 @@ void DatabaseImpl::GetKeyGeneratorCurrentNumber(
         pending_callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto callbacks = base::MakeRefCounted<IndexedDBCallbacks>(
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      dispatcher_host_->AsWeakPtr(), storage_key_.origin(),
-      std::move(pending_callbacks), idb_runner_);
+      dispatcher_host_->AsWeakPtr(), storage_key_, std::move(pending_callbacks),
+      idb_runner_);
   if (!connection_->IsConnected())
     return;
 
@@ -449,9 +441,8 @@ void DatabaseImpl::Clear(
         pending_callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto callbacks = base::MakeRefCounted<IndexedDBCallbacks>(
-      // TODO(crbug.com/1210555): Propagate StorageKey up the chain.
-      dispatcher_host_->AsWeakPtr(), storage_key_.origin(),
-      std::move(pending_callbacks), idb_runner_);
+      dispatcher_host_->AsWeakPtr(), storage_key_, std::move(pending_callbacks),
+      idb_runner_);
   if (!connection_->IsConnected())
     return;
 

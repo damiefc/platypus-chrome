@@ -69,7 +69,7 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'.+_(api|browser|eg|int|perf|pixel|unit|ui)?test(s)?(_[a-z]+)?%s' %
         _IMPLEMENTATION_EXTENSIONS,
     r'.+_(fuzz|fuzzer)(_[a-z]+)?%s' % _IMPLEMENTATION_EXTENSIONS,
-    r'.+profile_sync_service_harness%s' % _IMPLEMENTATION_EXTENSIONS,
+    r'.+sync_service_impl_harness%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.*[\\/](test|tool(s)?)[\\/].*',
     # content_shell is used for running content_browsertests.
     r'content[\\/]shell[\\/].*',
@@ -4587,7 +4587,7 @@ def CheckForWindowsLineEndings(input_api, output_api):
       f, files_to_check=file_inclusion_pattern, files_to_skip=None)
   for f in input_api.AffectedSourceFiles(source_file_filter):
     include_file = False
-    for _, line in f.ChangedContents(True):
+    for line in input_api.ReadFile(f, 'r').splitlines(True):
       if line.endswith('\r\n'):
         include_file = True
     if include_file:

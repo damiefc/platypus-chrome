@@ -50,6 +50,13 @@ class AppRegistrar {
   // used in other registrar methods.
   virtual bool IsInstalled(const AppId& app_id) const = 0;
 
+  // Returns whether the app is currently being uninstalled. This will be true
+  // after uninstall has begun but before the OS integration hooks for uninstall
+  // have completed. It will return false after uninstallation has completed.
+  // Note that the underlying field this checks is not yet persisted to the
+  // database; see https://crbug.com/1162477
+  virtual bool IsUninstalling(const AppId& app_id) const = 0;
+
   // Returns whether the app with |app_id| is currently fully locally installed.
   // ie. app is not grey in chrome://apps UI surface and may have OS integration
   // like shortcuts. |IsLocallyInstalled| apps is a subset of |IsInstalled|
@@ -211,9 +218,8 @@ class AppRegistrar {
   // entries in the web app manifest.
   DisplayMode GetEffectiveDisplayModeFromManifest(const AppId& app_id) const;
 
-  // TODO(crbug.com/897314): Finish experiment by legitimising it as a
-  // DisplayMode or removing entirely.
-  bool IsInExperimentalTabbedWindowMode(const AppId& app_id) const;
+  // Returns whether the app should be opened in tabbed window mode.
+  bool IsTabbedWindowModeEnabled(const AppId& app_id) const;
 
   void AddObserver(AppRegistrarObserver* observer);
   void RemoveObserver(AppRegistrarObserver* observer);
@@ -255,6 +261,9 @@ class AppRegistrar {
 
   base::ObserverList<AppRegistrarObserver, /*check_empty=*/true> observers_;
   OsIntegrationManager* os_integration_manager_ = nullptr;
+
+  // TODO(crbug.com/897314): This can be removed once feature has launched.
+  bool IsInExperimentalTabbedWindowMode(const AppId& app_id) const;
 };
 
 }  // namespace web_app

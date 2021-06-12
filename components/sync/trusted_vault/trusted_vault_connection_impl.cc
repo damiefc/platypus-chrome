@@ -4,6 +4,7 @@
 
 #include "components/sync/trusted_vault/trusted_vault_connection_impl.h"
 
+#include <string>
 #include <utility>
 
 #include "base/base64url.h"
@@ -66,6 +67,11 @@ sync_pb::SecurityDomainMember CreateSecurityDomainMember(
     case AuthenticationFactorType::kPhysicalDevice:
       member.set_member_type(
           sync_pb::SecurityDomainMember::MEMBER_TYPE_PHYSICAL_DEVICE);
+      break;
+    case AuthenticationFactorType::kUnspecified:
+      member.set_member_type(
+          sync_pb::SecurityDomainMember::MEMBER_TYPE_UNSPECIFIED);
+      break;
   }
   return member;
 }
@@ -74,13 +80,17 @@ sync_pb::JoinSecurityDomainsRequest CreateJoinSecurityDomainsRequest(
     const absl::optional<TrustedVaultKeyAndVersion>&
         last_trusted_vault_key_and_version,
     const SecureBoxPublicKey& public_key,
-    AuthenticationFactorType authentication_factor_type) {
+    AuthenticationFactorType authentication_factor_type,
+    absl::optional<int> authentication_factor_type_hint) {
   sync_pb::JoinSecurityDomainsRequest request;
   request.mutable_security_domain()->set_name(kSyncSecurityDomainName);
   *request.mutable_security_domain_member() =
       CreateSecurityDomainMember(public_key, authentication_factor_type);
   *request.mutable_shared_member_key() =
       CreateSharedMemberKey(last_trusted_vault_key_and_version, public_key);
+  if (authentication_factor_type_hint.has_value()) {
+    request.set_member_type_hint(authentication_factor_type_hint.value());
+  }
   return request;
 }
 
@@ -170,13 +180,15 @@ TrustedVaultConnectionImpl::RegisterAuthenticationFactor(
         last_trusted_vault_key_and_version,
     const SecureBoxPublicKey& public_key,
     AuthenticationFactorType authentication_factor_type,
+    absl::optional<int> authentication_factor_type_hint,
     RegisterAuthenticationFactorCallback callback) {
   auto request = std::make_unique<TrustedVaultRequest>(
       TrustedVaultRequest::HttpMethod::kPost,
       GURL(trusted_vault_service_url_.spec() + kJoinSecurityDomainsURLPath),
       /*serialized_request_proto=*/
       CreateJoinSecurityDomainsRequest(last_trusted_vault_key_and_version,
-                                       public_key, authentication_factor_type)
+                                       public_key, authentication_factor_type,
+                                       authentication_factor_type_hint)
           .SerializeAsString());
 
   request->FetchAccessTokenAndSendRequest(

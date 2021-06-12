@@ -11,10 +11,12 @@
 #include "base/json/json_writer.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/history_clusters/core/memories_features.h"
 #include "components/history_clusters/core/proto/clusters.pb.h"
+#include "net/base/net_errors.h"
 
 namespace history_clusters {
 
@@ -32,10 +34,14 @@ proto::GetClustersRequest CreateRequestProto(
 
   base::ListValue debug_visits_list;
   for (auto& visit : visits) {
-    proto::Visit* request_visit = request.add_visits();
+    // TODO(tommycli): Still need to set `site_engagement_score` and
+    //  `is_from_google_search`
+    proto::AnnotatedVisit* request_visit = request.add_visits();
     request_visit->set_visit_id(visit.visit_row.visit_id);
     request_visit->set_url(visit.url_row.url().spec());
     request_visit->set_origin(visit.url_row.url().GetOrigin().spec());
+    request_visit->set_foreground_time_secs(
+        visit.visit_row.visit_duration.InSeconds());
     request_visit->set_navigation_time_ms(
         visit.visit_row.visit_time.ToDeltaSinceWindowsEpoch().InMilliseconds());
     request_visit->set_page_end_reason(
@@ -51,6 +57,9 @@ proto::GetClustersRequest CreateRequestProto(
       debug_visit.SetStringKey("url", request_visit->url());
       debug_visit.SetStringKey("origin", request_visit->origin());
       debug_visit.SetStringKey(
+          "foreground_time_secs",
+          base::NumberToString(request_visit->foreground_time_secs()));
+      debug_visit.SetStringKey(
           "navigationTimeMs",
           base::NumberToString(request_visit->navigation_time_ms()));
       debug_visit.SetStringKey(
@@ -59,6 +68,9 @@ proto::GetClustersRequest CreateRequestProto(
       debug_visit.SetStringKey(
           "pageTransition",
           base::NumberToString(request_visit->page_transition()));
+      debug_visit.SetStringKey(
+          "referringVisitId",
+          base::NumberToString(request_visit->referring_visit_id()));
       debug_visits_list.Append(std::move(debug_visit));
     }
   }
@@ -89,9 +101,10 @@ std::vector<history::Cluster> ParseResponseProto(
     history::Cluster cluster;
     for (const std::string& keyword : cluster_proto.keywords())
       cluster.keywords.push_back(base::UTF8ToUTF16(keyword));
-    for (int64_t visit_id : cluster_proto.visit_ids()) {
+    for (const proto::ClusterVisit& cluster_visit :
+         cluster_proto.cluster_visits()) {
       const auto visits_it = base::ranges::find(
-          visits, visit_id,
+          visits, cluster_visit.visit_id(),
           [](const auto& visit) { return visit.visit_row.visit_id; });
       if (visits_it != visits.end())
         cluster.annotated_visits.push_back(*visits_it);
@@ -111,11 +124,17 @@ std::vector<history::Cluster> ParseResponseProto(
       }
       debug_cluster.SetKey("keywords", std::move(debug_keywords));
 
-      base::ListValue debug_visit_ids;
-      for (int64_t visit_id : cluster.visit_ids()) {
-        debug_visit_ids.Append(base::NumberToString(visit_id));
+      base::ListValue debug_visits;
+      for (const proto::ClusterVisit& cluster_visit :
+           cluster.cluster_visits()) {
+        base::DictionaryValue debug_visit;
+        debug_visit.SetStringKey(
+            "visit_id", base::NumberToString(cluster_visit.visit_id()));
+        debug_visit.SetStringKey("score",
+                                 base::NumberToString(cluster_visit.score()));
+        debug_visits.Append(std::move(debug_visit));
       }
-      debug_cluster.SetKey("visit_ids", std::move(debug_visit_ids));
+      debug_cluster.SetKey("visits", std::move(debug_visits));
 
       debug_clusters_list.Append(std::move(debug_cluster));
     }
@@ -182,6 +201,16 @@ void MemoriesRemoteModelHelper::GetMemories(
             if (!response) {
               if (debug_logger) {
                 debug_logger->Run("MemoriesRemoteModelHelper response nullptr");
+                debug_logger->Run(base::StringPrintf("Net Error Code: %d",
+                                                     url_loader->NetError()));
+                debug_logger->Run("Net Error String: " +
+                                  net::ErrorToString(url_loader->NetError()));
+                if (url_loader->ResponseInfo() &&
+                    url_loader->ResponseInfo()->headers) {
+                  debug_logger->Run(base::StringPrintf(
+                      "HTTP response code: %d",
+                      url_loader->ResponseInfo()->headers->response_code()));
+                }
               }
               return std::vector<history::Cluster>{};
             }

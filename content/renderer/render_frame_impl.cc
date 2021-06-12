@@ -1874,15 +1874,6 @@ RenderFrameImpl::~RenderFrameImpl() {
   web_media_stream_device_observer_.reset();
 
   base::trace_event::TraceLog::GetInstance()->RemoveProcessLabel(routing_id_);
-
-  if (is_main_frame_) {
-    // Ensure the RenderView doesn't point to this object, once it is destroyed.
-    // TODO(nasko): Add a check that the |main_render_frame_| of |render_view_|
-    // is |this|, once the object is no longer leaked.
-    // See https://crbug.com/464764.
-    render_view_->main_render_frame_ = nullptr;
-  }
-
   g_routing_id_frame_map.Get().erase(routing_id_);
   agent_scheduling_group_.RemoveRoute(routing_id_);
 }
@@ -1891,10 +1882,6 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
   initialized_ = true;
   is_main_frame_ = !parent;
 
-  WebFrame* local_root = frame_;
-  if (parent && parent->IsWebLocalFrame()) {
-    local_root = parent->ToWebLocalFrame()->LocalRoot();
-  }
   bool is_tracing_rail = false;
   bool is_tracing_navigation = false;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED("navigation", &is_tracing_navigation);
@@ -2125,9 +2112,7 @@ void RenderFrameImpl::Unload(
   // TODO(creis): WebFrame::swap() can return false.  Most of those cases
   // should be due to the frame being detached during unload (in which case
   // the necessary cleanup has happened anyway), but it might be possible for
-  // it to return false without detaching.  Catch any cases that the
-  // RenderView's main_render_frame_ isn't cleared below (whether swap returns
-  // false or not).
+  // it to return false without detaching.
   //
   // This executes the unload handlers on this frame and its local descendants.
   bool success = frame_->Swap(proxy->web_frame());
@@ -2138,10 +2123,6 @@ void RenderFrameImpl::Unload(
     // Main frames should always swap successfully because there is no parent
     // frame to cause them to become detached.
     DCHECK(success);
-    // For main frames, the swap should have cleared the RenderView's pointer to
-    // this frame.
-    CHECK(!render_view->main_render_frame_);
-
     // The RenderFrameProxy being swapped in here has now been attached to the
     // Page as its main frame and properly initialized by the WebFrame::Swap()
     // call, so we can call WebView's DidAttachRemoteMainFrame().
@@ -2290,6 +2271,14 @@ void RenderFrameImpl::DidCommitAndDrawCompositorFrame() {
 
 RenderView* RenderFrameImpl::GetRenderView() {
   return render_view_;
+}
+
+RenderFrame* RenderFrameImpl::GetMainRenderFrame() {
+  WebFrame* main_frame = GetWebView()->MainFrame();
+  DCHECK(main_frame);
+  if (!main_frame->IsWebLocalFrame())
+    return nullptr;
+  return RenderFrame::FromWebFrame(main_frame->ToWebLocalFrame());
 }
 
 RenderAccessibility* RenderFrameImpl::GetRenderAccessibility() {
@@ -4532,6 +4521,7 @@ RenderFrameImpl::MakeDidCommitProvisionalLoadParams(
 
   params->item_sequence_number = item.ItemSequenceNumber();
   params->document_sequence_number = item.DocumentSequenceNumber();
+  params->app_history_key = item.GetAppHistoryKey().Utf8();
 
   // If the page contained a client redirect (meta refresh, document.loc...),
   // set the referrer appropriately.
@@ -4856,10 +4846,6 @@ bool RenderFrameImpl::SwapIn(WebFrame* previous_web_frame) {
   // If this is the main frame going from a remote frame to a local frame,
   // it needs to set RenderViewImpl's pointer for the main frame to itself.
   if (is_main_frame_) {
-    // TODO(https://crubg.com/936696): Implement RenderDocument on main frames.
-    CHECK(!render_view_->main_render_frame_);
-    render_view_->main_render_frame_ = this;
-
     // The WebFrame being swapped in here has now been attached to the Page as
     // its main frame, and the WebFrameWidget was previously initialized when
     // the frame was created so we can call WebView's DidAttachLocalMainFrame().
@@ -5142,6 +5128,16 @@ void RenderFrameImpl::SynchronouslyCommitAboutBlankForBug778318(
   // though the provider should not be used for any actual networking.
   navigation_params->service_worker_network_provider =
       ServiceWorkerNetworkProviderForFrame::CreateInvalidInstance();
+  // The synchronous about:blank commit should only happen when the frame is
+  // currently showing the initial empty document. For iframes, all navigations
+  // that happen on the initial empty document should result in replacement, we
+  // must have set the `frame_load_type` to kReplaceCurrentItem. For main frames
+  // there are still cases where we will append instead of replace, but the
+  // browser already expects this case.
+  // TODO(https://crbug.com/1215096): Ensure main frame cases always do
+  // replacement too.
+  DCHECK(IsMainFrame() || navigation_params->frame_load_type ==
+                              WebFrameLoadType::kReplaceCurrentItem);
   frame_->CommitNavigation(std::move(navigation_params), BuildDocumentState());
 }
 

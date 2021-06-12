@@ -101,7 +101,6 @@
 <translation id="1923342640370224680">前一個小時</translation>
 <translation id="1941314575388338491">輕按兩下即可複製。</translation>
 <translation id="1952172573699511566">網站將盡可能以您偏好的語言顯示文字。</translation>
-<translation id="1952728750904661634">登入受管理的帳戶</translation>
 <translation id="1965935827552890526">請完成您在其他已開啟的 Chrome 視窗中正在執行的動作。</translation>
 <translation id="1973912524893600642">保留資料</translation>
 <translation id="1974060860693918893">進階選項</translation>
@@ -111,7 +110,6 @@
 <translation id="2073572773299281212">曾於 <ph name="DAYS" /> 天前在線</translation>
 <translation id="2074131957428911366">您隨時可在<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />中選擇要同步的資料。</translation>
 <translation id="2079545284768500474">復原</translation>
-<translation id="2086623437239112659">您已儲存的登入資料可能已過期。</translation>
 <translation id="209018056901015185">切換為電腦版網站</translation>
 <translation id="2103075008456228677">開啟 history.google.com</translation>
 <translation id="2116625576999540962">已移動 <ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> 個項目</translation>
@@ -119,7 +117,6 @@
 <translation id="214201757571129614">登入…</translation>
 <translation id="2149973817440762519">編輯書籤</translation>
 <translation id="2175927920773552910">二維條碼</translation>
-<translation id="2198757192731523470">Google 可能會使用您的記錄，為您提供個人化的搜尋服務、廣告和其他 Google 服務。</translation>
 <translation id="2218443599109088993">縮小</translation>
 <translation id="2230173723195178503">已載入網頁</translation>
 <translation id="2239626343334228536">正在清除瀏覽資料…</translation>
@@ -300,7 +297,6 @@
 <translation id="4042870976416480368">在網頁中查找</translation>
 <translation id="4049507953662678203">請確定您已連接網絡，然後再試一次。</translation>
 <translation id="4079195788735381731">您的機構已將您登出</translation>
-<translation id="4082688844002261427">控制系統如何使用您的瀏覽記錄為您提供個人化的搜尋內容、廣告和其他服務</translation>
 <translation id="408404951701638773">簡易存取搜尋列</translation>
 <translation id="411254640334432676">下載失敗。</translation>
 <translation id="4112644173421521737">搜尋</translation>
@@ -409,6 +405,7 @@
 <translation id="5197255632782567636">互聯網</translation>
 <translation id="5210365745912300556">關閉分頁</translation>
 <translation id="5228579091201413441">啟用同步功能</translation>
+<translation id="5232485538978018676">使用受管理的帳戶登入</translation>
 <translation id="5234764350956374838">關閉</translation>
 <translation id="5245322853195994030">取消同步處理</translation>
 <translation id="5271549068863921519">儲存密碼</translation>
@@ -454,7 +451,6 @@
 <translation id="5738887413654608789">這樣您便可根據周圍環境探索相關網頁。</translation>
 <translation id="5758631781033351321">您可在此查看閱讀清單</translation>
 <translation id="5782227691023083829">正在翻譯...</translation>
-<translation id="5797070761912323120">Google 可能會使用您的記錄，為您提供個人化的搜尋服務、廣告和其他 Google 服務</translation>
 <translation id="5803566855766646066">確定要捨棄這張新的信用卡嗎？</translation>
 <translation id="5812974770859303494">新增至…</translation>
 <translation id="5816228676161003208">這樣您便可使用語音更快速地搜尋內容。</translation>
@@ -649,6 +645,7 @@
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> 篇未讀嘅文章。</translation>
 <translation id="7412027924265291969">繼續</translation>
 <translation id="7425346204213733349">系統不會將您變更的書籤、記錄、密碼和其他設定繼續同步至您的 Google 帳戶，但 Google 帳戶內現有的資料仍會保留。</translation>
+<translation id="7431991332293347422">控制系統如何使用您的瀏覽記錄，為您提供個人化的搜尋內容和其他服務</translation>
 <translation id="7435356471928173109">已由管理員關閉</translation>
 <translation id="7454057999980797137">州/縣</translation>
 <translation id="7456847797759667638">開啟位置…</translation>
@@ -693,7 +690,6 @@
 <translation id="7887198238286927132">為保障您的私隱，Chrome 不會自動填入此欄位。</translation>
 <translation id="7938254975914653459">FaceTime</translation>
 <translation id="7939128259257418052">匯出密碼…</translation>
-<translation id="7947953824732555851">接受並登入</translation>
 <translation id="794799177247607889">停止記錄</translation>
 <translation id="7953440832920792856">{COUNT,plural, =0{沒有密碼被盜用}=1{{COUNT} 個密碼被盜用}other{{COUNT} 個密碼被盜用}}</translation>
 <translation id="7961015016161918242">從來沒有</translation>
@@ -724,6 +720,7 @@
 <translation id="8206354486702514201">這項設定由管理員執行。</translation>
 <translation id="8225985093977202398">快取圖片和檔案</translation>
 <translation id="8261506727792406068">刪除</translation>
+<translation id="8271720166617117963">接受並登入</translation>
 <translation id="8281781826761538115">預設 - <ph name="DEFAULT_LOCALE" /></translation>
 <translation id="8281886186245836920">略過</translation>
 <translation id="8283172974887967105">設定…</translation>
@@ -809,7 +806,7 @@
 <translation id="9148126808321036104">重新登入</translation>
 <translation id="9152539721251340337">建立二維條碼</translation>
 <translation id="9157836665414082580">隱藏對話框</translation>
-<translation id="9183059292653643328">這個瀏覽器是由貴機構管理</translation>
+<translation id="9183059292653643328">此瀏覽器由您的機構管理</translation>
 <translation id="9188680907066685419">登出受管理的帳戶</translation>
 <translation id="9200875785104711666"><ph name="TIME" /> 天前</translation>
 <translation id="9203116392574189331">Handoff</translation>

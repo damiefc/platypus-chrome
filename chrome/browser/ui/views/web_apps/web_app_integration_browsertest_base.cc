@@ -256,7 +256,7 @@ absl::optional<AppState> WebAppIntegrationBrowserTestBase::GetStateForAppId(
 // static
 bool WebAppIntegrationBrowserTestBase::IsInspectionAction(
     const std::string& action) {
-  return base::StartsWith(action, "assert_");
+  return base::StartsWith(action, "check_");
 }
 
 // static
@@ -398,7 +398,7 @@ WebAppIntegrationBrowserTestBase::BuildAllPlatformTestCaseSet(
   return final_tests;
 }
 
-// Non-assert actions implemented before assert actions. Implemented in
+// State change actions implemented before state check actions. Implemented in
 // alphabetical order.
 void WebAppIntegrationBrowserTestBase::ExecuteAction(
     const std::string& action_string) {
@@ -422,7 +422,8 @@ void WebAppIntegrationBrowserTestBase::ExecuteAction(
       action_string.substr(0, action_string.length() - param_length);
 
   if (!IsInspectionAction(action_base)) {
-    before_action_state_ = std::move(after_action_state_);
+    before_state_change_action_state_ =
+        std::move(after_state_change_action_state_);
   }
 
   if (action_base == "add_policy_app_internal_tabbed") {
@@ -483,62 +484,61 @@ void WebAppIntegrationBrowserTestBase::ExecuteAction(
     ManifestUpdateDisplay(action_param, blink::mojom::DisplayMode::kMinimalUi);
   } else if (action_base == "user_signin_internal") {
     UserSigninInternal();
-  } else if (action_base == "assert_app_locally_installed_internal") {
-    AssertAppLocallyInstalledInternal();
-  } else if (action_base == "assert_app_not_locally_installed_internal") {
-    AssertAppNotLocallyInstalledInternal();
-  } else if (action_base == "assert_app_not_in_list") {
-    AssertAppNotInList(action_param);
-  } else if (action_base == "assert_installable") {
-    AssertInstallable();
-  } else if (action_base == "assert_install_icon_shown") {
-    AssertInstallIconShown();
-  } else if (action_base == "assert_install_icon_not_shown") {
-    AssertInstallIconNotShown();
-  } else if (action_base == "assert_launch_icon_shown") {
-    AssertLaunchIconShown();
-  } else if (action_base == "assert_launch_icon_not_shown") {
-    AssertLaunchIconNotShown();
-  } else if (action_base == "assert_manifest_display_mode_browser_internal") {
-    AssertManifestDisplayModeInternal(DisplayMode::kBrowser);
-  } else if (action_base == "assert_manifest_display_mode_minimal_internal") {
-    AssertManifestDisplayModeInternal(DisplayMode::kMinimalUi);
-  } else if (action_base ==
-             "assert_manifest_display_mode_standalone_internal") {
-    AssertManifestDisplayModeInternal(DisplayMode::kStandalone);
-  } else if (action_base == "assert_no_crash") {
-  } else if (action_base == "assert_tab_created") {
-    AssertTabCreated();
-  } else if (action_base == "assert_user_display_mode_browser_internal") {
-    AssertUserDisplayModeInternal(DisplayMode::kBrowser);
-  } else if (action_base == "assert_user_display_mode_standalone_internal") {
-    AssertUserDisplayModeInternal(DisplayMode::kStandalone);
-  } else if (action_base == "assert_no_crash") {
-  } else if (action_base == "assert_tab_created") {
-    AssertTabCreated();
-  } else if (action_base == "assert_window_closed") {
-    AssertWindowClosed();
-  } else if (action_base == "assert_window_created") {
-    AssertWindowCreated();
-  } else if (action_string == "assert_window_display_minimal") {
-    AssertWindowDisplayMode(blink::mojom::DisplayMode::kMinimalUi);
-  } else if (action_string == "assert_window_display_standalone") {
-    AssertWindowDisplayMode(blink::mojom::DisplayMode::kStandalone);
+  } else if (action_base == "check_app_locally_installed_internal") {
+    CheckAppLocallyInstalledInternal();
+  } else if (action_base == "check_app_not_locally_installed_internal") {
+    CheckAppNotLocallyInstalledInternal();
+  } else if (action_base == "check_app_not_in_list") {
+    CheckAppNotInList(action_param);
+  } else if (action_base == "check_installable") {
+    CheckInstallable();
+  } else if (action_base == "check_install_icon_shown") {
+    CheckInstallIconShown();
+  } else if (action_base == "check_install_icon_not_shown") {
+    CheckInstallIconNotShown();
+  } else if (action_base == "check_launch_icon_shown") {
+    CheckLaunchIconShown();
+  } else if (action_base == "check_launch_icon_not_shown") {
+    CheckLaunchIconNotShown();
+  } else if (action_base == "check_manifest_display_mode_browser_internal") {
+    CheckManifestDisplayModeInternal(DisplayMode::kBrowser);
+  } else if (action_base == "check_manifest_display_mode_minimal_internal") {
+    CheckManifestDisplayModeInternal(DisplayMode::kMinimalUi);
+  } else if (action_base == "check_manifest_display_mode_standalone_internal") {
+    CheckManifestDisplayModeInternal(DisplayMode::kStandalone);
+  } else if (action_base == "check_no_crash") {
+  } else if (action_base == "check_tab_created") {
+    CheckTabCreated();
+  } else if (action_base == "check_user_display_mode_browser_internal") {
+    CheckUserDisplayModeInternal(DisplayMode::kBrowser);
+  } else if (action_base == "check_user_display_mode_standalone_internal") {
+    CheckUserDisplayModeInternal(DisplayMode::kStandalone);
+  } else if (action_base == "check_no_crash") {
+  } else if (action_base == "check_tab_created") {
+    CheckTabCreated();
+  } else if (action_base == "check_window_closed") {
+    CheckWindowClosed();
+  } else if (action_base == "check_window_created") {
+    CheckWindowCreated();
+  } else if (action_string == "check_window_display_minimal") {
+    CheckWindowDisplayMode(blink::mojom::DisplayMode::kMinimalUi);
+  } else if (action_string == "check_window_display_standalone") {
+    CheckWindowDisplayMode(blink::mojom::DisplayMode::kStandalone);
   } else {
     FAIL() << "Unimplemented action: " << action_base;
   }
 
   if (IsInspectionAction(action_base)) {
-    DCHECK(!after_action_state_ ||
-           *after_action_state_ == ConstructStateSnapshot());
+    DCHECK(!after_state_change_action_state_ ||
+           *after_state_change_action_state_ == ConstructStateSnapshot());
   } else {
-    after_action_state_ =
+    after_state_change_action_state_ =
         std::make_unique<StateSnapshot>(ConstructStateSnapshot());
     MaybeWaitForManifestUpdates(profile());
   }
 }
 
-// Automated Testing Actions
+// State Change Actions
 void WebAppIntegrationBrowserTestBase::AddPolicyAppInternal(
     const std::string& action_param,
     base::Value default_launch_container,
@@ -637,8 +637,8 @@ web_app::AppId WebAppIntegrationBrowserTestBase::InstallOmniboxOrMenu() {
 
 void WebAppIntegrationBrowserTestBase::LaunchInternal(
     const std::string& action_param) {
-  absl::optional<AppState> app_state =
-      GetAppByScope(before_action_state_.get(), profile(), action_param);
+  absl::optional<AppState> app_state = GetAppByScope(
+      before_state_change_action_state_.get(), profile(), action_param);
   ASSERT_TRUE(app_state.has_value())
       << "No app installed for scope: " << action_param;
   auto app_id = app_state->id;
@@ -699,8 +699,8 @@ void WebAppIntegrationBrowserTestBase::RemovePolicyApp(
 
 void WebAppIntegrationBrowserTestBase::SetOpenInTabInternal(
     const std::string& action_param) {
-  absl::optional<AppState> app_state =
-      GetAppByScope(before_action_state_.get(), profile(), action_param);
+  absl::optional<AppState> app_state = GetAppByScope(
+      before_state_change_action_state_.get(), profile(), action_param);
   ASSERT_TRUE(app_state.has_value())
       << "No app installed for scope: " << action_param;
   auto app_id = app_state->id;
@@ -712,8 +712,8 @@ void WebAppIntegrationBrowserTestBase::SetOpenInTabInternal(
 
 void WebAppIntegrationBrowserTestBase::SetOpenInWindowInternal(
     const std::string& action_param) {
-  absl::optional<AppState> app_state =
-      GetAppByScope(before_action_state_.get(), profile(), action_param);
+  absl::optional<AppState> app_state = GetAppByScope(
+      before_state_change_action_state_.get(), profile(), action_param);
   ASSERT_TRUE(app_state.has_value())
       << "No app installed for scope: " << action_param;
   auto app_id = app_state->id;
@@ -783,8 +783,8 @@ void WebAppIntegrationBrowserTestBase::UninstallFromMenu() {
 
 void WebAppIntegrationBrowserTestBase::UninstallInternal(
     const std::string& action_param) {
-  absl::optional<AppState> app_state =
-      GetAppByScope(before_action_state_.get(), profile(), action_param);
+  absl::optional<AppState> app_state = GetAppByScope(
+      before_state_change_action_state_.get(), profile(), action_param);
   ASSERT_TRUE(app_state.has_value())
       << "No app installed for scope: " << action_param;
   auto app_id = app_state->id;
@@ -817,35 +817,35 @@ void WebAppIntegrationBrowserTestBase::UserSigninInternal() {
   delegate_->UserSigninInternal();
 }
 
-// Assert Actions
-void WebAppIntegrationBrowserTestBase::AssertAppLocallyInstalledInternal() {
-  DCHECK(after_action_state_);
-  absl::optional<AppState> app_state =
-      GetStateForAppId(after_action_state_.get(), profile(), active_app_id_);
+// State Check Actions
+void WebAppIntegrationBrowserTestBase::CheckAppLocallyInstalledInternal() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<AppState> app_state = GetStateForAppId(
+      after_state_change_action_state_.get(), profile(), active_app_id_);
   ASSERT_TRUE(app_state.has_value());
   EXPECT_TRUE(app_state->is_installed_locally);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertAppNotLocallyInstalledInternal() {
-  DCHECK(after_action_state_);
-  absl::optional<AppState> app_state =
-      GetStateForAppId(after_action_state_.get(), profile(), active_app_id_);
+void WebAppIntegrationBrowserTestBase::CheckAppNotLocallyInstalledInternal() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<AppState> app_state = GetStateForAppId(
+      after_state_change_action_state_.get(), profile(), active_app_id_);
   ASSERT_TRUE(app_state.has_value());
   EXPECT_FALSE(app_state->is_installed_locally);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertAppNotInList(
+void WebAppIntegrationBrowserTestBase::CheckAppNotInList(
     const std::string& action_param) {
-  DCHECK(after_action_state_);
-  absl::optional<AppState> app_state =
-      GetAppByScope(after_action_state_.get(), profile(), action_param);
+  DCHECK(after_state_change_action_state_);
+  absl::optional<AppState> app_state = GetAppByScope(
+      after_state_change_action_state_.get(), profile(), action_param);
   EXPECT_FALSE(app_state.has_value());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertInstallable() {
-  DCHECK(after_action_state_);
-  absl::optional<BrowserState> browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckInstallable() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<BrowserState> browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(browser_state.has_value());
   absl::optional<TabState> active_tab =
       GetStateForActiveTab(browser_state.value());
@@ -853,55 +853,55 @@ void WebAppIntegrationBrowserTestBase::AssertInstallable() {
   EXPECT_TRUE(active_tab->is_installable);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertInstallIconShown() {
-  DCHECK(after_action_state_);
-  absl::optional<BrowserState> browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckInstallIconShown() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<BrowserState> browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(browser_state.has_value());
   EXPECT_TRUE(browser_state->install_icon_shown);
   EXPECT_TRUE(pwa_install_view()->GetVisible());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertInstallIconNotShown() {
-  absl::optional<BrowserState> browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckInstallIconNotShown() {
+  absl::optional<BrowserState> browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(browser_state.has_value());
   EXPECT_FALSE(browser_state->install_icon_shown);
   EXPECT_FALSE(pwa_install_view()->GetVisible());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertLaunchIconShown() {
-  DCHECK(after_action_state_);
-  absl::optional<BrowserState> browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckLaunchIconShown() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<BrowserState> browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(browser_state.has_value());
   EXPECT_TRUE(browser_state->launch_icon_shown);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertLaunchIconNotShown() {
-  DCHECK(after_action_state_);
-  absl::optional<BrowserState> browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckLaunchIconNotShown() {
+  DCHECK(after_state_change_action_state_);
+  absl::optional<BrowserState> browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(browser_state.has_value());
   EXPECT_FALSE(browser_state->launch_icon_shown);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertManifestDisplayModeInternal(
+void WebAppIntegrationBrowserTestBase::CheckManifestDisplayModeInternal(
     DisplayMode display_mode) {
-  DCHECK(after_action_state_);
-  absl::optional<AppState> app_state =
-      GetStateForAppId(after_action_state_.get(), profile(), active_app_id_);
+  DCHECK(after_state_change_action_state_);
+  absl::optional<AppState> app_state = GetStateForAppId(
+      after_state_change_action_state_.get(), profile(), active_app_id_);
   ASSERT_TRUE(app_state.has_value());
   EXPECT_EQ(display_mode, app_state->effective_display_mode);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertTabCreated() {
-  DCHECK(before_action_state_);
-  DCHECK(after_action_state_);
-  absl::optional<BrowserState> most_recent_browser_state =
-      GetStateForBrowser(after_action_state_.get(), profile(), browser());
-  absl::optional<BrowserState> previous_browser_state =
-      GetStateForBrowser(before_action_state_.get(), profile(), browser());
+void WebAppIntegrationBrowserTestBase::CheckTabCreated() {
+  DCHECK(before_state_change_action_state_);
+  DCHECK(after_state_change_action_state_);
+  absl::optional<BrowserState> most_recent_browser_state = GetStateForBrowser(
+      after_state_change_action_state_.get(), profile(), browser());
+  absl::optional<BrowserState> previous_browser_state = GetStateForBrowser(
+      before_state_change_action_state_.get(), profile(), browser());
   ASSERT_TRUE(most_recent_browser_state.has_value());
   ASSERT_TRUE(previous_browser_state.has_value());
   EXPECT_GT(most_recent_browser_state->tabs.size(),
@@ -912,47 +912,47 @@ void WebAppIntegrationBrowserTestBase::AssertTabCreated() {
   ASSERT_TRUE(active_tab.has_value());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertUserDisplayModeInternal(
+void WebAppIntegrationBrowserTestBase::CheckUserDisplayModeInternal(
     DisplayMode display_mode) {
-  DCHECK(after_action_state_);
-  absl::optional<AppState> app_state =
-      GetStateForAppId(after_action_state_.get(), profile(), active_app_id_);
+  DCHECK(after_state_change_action_state_);
+  absl::optional<AppState> app_state = GetStateForAppId(
+      after_state_change_action_state_.get(), profile(), active_app_id_);
   ASSERT_TRUE(app_state.has_value());
   EXPECT_EQ(display_mode, app_state->user_display_mode);
 }
 
-void WebAppIntegrationBrowserTestBase::AssertWindowClosed() {
-  DCHECK(before_action_state_);
-  DCHECK(after_action_state_);
+void WebAppIntegrationBrowserTestBase::CheckWindowClosed() {
+  DCHECK(before_state_change_action_state_);
+  DCHECK(after_state_change_action_state_);
   absl::optional<ProfileState> after_action_profile =
-      GetStateForProfile(after_action_state_.get(), profile());
+      GetStateForProfile(after_state_change_action_state_.get(), profile());
   absl::optional<ProfileState> before_action_profile =
-      GetStateForProfile(before_action_state_.get(), profile());
+      GetStateForProfile(before_state_change_action_state_.get(), profile());
   ASSERT_TRUE(after_action_profile.has_value());
   ASSERT_TRUE(before_action_profile.has_value());
   EXPECT_LT(after_action_profile->browsers.size(),
             before_action_profile->browsers.size());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertWindowCreated() {
-  DCHECK(before_action_state_);
-  DCHECK(after_action_state_);
+void WebAppIntegrationBrowserTestBase::CheckWindowCreated() {
+  DCHECK(before_state_change_action_state_);
+  DCHECK(after_state_change_action_state_);
   absl::optional<ProfileState> after_action_profile =
-      GetStateForProfile(after_action_state_.get(), profile());
+      GetStateForProfile(after_state_change_action_state_.get(), profile());
   absl::optional<ProfileState> before_action_profile =
-      GetStateForProfile(before_action_state_.get(), profile());
+      GetStateForProfile(before_state_change_action_state_.get(), profile());
   ASSERT_TRUE(after_action_profile.has_value());
   ASSERT_TRUE(before_action_profile.has_value());
   EXPECT_GT(after_action_profile->browsers.size(),
             before_action_profile->browsers.size());
 }
 
-void WebAppIntegrationBrowserTestBase::AssertWindowDisplayMode(
+void WebAppIntegrationBrowserTestBase::CheckWindowDisplayMode(
     blink::mojom::DisplayMode display_mode) {
   DCHECK(app_browser());
   DCHECK(app_browser()->app_controller()->AsWebAppBrowserController());
-  absl::optional<AppState> app_state =
-      GetStateForAppId(after_action_state_.get(), profile(), active_app_id_);
+  absl::optional<AppState> app_state = GetStateForAppId(
+      after_state_change_action_state_.get(), profile(), active_app_id_);
   ASSERT_TRUE(app_state.has_value());
 
   content::WebContents* web_contents =
@@ -1063,8 +1063,8 @@ bool WebAppIntegrationBrowserTestBase::AreNoAppWindowsOpen(
 void WebAppIntegrationBrowserTestBase::ForceUpdateManifestContents(
     const std::string& app_scope,
     GURL app_url_with_manifest_param) {
-  absl::optional<AppState> app_state =
-      GetAppByScope(before_action_state_.get(), profile(), app_scope);
+  absl::optional<AppState> app_state = GetAppByScope(
+      before_state_change_action_state_.get(), profile(), app_scope);
   ASSERT_TRUE(app_state.has_value());
   auto app_id = app_state->id;
   active_app_id_ = app_id;

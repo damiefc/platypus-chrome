@@ -6,7 +6,6 @@
 
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/accessibility/accessibility_permission_context.h"
 #include "chrome/browser/background_fetch/background_fetch_permission_context.h"
 #include "chrome/browser/background_sync/periodic_background_sync_permission_context.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -28,6 +27,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/background_sync/background_sync_permission_context.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/permissions/contexts/accessibility_permission_context.h"
 #include "components/permissions/contexts/clipboard_read_write_permission_context.h"
 #include "components/permissions/contexts/clipboard_sanitized_write_permission_context.h"
 #include "components/permissions/contexts/font_access_permission_context.h"
@@ -40,7 +40,7 @@
 #include "components/permissions/permission_manager.h"
 #include "ppapi/buildflags/buildflags.h"
 
-#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_WIN)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_WIN)
 #include "chrome/browser/media/protected_media_identifier_permission_context.h"
 #endif
 
@@ -77,7 +77,7 @@ permissions::PermissionManager::PermissionContextMap CreatePermissionContexts(
           std::make_unique<GeolocationPermissionContextDelegateAndroid>(
               profile));
 #endif
-#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID) || defined(OS_WIN)
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_WIN)
   permission_contexts[ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER] =
       std::make_unique<ProtectedMediaIdentifierPermissionContext>(profile);
 #endif
@@ -94,7 +94,7 @@ permissions::PermissionManager::PermissionContextMap CreatePermissionContexts(
   permission_contexts[ContentSettingsType::SENSORS] =
       std::make_unique<permissions::SensorPermissionContext>(profile);
   permission_contexts[ContentSettingsType::ACCESSIBILITY_EVENTS] =
-      std::make_unique<AccessibilityPermissionContext>(profile);
+      std::make_unique<permissions::AccessibilityPermissionContext>(profile);
   permission_contexts[ContentSettingsType::CLIPBOARD_READ_WRITE] =
       std::make_unique<permissions::ClipboardReadWritePermissionContext>(
           profile);

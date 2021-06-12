@@ -570,6 +570,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaColAttr) {
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaColRowIndex) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-col-row-index.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaColRowIndexUndefined) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-col-row-index-undefined.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityAriaColumnHeader) {
   RunAriaTest(FILE_PATH_LITERAL("aria-columnheader.html"));
 }
@@ -2959,6 +2969,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DisplayLockingAllCommitted) {
 // they test a specific web page that crashed or had some bad behavior
 // in the past.
 //
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AddChildOfNotIncludedInTreeChain) {
+  RunRegressionTest(
+      FILE_PATH_LITERAL("add-child-of-not-included-in-tree-chain.html"));
+}
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        ContentVisibilityWithPseudoElement) {

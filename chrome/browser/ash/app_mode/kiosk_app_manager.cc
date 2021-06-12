@@ -36,8 +36,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/extensions/external_cache_impl.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
-#include "chrome/browser/chromeos/policy/device_local_account.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/device_local_account.h"
 #include "chrome/browser/extensions/external_loader.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -417,7 +417,7 @@ bool KioskAppManager::IsAutoLaunchRequested() const {
   // consent through UI.
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (connector->IsEnterpriseManaged())
+  if (connector->IsDeviceEnterpriseManaged())
     return false;
 
   return GetAutoLoginState() == AutoLoginState::kRequested;
@@ -431,7 +431,7 @@ bool KioskAppManager::IsAutoLaunchEnabled() const {
   // consent through UI.
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  if (connector->IsEnterpriseManaged())
+  if (connector->IsDeviceEnterpriseManaged())
     return true;
 
   return GetAutoLoginState() == AutoLoginState::kApproved;

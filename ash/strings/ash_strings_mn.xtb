@@ -61,6 +61,7 @@
 <translation id="1341651618736211726">Дүүрэлт</translation>
 <translation id="1346748346194534595">Баруун</translation>
 <translation id="1351937230027495976">Цэсийг буулгах</translation>
+<translation id="1383597849754832576">Ярианы файлуудыг татах боломжгүй. Дараа дахин оролдоно уу.</translation>
 <translation id="1383876407941801731">Хайлт</translation>
 <translation id="1391102559483454063">Асаалттай</translation>
 <translation id="1407069428457324124">Бараан загвар</translation>
@@ -130,8 +131,8 @@
 <translation id="1972950159383891558">Сайн уу, <ph name="USERNAME" /></translation>
 <translation id="1978498689038657292">Текстээр оруулах</translation>
 <translation id="1989113344093894667">Контентын зургийг авах боломжгүй</translation>
+<translation id="1990046457226896323">Ярианы файлуудыг татсан</translation>
 <translation id="1993072747612765854">Хамгийн сүүлийн <ph name="SYSTEM_APP_NAME" /> шинэчлэлтийн талаар дэлгэрэнгүй үзэх</translation>
-<translation id="1995660704900986789">Унтраах</translation>
 <translation id="1998100899771863792">Одоогийн дэлгэц</translation>
 <translation id="2016340657076538683">Мессеж бичих</translation>
 <translation id="2018630726571919839">Надад онигоо ярьж өгөөч</translation>
@@ -316,6 +317,7 @@
 <translation id="3510164367642747937">Хулганы курсорыг тодруулах</translation>
 <translation id="3513798432020909783"><ph name="MANAGER_EMAIL" />-н удирддаг бүртгэл</translation>
 <translation id="3552189655002856821">Wi-Fi унтраалттай байна</translation>
+<translation id="3560866052109807830">Тэмдэглэгээ зурах хэрэгсэл</translation>
 <translation id="3563775809269155755">Сүлжээний цэгийг идэвхжүүлэх</translation>
 <translation id="3571734092741541777">Тохиргоо хийх.</translation>
 <translation id="3573179567135747900">"<ph name="FROM_LOCALE" />"-руу буцааж өөрчил (системийг дахин эхлүүлэх хэрэгтэй)</translation>
@@ -411,6 +413,7 @@
 <translation id="4274537685965975248">Ctrl + Alt + Доош сумны товчлуурын шууд холбоосыг өөрчилсөн байна. End товчлуурыг ашиглахын тулд <ph name="LAUNCHER_KEY_NAME" /> товчлуур + Баруун сумыг дарна уу.</translation>
 <translation id="4279490309300973883">Толин тусгал үүсгэх</translation>
 <translation id="4285498937028063278">Сонголтоос гаргах</translation>
+<translation id="429402653707266969">Самбарын байршлыг асаах/унтраах</translation>
 <translation id="4294319844246081198">Өглөөний мэнд <ph name="GIVEN_NAME" />,</translation>
 <translation id="4296136865091727875">Бүх <ph name="COUNT" /> мэдэгдлийг устгах</translation>
 <translation id="4302592941791324970">Боломжгүй</translation>
@@ -438,6 +441,7 @@
 <translation id="4451374464530248585">Alt + Доош сумны товчлуурын шууд холбоосыг өөрчилсөн байна. Page Down товчлуурыг ашиглахын тулд <ph name="LAUNCHER_KEY_NAME" /> товчлуур + Доош сумыг дарна уу.</translation>
 <translation id="445864333228800152">Оройн мэнд,</translation>
 <translation id="4458688154122353284">Дэлгэцийн үйлдэл бичихийг зогсоох</translation>
+<translation id="4471354919263203780">Яриа таних файлыг татаж байна... <ph name="PERCENT" />%</translation>
 <translation id="4472575034687746823">Эхлүүлэх</translation>
 <translation id="4477350412780666475">Дараагийн бичлэг</translation>
 <translation id="4477892968187500306">Энэ төхөөрөмж нь Google-н баталгаажуулаагүй аппыг агуулж болзошгүй.</translation>

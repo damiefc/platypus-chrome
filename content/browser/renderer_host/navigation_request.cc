@@ -1323,9 +1323,8 @@ NavigationRequest::NavigationRequest(
     bool is_renderer_initiated = !browser_initiated;
     Referrer referrer(*common_params_->referrer);
     GetContentClient()->browser()->OverrideNavigationParams(
-        controller->GetWebContents(), source_site_instance_.get(),
-        &common_params_->transition, &is_renderer_initiated, &referrer,
-        &common_params_->initiator_origin);
+        source_site_instance_.get(), &common_params_->transition,
+        &is_renderer_initiated, &referrer, &common_params_->initiator_origin);
     common_params_->referrer =
         blink::mojom::Referrer::New(referrer.url, referrer.policy);
     browser_initiated = !is_renderer_initiated;
@@ -2929,8 +2928,10 @@ void NavigationRequest::OnResponseStarted(
           base::WrapRefCounted<SiteInstanceImpl>(static_cast<SiteInstanceImpl*>(
               instance->GetRelatedSiteInstance(frame_entry->url()).get()));
       nav_entry->AddOrUpdateFrameEntry(
-          frame_tree_node_, frame_entry->item_sequence_number(),
-          frame_entry->document_sequence_number(), new_site_instance.get(),
+          frame_tree_node_, NavigationEntryImpl::UpdatePolicy::kReplace,
+          frame_entry->item_sequence_number(),
+          frame_entry->document_sequence_number(),
+          frame_entry->app_history_key(), new_site_instance.get(),
           frame_entry->source_site_instance(), frame_entry->url(),
           frame_entry->committed_origin(), frame_entry->referrer(),
           frame_entry->initiator_origin(), frame_entry->redirect_chain(),
@@ -3373,8 +3374,12 @@ void NavigationRequest::OnStartChecksComplete(
   if (IsServedFromBackForwardCache()) {
     loader_type = NavigationURLLoader::LoaderType::kNoop;
     DCHECK(rfh_restored_from_back_forward_cache_);
-    cached_response_head =
-        rfh_restored_from_back_forward_cache_->last_response_head()->Clone();
+    const network::mojom::URLResponseHeadPtr& last_response_head =
+        rfh_restored_from_back_forward_cache_->last_response_head();
+    // `last_response_head` may be nullptr if the page wasn't served from
+    // http(s).
+    if (last_response_head)
+      cached_response_head = last_response_head->Clone();
   } else if (IsPrerenderedPageActivation()) {
     loader_type = NavigationURLLoader::LoaderType::kNoop;
     DCHECK(prerender_frame_tree_node_id_.has_value());
@@ -3382,15 +3387,15 @@ void NavigationRequest::OnStartChecksComplete(
         GetPrerenderHostRegistry()
             .GetRenderFrameHostForReservedHost(*prerender_frame_tree_node_id_)
             ->last_response_head();
-    if (last_response_head) {
+    // TODO(https://crbug.com/1216997): Support the case the initial navigation
+    // haven't received the response head at this point.
+    if (last_response_head)
       cached_response_head = last_response_head->Clone();
-    } else {
-      // TODO(https://crbug.com/1216997): Support the case the initial
-      // navigation haven't received the response head at this point.
-      cached_response_head = network::mojom::URLResponseHead::New();
-      cached_response_head->parsed_headers =
-          network::mojom::ParsedHeaders::New();
-    }
+  }
+  if (loader_type == NavigationURLLoader::LoaderType::kNoop &&
+      !cached_response_head) {
+    cached_response_head = network::mojom::URLResponseHead::New();
+    cached_response_head->parsed_headers = network::mojom::ParsedHeaders::New();
   }
 
   loader_ = NavigationURLLoader::Create(
@@ -3990,7 +3995,9 @@ void NavigationRequest::CommitPageActivation() {
       return;
     }
 
-    // The prerender page might have navigated.
+    // The prerender page might have navigated. Update the URL and the redirect
+    // chain, as the prerendered page might have been redirected or performed
+    // a same-document navigation.
     // TODO(https://crbug.com/1181712): Ensure that the tests that navigate
     // MPArch activation flow do not crash. This is a hack to unblock the basic
     // MPArch activation flow for now. There are probably other parameters which
@@ -4000,6 +4007,11 @@ void NavigationRequest::CommitPageActivation() {
     // in the main frame of the prerender frame tree).
     common_params_->url =
         activated_entry->render_frame_host->GetLastCommittedURL();
+    // TODO(https://crbug.com/1181712): We may have to add the entire redirect
+    // chain.
+    redirect_chain_.clear();
+    redirect_chain_.push_back(
+        activated_entry->render_frame_host->GetLastCommittedURL());
   }
 
   base::WeakPtr<NavigationRequest> weak_self(weak_factory_.GetWeakPtr());

@@ -1502,6 +1502,21 @@ absl::optional<SkColor> WebContentsImpl::GetBackgroundColor() {
   return GetRenderViewHost()->background_color();
 }
 
+void WebContentsImpl::SetPageBaseBackgroundColor(
+    absl::optional<SkColor> color) {
+  if (page_base_background_color_ == color)
+    return;
+  page_base_background_color_ = color;
+  ExecutePageBroadcastMethod(base::BindRepeating(
+      [](absl::optional<SkColor> color, RenderViewHostImpl* rvh) {
+        // Null `broadcast` can happen before view is created on the renderer
+        // side, in which case this color will be sent in CreateView.
+        if (auto& broadcast = rvh->GetAssociatedPageBroadcast())
+          broadcast->SetPageBaseBackgroundColor(color);
+      },
+      page_base_background_color_));
+}
+
 void WebContentsImpl::SetAccessibilityMode(ui::AXMode mode) {
   OPTIONAL_TRACE_EVENT2("content", "WebContentsImpl::SetAccessibilityMode",
                         "mode", mode.ToString(), "previous_mode",
@@ -5494,13 +5509,13 @@ void WebContentsImpl::DidFinishNavigation(NavigationHandle* navigation_handle) {
     // is changed due to the override above, or if the navigation is served from
     // the back-forward cache, because the WebPreferences value stored in the
     // renderer might be stale (because we don't send WebPreferences updates to
-    // bfcached renderers).
+    // bfcached renderers). Same for prerendering.
     // TODO(rakina): Maybe handle the back-forward cache case in
     // ReadyToCommitNavigation instead?
     // TODO(https://crbug.com/1194880): Maybe sync RendererPreferences as well?
     if (value_changed_due_to_override ||
-        NavigationRequest::From(navigation_handle)
-            ->IsServedFromBackForwardCache()) {
+        navigation_handle->IsServedFromBackForwardCache() ||
+        navigation_handle->IsPrerenderedPageActivation()) {
       SetWebPreferences(*web_preferences_.get());
     }
   }
@@ -5649,6 +5664,14 @@ void WebContentsImpl::OnBackgroundColorChanged(RenderViewHostImpl* source) {
       last_sent_background_color_ != source->background_color()) {
     observers_.NotifyObservers(&WebContentsObserver::OnBackgroundColorChanged);
     last_sent_background_color_ = source->background_color();
+    return;
+  }
+
+  if (source->background_color().has_value()) {
+    if (auto* view = GetRenderWidgetHostView()) {
+      static_cast<RenderWidgetHostViewBase*>(view)->SetContentBackgroundColor(
+          source->background_color().value());
+    }
   }
 }
 
@@ -5848,6 +5871,10 @@ void WebContentsImpl::RecomputeWebPreferencesSlow() {
   // them).
   web_preferences_.reset();
   OnWebPreferencesChanged();
+}
+
+absl::optional<SkColor> WebContentsImpl::GetBaseBackgroundColor() {
+  return page_base_background_color_;
 }
 
 void WebContentsImpl::PrintCrossProcessSubframe(

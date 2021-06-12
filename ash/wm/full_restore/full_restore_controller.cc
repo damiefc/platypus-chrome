@@ -301,6 +301,9 @@ void FullRestoreController::OnWindowPropertyChanged(aura::Window* window,
   DCHECK(windows_observation_.IsObservingSource(window));
   windows_observation_.RemoveObservation(window);
   to_be_shown_windows_.erase(window);
+
+  if (base::Contains(restore_property_clear_callbacks_, window))
+    CancelAndRemoveRestorePropertyClearCallback(window);
 }
 
 void FullRestoreController::OnWindowStackingChanged(aura::Window* window) {
@@ -477,6 +480,7 @@ void FullRestoreController::SaveWindowImpl(
       auto extra = full_restore::WindowInfo::ArcExtraInfo();
       extra.maximum_size = widget->GetMaximumSize();
       extra.minimum_size = widget->GetMinimumSize();
+      extra.title = window->GetTitle();
       window_info.arc_extra_info = extra;
     }
   }
@@ -536,16 +540,21 @@ void FullRestoreController::RestoreStateTypeAndClearLaunchedKey(
 }
 
 void FullRestoreController::ClearLaunchedKey(aura::Window* window) {
-  DCHECK(window);
-  DCHECK(base::Contains(restore_property_clear_callbacks_, window));
-
-  restore_property_clear_callbacks_[window].Cancel();
-  restore_property_clear_callbacks_.erase(window);
+  CancelAndRemoveRestorePropertyClearCallback(window);
 
   // If the window is destroying then prevent extra work by not clearing the
   // property.
   if (!window->is_destroying())
     window->SetProperty(full_restore::kLaunchedFromFullRestoreKey, false);
+}
+
+void FullRestoreController::CancelAndRemoveRestorePropertyClearCallback(
+    aura::Window* window) {
+  DCHECK(window);
+  DCHECK(base::Contains(restore_property_clear_callbacks_, window));
+
+  restore_property_clear_callbacks_[window].Cancel();
+  restore_property_clear_callbacks_.erase(window);
 }
 
 void FullRestoreController::SetReadWindowCallbackForTesting(

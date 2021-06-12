@@ -9,6 +9,7 @@
 
 #include "components/autofill/core/browser/ui/payments/payments_bubble_closed_reasons.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/gfx/image/image.h"
 
 namespace autofill {
 
@@ -44,8 +45,11 @@ class VirtualCardManualFallbackBubbleController {
   // Returns a reference to the bubble view.
   virtual AutofillBubbleBase* GetBubble() const = 0;
 
+  // Returns the title icon of the bubble.
+  virtual const gfx::Image& GetBubbleTitleIcon() const = 0;
+
   // Returns the title text of the bubble.
-  virtual std::u16string GetBubbleTitle() const = 0;
+  virtual std::u16string GetBubbleTitleText() const = 0;
 
   // Returns the descriptive label of the virtual card number field.
   virtual std::u16string GetVirtualCardNumberFieldLabel() const = 0;
@@ -71,6 +75,9 @@ class VirtualCardManualFallbackBubbleController {
   // Handles the event of bubble closure. |closed_reason| is the detailed reason
   // why the bubble was closed.
   virtual void OnBubbleClosed(PaymentsBubbleClosedReason closed_reason) = 0;
+
+  // Updates the system clipboard with the |text|.
+  virtual void UpdateClipboard(const std::u16string& text) const = 0;
 };
 
 }  // namespace autofill

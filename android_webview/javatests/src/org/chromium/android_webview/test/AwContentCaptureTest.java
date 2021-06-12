@@ -376,6 +376,15 @@ public class AwContentCaptureTest {
                 expectedCallbacks, results);
     }
 
+    private static void waitAndVerifyCallbacks(int[] expectedCallbacks, int callCount,
+            TestAwContentCaptureConsumer consumer) throws Throwable {
+        try {
+            consumer.waitForCallback(callCount, expectedCallbacks.length);
+        } finally {
+            verifyCallbacks(expectedCallbacks, consumer.getCallbacks());
+        }
+    }
+
     private void runAndVerifyCallbacks(final Runnable testCase, int[] expectedCallbacks)
             throws Throwable {
         try {
@@ -683,6 +692,7 @@ public class AwContentCaptureTest {
             mSecondConsumer = new TestAwContentCaptureConsumer();
             mOnscreenContentProvider.addConsumer(mSecondConsumer);
         });
+        int callCount = mSecondConsumer.getCallCount();
         final String response = "<html><head></head><body>"
                 + "<div id='place_holder'>"
                 + "<p style=\"height: 100vh\">Hello</p>"
@@ -693,8 +703,8 @@ public class AwContentCaptureTest {
             loadUrlSync(url);
         }, toIntArray(TestAwContentCaptureConsumer.CONTENT_CAPTURED));
         // Verify the other one also get the content.
-        verifyCallbacks(toIntArray(TestAwContentCaptureConsumer.CONTENT_CAPTURED),
-                mSecondConsumer.getCallbacks());
+        waitAndVerifyCallbacks(toIntArray(TestAwContentCaptureConsumer.CONTENT_CAPTURED), callCount,
+                mSecondConsumer);
     }
 
     @Test

@@ -61,6 +61,7 @@
 <translation id="1341651618736211726">溢位</translation>
 <translation id="1346748346194534595">向右</translation>
 <translation id="1351937230027495976">收合選單</translation>
+<translation id="1383597849754832576">無法下載即時字幕檔案，請稍後再試。</translation>
 <translation id="1383876407941801731">搜尋</translation>
 <translation id="1391102559483454063">開啟</translation>
 <translation id="1407069428457324124">深色主題</translation>
@@ -108,7 +109,7 @@
 <translation id="1787955149152357925">關閉</translation>
 <translation id="1804572139604454141">磁碟空間嚴重不足，因此已停止錄製</translation>
 <translation id="181103072419391116">訊號強度 <ph name="SIGNAL_STRENGTH" />，由系統管理員管理</translation>
-<translation id="1812997170047690955">我的畫面內容有什麼資訊？</translation>
+<translation id="1812997170047690955">我的畫面上有哪些內容？</translation>
 <translation id="1823873187264960516">乙太網路：<ph name="ADDRESS" /></translation>
 <translation id="1836215606488044471">小幫手 (載入中…)</translation>
 <translation id="1838895407229022812">夜燈模式已關閉。</translation>
@@ -130,8 +131,8 @@
 <translation id="1972950159383891558"><ph name="USERNAME" />，你好：</translation>
 <translation id="1978498689038657292">文字輸入</translation>
 <translation id="1989113344093894667">無法擷取內容</translation>
+<translation id="1990046457226896323">已下載即時字幕檔案</translation>
 <translation id="1993072747612765854">進一步瞭解最新的 <ph name="SYSTEM_APP_NAME" />更新內容</translation>
-<translation id="1995660704900986789">關閉</translation>
 <translation id="1998100899771863792">目前的桌面</translation>
 <translation id="2016340657076538683">輸入訊息</translation>
 <translation id="2018630726571919839">講個笑話</translation>
@@ -316,6 +317,7 @@
 <translation id="3510164367642747937">醒目顯示滑鼠游標</translation>
 <translation id="3513798432020909783">這個帳戶是由 <ph name="MANAGER_EMAIL" /> 管理</translation>
 <translation id="3552189655002856821">Wi-Fi 已關閉</translation>
+<translation id="3560866052109807830">標記繪製工具</translation>
 <translation id="3563775809269155755">啟用無線基地台</translation>
 <translation id="3571734092741541777">設定</translation>
 <translation id="3573179567135747900">改回「<ph name="FROM_LOCALE" />」(需要重新啟動)</translation>
@@ -410,6 +412,7 @@
 <translation id="4274537685965975248">「Ctrl + Alt + 向下鍵」的鍵盤快速鍵已變更。如要使用 End 鍵，請按下<ph name="LAUNCHER_KEY_NAME" />鍵 + 向右鍵。</translation>
 <translation id="4279490309300973883">鏡像</translation>
 <translation id="4285498937028063278">取消固定</translation>
+<translation id="429402653707266969">切換工具列位置</translation>
 <translation id="4294319844246081198">早安，<ph name="GIVEN_NAME" />：</translation>
 <translation id="4296136865091727875">清除全部 <ph name="COUNT" /> 則通知</translation>
 <translation id="4302592941791324970">無法使用</translation>
@@ -437,6 +440,7 @@
 <translation id="4451374464530248585">「Alt + 向下鍵」的鍵盤快速鍵已變更。如要使用 Page Down 鍵，請按下<ph name="LAUNCHER_KEY_NAME" />鍵 + 向下鍵。</translation>
 <translation id="445864333228800152">晚安，</translation>
 <translation id="4458688154122353284">停止錄製螢幕畫面</translation>
+<translation id="4471354919263203780">正在下載語音辨識檔案...<ph name="PERCENT" />%</translation>
 <translation id="4472575034687746823">開始使用</translation>
 <translation id="4477350412780666475">下一首曲目</translation>
 <translation id="4477892968187500306">這個裝置可能包含尚未經 Google 驗證的應用程式。</translation>

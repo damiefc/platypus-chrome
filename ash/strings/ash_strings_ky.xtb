@@ -61,6 +61,7 @@
 <translation id="1341651618736211726">Кошумча</translation>
 <translation id="1346748346194534595">Оң</translation>
 <translation id="1351937230027495976">Менюну жыйыштыруу</translation>
+<translation id="1383597849754832576">Кеп файлдары жүктөлүп алынган жок. Кийинчерээк кайталаңыз.</translation>
 <translation id="1383876407941801731">Издөө</translation>
 <translation id="1391102559483454063">Күйүк</translation>
 <translation id="1407069428457324124">Караңгы тема</translation>
@@ -130,8 +131,8 @@
 <translation id="1972950159383891558">Салам <ph name="USERNAME" />,</translation>
 <translation id="1978498689038657292">Текст киргизүү</translation>
 <translation id="1989113344093894667">Мазмун сүрөткө тартылган жок</translation>
+<translation id="1990046457226896323">Кеп файлдары жүктөлүп алынды</translation>
 <translation id="1993072747612765854"><ph name="SYSTEM_APP_NAME" /> колдонмосундагы жаңыртуу жөнүндө кененирээк маалымат алуу</translation>
-<translation id="1995660704900986789">Өчүрүү</translation>
 <translation id="1998100899771863792">Учурдагы иш такта</translation>
 <translation id="2016340657076538683">Бир нерсе деп жазыңыз</translation>
 <translation id="2018630726571919839">Мага тамаша айтып бер</translation>
@@ -316,6 +317,7 @@
 <translation id="3510164367642747937">Чычкан курсору баса белгиленсин</translation>
 <translation id="3513798432020909783">Аккаунтту башкарган: <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3552189655002856821">Wi-Fi өчүрүлгөн</translation>
+<translation id="3560866052109807830">Маркер калемдер</translation>
 <translation id="3563775809269155755">Туташуу түйүнүн иштетүү</translation>
 <translation id="3571734092741541777">Орнотуу</translation>
 <translation id="3573179567135747900">Төмөнкүгө кайра өзгөртүү "<ph name="FROM_LOCALE" />" (өчүрүп күйгүзүү керек)</translation>
@@ -410,6 +412,7 @@
 <translation id="4274537685965975248">Ctrl + Alt + ылдый жебе ыкчам баскычы өзгөртүлдү. Аягы баскычын колдонуу үчүн <ph name="LAUNCHER_KEY_NAME" /> баскычын + oңго жебени басыңыз.</translation>
 <translation id="4279490309300973883">Чагылыштыруу</translation>
 <translation id="4285498937028063278">Бошотуу</translation>
+<translation id="429402653707266969">Куралдар тилкесинин жайгашкан жерин өчүрүү/күйгүзүү</translation>
 <translation id="4294319844246081198">Кутмандуу таңыңыз менен, <ph name="GIVEN_NAME" />,</translation>
 <translation id="4296136865091727875"><ph name="COUNT" /> билдирменин баарын өчүрүү</translation>
 <translation id="4302592941791324970">Жеткиликсиз</translation>
@@ -437,6 +440,7 @@
 <translation id="4451374464530248585">Alt + ылдый жебе ыкчам баскычы өзгөртүлдү. Барактын төмөн жагына жылдыруу баскычын колдонуу үчүн <ph name="LAUNCHER_KEY_NAME" /> баскычын + ылдый жебени басыңыз.</translation>
 <translation id="445864333228800152">Кутмандуу кечиңиз менен,</translation>
 <translation id="4458688154122353284">Экрандан видео жаздырууну токтотуу</translation>
+<translation id="4471354919263203780">Кепти таануу файлдары жүктөлүп алынууда... <ph name="PERCENT" />%</translation>
 <translation id="4472575034687746823">Баштоо</translation>
 <translation id="4477350412780666475">Кийинки трек</translation>
 <translation id="4477892968187500306">Бул түзмөктө Google текшербеген колдонмолор болушу мүмкүн.</translation>

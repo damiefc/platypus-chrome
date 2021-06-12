@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/document_marker_painter.h"
 
-#include "base/stl_util.h"
+#include "base/cxx17_backports.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
@@ -286,8 +286,7 @@ TextPaintStyle DocumentMarkerPainter::ComputeTextPaintStyleFrom(
   if (marker.GetType() != DocumentMarker::kTextFragment) {
     const Color platform_text_color =
         LayoutTheme::GetTheme().PlatformTextSearchColor(
-            marker.IsActiveMatch(), document.InForcedColorsMode(),
-            style.UsedColorScheme());
+            marker.IsActiveMatch(), style.UsedColorScheme());
     if (platform_text_color == text_color)
       return {};
     text_color = platform_text_color;

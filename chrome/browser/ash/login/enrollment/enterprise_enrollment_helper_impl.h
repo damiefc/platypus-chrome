@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper.h"
-#include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/policy/device_account_initializer.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
@@ -45,7 +45,7 @@ class EnterpriseEnrollmentHelperImpl
   void GetDeviceAttributeUpdatePermission() override;
   void UpdateDeviceAttributes(const std::string& asset_id,
                               const std::string& location) override;
-  void Setup(ActiveDirectoryJoinDelegate* ad_join_delegate,
+  void Setup(policy::ActiveDirectoryJoinDelegate* ad_join_delegate,
              const policy::EnrollmentConfig& enrollment_config,
              const std::string& enrolling_user_domain) override;
 
@@ -112,7 +112,7 @@ class EnterpriseEnrollmentHelperImpl
   bool oauth_data_cleared_ = false;
   policy::DMAuth auth_data_;
   bool success_ = false;
-  ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
+  policy::ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
 
   std::unique_ptr<policy::PolicyOAuth2TokenFetcher> oauth_fetcher_;
   std::unique_ptr<policy::DeviceAccountInitializer> device_account_initializer_;

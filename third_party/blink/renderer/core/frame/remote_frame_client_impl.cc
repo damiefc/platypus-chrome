@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/web/web_remote_frame_client.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -15,6 +14,7 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/events/wheel_event.h"
+#include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -30,7 +30,11 @@ RemoteFrameClientImpl::RemoteFrameClientImpl(WebRemoteFrameImpl* web_frame)
 
 void RemoteFrameClientImpl::Trace(Visitor* visitor) const {
   visitor->Trace(web_frame_);
-  RemoteFrameClient::Trace(visitor);
+  FrameClient::Trace(visitor);
+}
+
+bool RemoteFrameClientImpl::IsRemoteFrameClient() const {
+  return true;
 }
 
 bool RemoteFrameClientImpl::InShadowTree() const {
@@ -65,16 +69,7 @@ void RemoteFrameClientImpl::Detached(FrameDetachType type) {
 }
 
 unsigned RemoteFrameClientImpl::BackForwardLength() {
-  // TODO(creis,japhet): This method should return the real value for the
-  // session history length. For now, return static value for the initial
-  // navigation and the subsequent one moving the frame out-of-process.
-  // See https://crbug.com/501116.
-  return 2;
-}
-
-AssociatedInterfaceProvider*
-RemoteFrameClientImpl::GetRemoteAssociatedInterfaces() {
-  return web_frame_->Client()->GetRemoteAssociatedInterfaces();
+  return To<WebViewImpl>(web_frame_->View())->HistoryListLength();
 }
 
 }  // namespace blink

@@ -437,23 +437,8 @@ void NGBoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
 
   // If the caret's node's fragment's containing block is this block, and
   // the paint action is PaintPhaseForeground, then paint the caret.
-  if (original_phase == PaintPhase::kForeground &&
-      ShouldPaintCarets(box_fragment_)) {
-    // Apply overflow clip if needed.
-    // reveal-caret-of-multiline-contenteditable.html needs this.
-    // TDOO(yoisn): We should share this code with |BlockPainter::Paint()|
-    absl::optional<ScopedPaintChunkProperties> paint_chunk_properties;
-    if (const auto* fragment = paint_state.FragmentToPaint()) {
-      if (const auto* properties = fragment->PaintProperties()) {
-        if (const auto* overflow_clip = properties->OverflowClip()) {
-          paint_chunk_properties.emplace(
-              paint_info.context.GetPaintController(), *overflow_clip,
-              *box_fragment_.GetLayoutObject(), DisplayItem::kCaret);
-        }
-      }
-    }
-    PaintCarets(paint_info, paint_offset);
-  }
+  if (original_phase == PaintPhase::kForeground)
+    PaintCaretsIfNeeded(paint_state, paint_info, paint_offset);
 
   if (ShouldPaintSelfOutline(original_phase)) {
     info.phase = PaintPhase::kSelfOutlineOnly;
@@ -598,14 +583,32 @@ void NGBoxFragmentPainter::PaintObject(
   }
 }
 
-void NGBoxFragmentPainter::PaintCarets(const PaintInfo& paint_info,
-                                       const PhysicalOffset& paint_offset) {
-  const NGPhysicalBoxFragment& fragment = PhysicalFragment();
-  LocalFrame* frame = fragment.GetLayoutObject()->GetFrame();
-  if (ShouldPaintCursorCaret(fragment))
+void NGBoxFragmentPainter::PaintCaretsIfNeeded(
+    const ScopedPaintState& paint_state,
+    const PaintInfo& paint_info,
+    const PhysicalOffset& paint_offset) {
+  if (!ShouldPaintCarets(box_fragment_))
+    return;
+
+  // Apply overflow clip if needed.
+  // reveal-caret-of-multiline-contenteditable.html needs this.
+  // TDOO(yoisn): We should share this code with |BlockPainter::Paint()|
+  absl::optional<ScopedPaintChunkProperties> paint_chunk_properties;
+  if (const auto* fragment = paint_state.FragmentToPaint()) {
+    if (const auto* properties = fragment->PaintProperties()) {
+      if (const auto* overflow_clip = properties->OverflowClip()) {
+        paint_chunk_properties.emplace(
+            paint_info.context.GetPaintController(), *overflow_clip,
+            *box_fragment_.GetLayoutObject(), DisplayItem::kCaret);
+      }
+    }
+  }
+
+  LocalFrame* frame = box_fragment_.GetLayoutObject()->GetFrame();
+  if (ShouldPaintCursorCaret(box_fragment_))
     frame->Selection().PaintCaret(paint_info.context, paint_offset);
 
-  if (ShouldPaintDragCaret(fragment)) {
+  if (ShouldPaintDragCaret(box_fragment_)) {
     frame->GetPage()->GetDragCaret().PaintDragCaret(frame, paint_info.context,
                                                     paint_offset);
   }
@@ -1816,8 +1819,8 @@ bool NGBoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
   if (hit_test_self &&
       IsVisibleToHitTest(box_fragment_, hit_test.result->GetHitTestRequest())) {
     PhysicalRect bounds_rect(physical_offset, size);
-    if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
-                 HitTestRequest::kHitTestVisualOverflow)) {
+    if (UNLIKELY(
+            hit_test.result->GetHitTestRequest().IsHitTestVisualOverflow())) {
       // We'll include overflow from children here (in addition to self-overflow
       // caused by filters), because we want to record a match if we hit the
       // overflow of a child below the stop node. This matches legacy behavior
@@ -1900,15 +1903,9 @@ bool NGBoxFragmentPainter::HitTestTextItem(
     return false;
 
   // TODO(layout-dev): Clip to line-top/bottom.
-  const PhysicalOffset offset =
-      hit_test.inline_root_offset + text_item.OffsetInContainerFragment();
-  PhysicalRect border_rect(offset, text_item.Size());
-  PhysicalRect rect(PixelSnappedIntRect(border_rect));
-  if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
-               HitTestRequest::kHitTestVisualOverflow)) {
-    rect = text_item.SelfInkOverflow();
-    rect.Move(border_rect.offset);
-  }
+  const PhysicalRect rect = text_item.ComputeTextBoundsRectForHitTest(
+      hit_test.inline_root_offset,
+      hit_test.result->GetHitTestRequest().IsHitTestVisualOverflow());
   if (!hit_test.location.Intersects(rect))
     return false;
 
@@ -2047,8 +2044,8 @@ bool NGBoxFragmentPainter::HitTestChildBoxItem(
     const PhysicalOffset child_offset =
         hit_test.inline_root_offset + item.OffsetInContainerFragment();
     PhysicalRect bounds_rect(child_offset, item.Size());
-    if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
-                 HitTestRequest::kHitTestVisualOverflow)) {
+    if (UNLIKELY(
+            hit_test.result->GetHitTestRequest().IsHitTestVisualOverflow())) {
       bounds_rect = item.SelfInkOverflow();
       bounds_rect.Move(child_offset);
     }

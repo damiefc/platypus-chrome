@@ -46,6 +46,8 @@
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/drive/drivefs_test_support.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
+#include "chrome/browser/ash/smb_client/smb_service.h"
+#include "chrome/browser/ash/smb_client/smb_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
@@ -56,8 +58,6 @@
 #include "chrome/browser/chromeos/file_manager/mount_test_util.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
-#include "chrome/browser/chromeos/smb_client/smb_service.h"
-#include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
 #include "chrome/browser/platform_util.h"
@@ -610,18 +610,6 @@ class TestVolume {
 
   DISALLOW_COPY_AND_ASSIGN(TestVolume);
 };
-
-const std::string GetSourceFileContent(const std::string& file_name) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  base::FilePath source_dir;
-  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &source_dir));
-  base::FilePath path =
-      source_dir.Append(base::FilePath::FromUTF8Unsafe(file_name));
-  std::string contents;
-  CHECK(base::ReadFileToString(path, &contents))
-      << "failed reading test data file " << file_name;
-  return contents;
-}
 
 base::Lock& GetLockForBlockingDefaultFileTaskRunner() {
   static base::NoDestructor<base::Lock> lock;
@@ -1706,10 +1694,6 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
   // Make sure to run the ARC storage UI toast tests.
   enabled_features.push_back(arc::kUsbStorageUIFeature);
 
-  // FileManager tests exist for the deprecated video player app, which will be
-  // removed, along with the kVideoPlayerAppHidden flag by m93.
-  disabled_features.push_back(ash::features::kVideoPlayerAppHidden);
-
   if (options.files_swa) {
     enabled_features.push_back(chromeos::features::kFilesSWA);
   } else {
@@ -2104,18 +2088,10 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     // chrome.runtime.sendMessage is sent by the test extension. However, since
     // we use callSwaTestMessageListener, rather than c.r.sendMessage to
     // communicate with Files SWA, we need to explicitly load those files.
-    CHECK(content::ExecuteScript(
-        observer.web_contents(),
-        GetSourceFileContent(
-            "ui/file_manager/file_manager/background/js/test_util_swa.js")));
-    CHECK(content::ExecuteScript(
-        observer.web_contents(),
-        GetSourceFileContent("ui/file_manager/file_manager/background/js/"
-                             "runtime_loaded_test_util.js")));
-    CHECK(content::ExecuteScript(
-        observer.web_contents(),
-        GetSourceFileContent(
-            "ui/file_manager/file_manager/background/js/test_util.js")));
+    bool result;
+    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+        observer.web_contents(), "test.swaLoadTestUtils()", &result));
+    ASSERT_TRUE(result);
     files_app_swa_id_ = base::StrCat({baseURL, launchDir});
     files_app_web_contents_ = observer.web_contents();
 

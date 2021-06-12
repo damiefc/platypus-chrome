@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_manual_fallback_bubble_views.h"
 
+#include "base/bind.h"
 #include "chrome/browser/ui/views/autofill/payments/payments_view_util.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -30,17 +31,6 @@ std::unique_ptr<views::Label> CreateRowItemLabel(std::u16string text) {
   return label;
 }
 
-std::unique_ptr<views::MdTextButton> CreateRowItemButton(std::u16string text) {
-  auto button = std::make_unique<views::MdTextButton>();
-  button->SetText(text);
-  button->SetCornerRadius(ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
-      views::Emphasis::kMaximum, button->GetPreferredSize()));
-  button->SetEnabledTextColors(
-      views::style::GetColor(*button.get(), views::style::CONTEXT_BUTTON_MD,
-                             views::style::STYLE_SECONDARY));
-  return button;
-}
-
 }  // namespace
 
 VirtualCardManualFallbackBubbleViews::VirtualCardManualFallbackBubbleViews(
@@ -50,6 +40,7 @@ VirtualCardManualFallbackBubbleViews::VirtualCardManualFallbackBubbleViews(
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       controller_(controller) {
   DCHECK(controller_);
+  SetShowIcon(true);
   SetShowCloseButton(true);
   SetButtons(ui::DIALOG_BUTTON_NONE);
 }
@@ -134,13 +125,22 @@ void VirtualCardManualFallbackBubbleViews::Init() {
   layout->AddView(CreateRowItemButton(controller_->GetCvc()));
 }
 
-void VirtualCardManualFallbackBubbleViews::AddedToWidget() {
-  GetBubbleFrameView()->SetTitleView(
-      std::make_unique<TitleWithIconAndSeparatorView>(GetWindowTitle()));
+ui::ImageModel VirtualCardManualFallbackBubbleViews::GetWindowIcon() {
+  // Fall back to network icon if no specific icon is provided.
+  // TODO(crbug.com/1218628): Fallback logic might be put inside
+  // BrowserAutofillManager or PDM.
+  if (controller_->GetBubbleTitleIcon().IsEmpty()) {
+    gfx::Image card_image =
+        ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+            CreditCard::IconResourceId(
+                controller_->GetVirtualCard()->network()));
+    return ui::ImageModel::FromImage(card_image);
+  }
+  return ui::ImageModel::FromImage(controller_->GetBubbleTitleIcon());
 }
 
 std::u16string VirtualCardManualFallbackBubbleViews::GetWindowTitle() const {
-  return controller_ ? controller_->GetBubbleTitle() : std::u16string();
+  return controller_ ? controller_->GetBubbleTitleText() : std::u16string();
 }
 
 void VirtualCardManualFallbackBubbleViews::WindowClosing() {
@@ -159,6 +159,22 @@ void VirtualCardManualFallbackBubbleViews::OnWidgetClosing(
             views::Widget::ClosedReason::kCancelButtonClicked);
   closed_reason_ = GetPaymentsBubbleClosedReasonFromWidgetClosedReason(
       widget->closed_reason());
+}
+
+std::unique_ptr<views::MdTextButton>
+VirtualCardManualFallbackBubbleViews::CreateRowItemButton(
+    const std::u16string& text) {
+  auto button = std::make_unique<views::MdTextButton>(
+      base::BindRepeating(
+          [](std::u16string text,
+             VirtualCardManualFallbackBubbleViews* bubble) {
+            bubble->controller_->UpdateClipboard(text);
+          },
+          text, base::Unretained(this)),
+      text, views::style::CONTEXT_BUTTON);
+  button->SetCornerRadius(ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
+      views::Emphasis::kMaximum, button->GetPreferredSize()));
+  return button;
 }
 
 }  // namespace autofill

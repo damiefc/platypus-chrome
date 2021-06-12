@@ -58,7 +58,7 @@
 #include "chrome/browser/chromeos/extensions/active_tab_permission_granter_delegate_chromeos.h"
 #include "chrome/browser/chromeos/extensions/extension_tab_util_delegate_chromeos.h"
 #include "chrome/browser/chromeos/extensions/permissions_updater_delegate_chromeos.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/external_data/handlers/crostini_ansible_playbook_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data/handlers/print_servers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data/handlers/printers_external_data_handler.h"
@@ -658,7 +658,8 @@ bool ChromeUserManagerImpl::AreEphemeralUsersEnabled() const {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   return GetEphemeralUsersEnabled() &&
-         (connector->IsEnterpriseManaged() || GetOwnerAccountId().is_valid());
+         (connector->IsDeviceEnterpriseManaged() ||
+          GetOwnerAccountId().is_valid());
 }
 
 void ChromeUserManagerImpl::OnUserRemoved(const AccountId& account_id) {
@@ -676,7 +677,7 @@ PrefService* ChromeUserManagerImpl::GetLocalState() const {
 bool ChromeUserManagerImpl::IsEnterpriseManaged() const {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->IsEnterpriseManaged();
+  return connector->IsDeviceEnterpriseManaged();
 }
 
 void ChromeUserManagerImpl::LoadDeviceLocalAccounts(

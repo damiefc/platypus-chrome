@@ -245,10 +245,6 @@ extern const base::Feature kMostVisitedTiles{"OmniboxMostVisitedTiles",
 const base::Feature kRichAutocompletion{"OmniboxRichAutocompletion",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Feature that enables Search Ready Omnibox in incognito.
-const base::Feature kOmniboxSearchReadyIncognito{
-    "OmniboxSearchReadyIncognito", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Feature used to enable the second batch of Pedals (Safety Check, etc.).
 const base::Feature kOmniboxPedalsBatch2{"OmniboxPedalsBatch2",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
@@ -323,10 +319,7 @@ const base::Feature kDefaultTypedNavigationsToHttps{
 // - Otherwise, a new navigation to the the fallback HTTP URL is started.
 const char kDefaultTypedNavigationsToHttpsTimeoutParam[] = "timeout";
 
-// NOTE: while this is enabled by default, CCT visits are only tagged with the
-// necessary transition type if the intent launching CCT supplies the
-// appropriate parameter.
-const base::Feature kHideVisitsFromCct{"OmniboxHideVisitsFromCct",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-
+// Spare renderer warmup for faster website loading.
+const base::Feature kOmniboxSpareRenderer{"OmniboxSpareRenderer",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 }  // namespace omnibox

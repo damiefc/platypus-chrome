@@ -90,17 +90,15 @@ public class LensController {
      *         the activity.
      * @param isIncognito Whether the current tab is in incognito mode.
      * @param srcUrl The 'src' attribute of the image.
-     * @param requiresConfirmation Whether the request requires an confirmation dialog.
      * @param titleOrAltText The 'title' or, if empty, the 'alt' attribute of the image.
      * @param pageUrl The url of the current page.
      * @param lensIntentType The intent type of the request.
      * @return The intent to Google Lens.
      */
     public Intent getShareWithGoogleLensIntent(Uri imageUri, boolean isIncognito, String srcUrl,
-            boolean requiresConfirmation, String titleOrAltText, String pageUrl,
-            @Nullable String lensIntentType) {
-        return mDelegate.getShareWithGoogleLensIntent(imageUri, isIncognito, srcUrl,
-                requiresConfirmation, titleOrAltText, pageUrl, lensIntentType);
+            String titleOrAltText, String pageUrl, @Nullable String lensIntentType) {
+        return mDelegate.getShareWithGoogleLensIntent(
+                imageUri, isIncognito, srcUrl, titleOrAltText, pageUrl, lensIntentType);
     }
 
     /**

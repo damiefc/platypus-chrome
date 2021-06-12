@@ -32,7 +32,7 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/gfx_utils.h"
-#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
+#include "chrome/browser/chromeos/policy/handlers/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -404,6 +404,12 @@ void ExtensionAppsChromeOs::OnRequestUpdate(
           content::RenderFrameHost::FromID(render_process_id, render_frame_id));
 
   if (!web_contents) {
+    return;
+  }
+
+  Profile* web_profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  if (web_profile != profile()) {
     return;
   }
 

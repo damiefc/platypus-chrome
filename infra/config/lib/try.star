@@ -43,7 +43,8 @@ def tryjob(
         location_regexp = None,
         location_regexp_exclude = None,
         cancel_stale = None,
-        add_default_excludes = True):
+        add_default_excludes = True,
+        enable_for_quick_run = False):
     """Specifies the details of a tryjob verifier.
 
     See https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/master/lucicfg/doc/README.md#luci.cq_tryjob_verifier
@@ -61,12 +62,16 @@ def tryjob(
     """
     if add_default_excludes:
         location_regexp_exclude = DEFAULT_EXCLUDE_REGEXPS + (location_regexp_exclude or [])
+    mode_allowlist = [cq.MODE_FULL_RUN, cq.MODE_DRY_RUN]
+    if enable_for_quick_run:
+        mode_allowlist.append(cq.MODE_QUICK_DRY_RUN)
     return struct(
         disable_reuse = disable_reuse,
         experiment_percentage = experiment_percentage,
         location_regexp = location_regexp,
         location_regexp_exclude = location_regexp_exclude,
         cancel_stale = cancel_stale,
+        mode_allowlist = mode_allowlist,
     )
 
 def try_builder(
@@ -119,7 +124,7 @@ def try_builder(
     experiments.setdefault("chromium.resultdb.result_sink.junit_tests", 100)
 
     # Migrate executable to bbagent incrementally.
-    experiments.setdefault("luci.buildbucket.use_bbagent", 10)
+    experiments.setdefault("luci.buildbucket.use_bbagent", 20)
 
     merged_resultdb_bigquery_exports = [
         resultdb.export_test_results(
@@ -190,6 +195,7 @@ def try_builder(
             location_regexp = tryjob.location_regexp,
             location_regexp_exclude = tryjob.location_regexp_exclude,
             cancel_stale = tryjob.cancel_stale,
+            mode_allowlist = tryjob.mode_allowlist,
         )
     else:
         # Allow CQ to trigger this builder if user opts in via CQ-Include-Trybots.
@@ -334,7 +340,7 @@ def chromium_mac_ios_builder(
         name,
         executable = "recipe:chromium_trybot",
         goma_backend = builders.goma.backend.RBE_PROD,
-        os = builders.os.MAC_10_15_OR_11,
+        os = builders.os.MAC_11,
         xcode = builders.xcode.x12d4e,
         **kwargs):
     return try_builder(

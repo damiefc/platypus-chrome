@@ -30,7 +30,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/browser/metrics/cached_metrics_profile.h"
 #include "chrome/browser/metrics/enrollment_status.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -123,8 +123,8 @@ EnrollmentStatus ChromeOSMetricsProvider::GetEnrollmentStatus() {
   if (!connector)
     return EnrollmentStatus::kErrorGettingStatus;
 
-  return connector->IsEnterpriseManaged() ? EnrollmentStatus::kManaged
-                                          : EnrollmentStatus::kNonManaged;
+  return connector->IsDeviceEnterpriseManaged() ? EnrollmentStatus::kManaged
+                                                : EnrollmentStatus::kNonManaged;
 }
 
 void ChromeOSMetricsProvider::Init() {

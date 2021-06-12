@@ -97,8 +97,12 @@ class DBusScreenSaverWatcher {
   // step will increment the service counter and re-start the process.
   void TryCurrentService() {
     // Detach the proxy, if we have one from the previous attempt.
-    if (proxy_)
-      proxy_->Detach();
+    if (proxy_) {
+      task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&dbus::ObjectProxy::Detach, base::Unretained(proxy_)));
+      proxy_ = nullptr;
+    }
 
     if (current_service_ >= kServiceCount) {
       if (current_service_ == kServiceCount) {

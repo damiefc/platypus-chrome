@@ -210,7 +210,7 @@
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/metrics/stability_metrics_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1582,14 +1582,19 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       *UrlLanguageHistogramFactory::GetForBrowserContext(profile_));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-// On mobile, need for clean shutdown arises only when the application comes
-// to foreground (i.e. MetricsService::OnAppEnterForeground is called).
-// http://crbug.com/179143
+// On mobile, the need for a clean shutdown arises only when the application
+// comes to the foreground (i.e. when MetricsService::OnAppEnterForeground() is
+// called). See crbug.com/179143 for more details.
 #if !defined(OS_ANDROID)
   // Start watching for a hang.
   //
+  // Depending on the client's ExtendedVariationsSafeMode experiment group (see
+  // MaybeExtendVariationsSafeMode() in variations_field_trial_creator.cc for
+  // more info), signaling that a clean shutdown is needed may occur earlier on
+  // desktop.
+  //
   // TODO(b/184937096): Remove the below call and remove the function
-  // MetricsService::LogNeedForCleanShutdown() once this is moved earlier. It
+  // MetricsService::LogNeedForCleanShutdown() if this is moved earlier. It is
   // is being kept here for the time being for the control group of the
   // extended Variations Safe Mode experiment.
   browser_process_->metrics_service()->LogNeedForCleanShutdown();

@@ -130,10 +130,10 @@
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_policy_handler.h"
-#include "chrome/browser/chromeos/policy/configuration_policy_handler_chromeos.h"
-#include "chrome/browser/chromeos/policy/lacros_availability_policy_handler.h"
+#include "chrome/browser/chromeos/policy/handlers/configuration_policy_handler_chromeos.h"
+#include "chrome/browser/chromeos/policy/handlers/lacros_availability_policy_handler.h"
+#include "chrome/browser/chromeos/policy/handlers/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/chromeos/policy/login/secondary_google_account_signin_policy_handler.h"
-#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/policy/default_geolocation_policy_handler.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
@@ -1264,6 +1264,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kAlternativeBrowserParameters,
     browser_switcher::prefs::kAlternativeBrowserParameters,
     base::Value::Type::LIST },
+  { key::kBrowserSwitcherParsingMode,
+    browser_switcher::prefs::kParsingMode,
+    base::Value::Type::INTEGER },
   { key::kBrowserSwitcherUrlList,
     browser_switcher::prefs::kUrlList,
     base::Value::Type::LIST },
@@ -1393,6 +1396,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kFetchKeepaliveDurationSecondsOnShutdown,
     prefs::kFetchKeepaliveDurationOnShutdown,
     base::Value::Type::INTEGER },
+  { key::kManagedWebAppsAccessToDeviceAttributesAllowed,
+    prefs::kManagedWebAppsAccessToDeviceAttributesAllowed,
+    base::Value::Type::BOOLEAN },
 #endif  // !defined(OS_ANDROID)
 
   { key::kSuppressDifferentOriginSubframeDialogs,
@@ -2060,9 +2066,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
           policy::key::kSpellcheckLanguageBlocklist));
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
-// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if defined(OS_LINUX)
   handlers->AddHandler(std::make_unique<SimpleDeprecatingPolicyHandler>(
       std::make_unique<SimplePolicyHandler>(key::kAllowNativeNotifications,
                                             prefs::kAllowNativeNotifications,
@@ -2070,7 +2074,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       std::make_unique<SimplePolicyHandler>(key::kAllowSystemNotifications,
                                             prefs::kAllowSystemNotifications,
                                             base::Value::Type::BOOLEAN)));
-#endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // defined(OS_LINUX)
 
   return handlers;
 }

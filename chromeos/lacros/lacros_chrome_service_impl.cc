@@ -31,6 +31,7 @@
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
 #include "chromeos/crosapi/mojom/metrics_reporting.mojom.h"
+#include "chromeos/crosapi/mojom/power.mojom.h"
 #include "chromeos/crosapi/mojom/prefs.mojom.h"
 #include "chromeos/crosapi/mojom/remoting.mojom.h"
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
@@ -39,6 +40,7 @@
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom.h"
 #include "chromeos/crosapi/mojom/url_handler.mojom.h"
+#include "chromeos/crosapi/mojom/web_page_info.mojom.h"
 #include "chromeos/lacros/lacros_chrome_service_delegate.h"
 #include "chromeos/lacros/lacros_chrome_service_impl_never_blocking_state.h"
 #include "chromeos/lacros/native_theme_cache.h"
@@ -256,6 +258,8 @@ LacrosChromeServiceImpl::LacrosChromeServiceImpl(
       crosapi::mojom::NativeThemeService,
       &crosapi::mojom::Crosapi::BindNativeThemeService,
       Crosapi::MethodMinVersions::kBindNativeThemeServiceMinVersion>();
+  ConstructRemote<crosapi::mojom::Power, &crosapi::mojom::Crosapi::BindPower,
+                  Crosapi::MethodMinVersions::kBindPowerMinVersion>();
   ConstructRemote<crosapi::mojom::Prefs, &crosapi::mojom::Crosapi::BindPrefs,
                   Crosapi::MethodMinVersions::kBindPrefsMinVersion>();
   ConstructRemote<crosapi::mojom::Remoting,
@@ -272,6 +276,10 @@ LacrosChromeServiceImpl::LacrosChromeServiceImpl(
   ConstructRemote<crosapi::mojom::UrlHandler,
                   &crosapi::mojom::Crosapi::BindUrlHandler,
                   Crosapi::MethodMinVersions::kBindUrlHandlerMinVersion>();
+  ConstructRemote<
+      crosapi::mojom::WebPageInfoFactory,
+      &crosapi::mojom::Crosapi::BindWebPageInfoFactory,
+      Crosapi::MethodMinVersions::kBindWebPageInfoFactoryMinVersion>();
   ConstructRemote<
       crosapi::mojom::DriveIntegrationService,
       &crosapi::mojom::Crosapi::BindDriveIntegrationService,

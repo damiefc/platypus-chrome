@@ -12,9 +12,11 @@
 #include "ash/app_list/bubble/app_list_bubble_apps_page.h"
 #include "ash/app_list/bubble/app_list_bubble_view.h"
 #include "ash/app_list/model/app_list_item.h"
+#include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/search/search_model.h"
 #include "ash/app_list/model/search/test_search_result.h"
 #include "ash/app_list/test_app_list_client.h"
+#include "ash/app_list/views/app_list_item_view.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/shell.h"
@@ -24,6 +26,19 @@
 
 namespace ash {
 namespace {
+
+// Returns the first window with type WINDOW_TYPE_MENU found via depth-first
+// search. Returns nullptr if no such window exists.
+aura::Window* FindMenuWindow(aura::Window* root) {
+  if (root->GetType() == aura::client::WINDOW_TYPE_MENU)
+    return root;
+  for (auto* child : root->children()) {
+    auto* menu_in_child = FindMenuWindow(child);
+    if (menu_in_child)
+      return menu_in_child;
+  }
+  return nullptr;
+}
 
 void AddAppListItem(const std::string& id) {
   Shell::Get()->app_list_controller()->GetModel()->AddItem(
@@ -54,20 +69,6 @@ RecentAppsView* GetRecentAppsView() {
       ->recent_apps_for_test();
 }
 
-// An AppListClient that records some method calls.
-class RecordingAppListClient : public TestAppListClient {
- public:
-  void ActivateItem(int profile_id,
-                    const std::string& id,
-                    int event_flags) override {
-    activate_item_count_++;
-    activate_item_last_id_ = id;
-  }
-
-  int activate_item_count_ = 0;
-  std::string activate_item_last_id_;
-};
-
 class RecentAppsViewTest : public AshTestBase {
  public:
   RecentAppsViewTest() {
@@ -81,8 +82,13 @@ class RecentAppsViewTest : public AshTestBase {
     Shell::Get()->app_list_controller()->SetClient(&app_list_client_);
   }
 
+  void RightClickOn(views::View* view) {
+    GetEventGenerator()->MoveMouseTo(view->GetBoundsInScreen().CenterPoint());
+    GetEventGenerator()->ClickRightButton();
+  }
+
   base::test::ScopedFeatureList scoped_feature_list_;
-  RecordingAppListClient app_list_client_;
+  TestAppListClient app_list_client_;
 };
 
 TEST_F(RecentAppsViewTest, CreatesIconsForApps) {
@@ -136,11 +142,72 @@ TEST_F(RecentAppsViewTest, ClickOnRecentApp) {
   GetEventGenerator()->ClickLeftButton();
 
   // The item was activated.
-  EXPECT_EQ(app_list_client_.activate_item_count_, 1);
-  EXPECT_EQ(app_list_client_.activate_item_last_id_, "id");
+  EXPECT_EQ(1, app_list_client_.activate_item_count());
+  EXPECT_EQ("id", app_list_client_.activate_item_last_id());
 }
 
-// TODO(jamescook): Test context menus.
+TEST_F(RecentAppsViewTest, RightClickOpensContextMenu) {
+  AddAppListItem("id1");
+  AddSearchResult("id1", AppListSearchResultType::kInstalledApp);
+  ShowAppList();
+
+  // Right click on the first icon.
+  RecentAppsView* view = GetRecentAppsView();
+  ASSERT_FALSE(view->children().empty());
+  views::View* icon = view->children()[0];
+  GetEventGenerator()->MoveMouseTo(icon->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->ClickRightButton();
+
+  // A menu opened.
+  aura::Window* root = Shell::GetPrimaryRootWindow();
+  aura::Window* menu = FindMenuWindow(root);
+  ASSERT_TRUE(menu);
+
+  // The menu is on screen.
+  gfx::Rect root_bounds = root->GetBoundsInScreen();
+  gfx::Rect menu_bounds = menu->GetBoundsInScreen();
+  EXPECT_TRUE(root_bounds.Contains(menu_bounds));
+}
+
+TEST_F(RecentAppsViewTest, AppIconSelectedWhenMenuIsShown) {
+  // Show an app list with 2 recent apps.
+  AddAppListItem("id1");
+  AddSearchResult("id1", AppListSearchResultType::kInstalledApp);
+  AddAppListItem("id2");
+  AddSearchResult("id2", AppListSearchResultType::kInstalledApp);
+  ShowAppList();
+
+  // There are 2 items.
+  RecentAppsView* view = GetRecentAppsView();
+  ASSERT_EQ(2u, view->children().size());
+  AppListItemView* item1 = view->GetItemViewForTest(0);
+  AppListItemView* item2 = view->GetItemViewForTest(1);
+
+  // The grid delegates are the same, so it doesn't matter which one we use for
+  // expectations below.
+  ASSERT_EQ(item1->grid_delegate_for_test(), item2->grid_delegate_for_test());
+  AppListItemView::GridDelegate* grid_delegate =
+      item1->grid_delegate_for_test();
+
+  // Right clicking an item selects it.
+  RightClickOn(item1);
+  EXPECT_TRUE(grid_delegate->IsSelectedView(item1));
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item2));
+
+  // Second click closes the menu.
+  RightClickOn(item1);
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item1));
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item2));
+
+  // Right clicking the other item selects it.
+  RightClickOn(item2);
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item1));
+  EXPECT_TRUE(grid_delegate->IsSelectedView(item2));
+
+  item2->CancelContextMenu();
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item1));
+  EXPECT_FALSE(grid_delegate->IsSelectedView(item2));
+}
 
 }  // namespace
 }  // namespace ash

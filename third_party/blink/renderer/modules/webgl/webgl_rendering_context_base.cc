@@ -28,9 +28,9 @@
 #include <memory>
 #include <utility>
 
+#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/numerics/checked_math.h"
-#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -1022,7 +1022,7 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
 
   // TODO(https://crbug.com/1208480): Move color space to being a read-write
   // attribute instead of a context creation attribute.
-  if (RuntimeEnabledFeatures::CanvasColorManagementEnabled()) {
+  if (RuntimeEnabledFeatures::CanvasColorManagementV2Enabled()) {
     color_params_ = CanvasColorParams(requested_attributes.color_space,
                                       requested_attributes.pixel_format,
                                       requested_attributes.alpha);
@@ -1385,24 +1385,12 @@ void WebGLRenderingContextBase::MarkContextChanged(
       if (layout_box && settings->GetAcceleratedCompositingEnabled())
         layout_box->ContentChanged(change_type);
     }
-    IntSize canvas_size = ClampedCanvasSize();
-    DidDraw(SkIRect::MakeXYWH(0, 0, canvas_size.Width(), canvas_size.Height()));
+    DidDraw();
   }
 }
-
 scoped_refptr<base::SingleThreadTaskRunner>
 WebGLRenderingContextBase::GetContextTaskRunner() {
   return task_runner_;
-}
-
-void WebGLRenderingContextBase::DidDraw(const SkIRect& dirty_rect) {
-  MarkContextChanged(kCanvasChanged);
-  CanvasRenderingContext::DidDraw(dirty_rect);
-}
-
-void WebGLRenderingContextBase::DidDraw() {
-  MarkContextChanged(kCanvasChanged);
-  CanvasRenderingContext::DidDraw();
 }
 
 bool WebGLRenderingContextBase::PushFrame() {

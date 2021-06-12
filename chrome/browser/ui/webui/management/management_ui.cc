@@ -14,8 +14,9 @@
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/management_resources.h"
+#include "chrome/grit/management_resources_map.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "extensions/buildflags/buildflags.h"
@@ -26,7 +27,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/core/browser_policy_connector_chromeos.h"
 #include "chrome/grit/chromium_strings.h"
 #include "ui/chromeos/devicetype_utils.h"
 #else  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -140,14 +141,9 @@ content::WebUIDataSource* CreateManagementUIHtmlSource(Profile* profile) {
                         l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME)));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  source->UseStringsJs();
-  source->EnableReplaceI18nInJS();
-  // Add required resources.
-  source->AddResourcePath("management_browser_proxy.js",
-                          IDR_MANAGEMENT_BROWSER_PROXY_JS);
-  source->AddResourcePath("management_ui.js", IDR_MANAGEMENT_UI_JS);
-  source->AddResourcePath("icons.js", IDR_MANAGEMENT_ICONS_JS);
-  source->SetDefaultResource(IDR_MANAGEMENT_HTML);
+  webui::SetupWebUIDataSource(
+      source, base::make_span(kManagementResources, kManagementResourcesSize),
+      IDR_MANAGEMENT_MANAGEMENT_HTML);
   return source;
 }
 
@@ -166,7 +162,7 @@ std::u16string ManagementUI::GetManagementPageSubtitle(Profile* profile) {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   const auto device_type = ui::GetChromeOSDeviceTypeResourceId();
-  if (!connector->IsEnterpriseManaged() &&
+  if (!connector->IsDeviceEnterpriseManaged() &&
       !profile->GetProfilePolicyConnector()->IsManaged()) {
     return l10n_util::GetStringFUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE,
                                       l10n_util::GetStringUTF16(device_type));
